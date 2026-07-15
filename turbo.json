@@ -26,7 +26,7 @@
     },
     "lint": {},
     "typecheck": {
-      "dependsOn": ["^db:generate"]
+      "dependsOn": ["^build", "^db:generate"]
     },
     "db:generate": {
       "cache": false,
