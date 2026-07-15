@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AggregatedStats,
@@ -7,7 +7,7 @@ import {
   GetCompaniesQueryDto,
   ALLOWED_COMPANY_SORT,
 } from '@clickbit/shared';
-import { Prisma, enum_crm_companies_lifecycle_stage, enum_crm_companies_company_size } from '@prisma/client';
+import type { Prisma, enum_crm_companies_lifecycle_stage } from '@prisma/client';
 import {
   CreateCompanyDto,
   UpdateCompanyDto,
@@ -672,7 +672,7 @@ export class CompaniesService {
     if (dto.domain !== undefined) data.domain = dto.domain;
     if (dto.industry !== undefined) data.industry = dto.industry;
     if (dto.company_size !== undefined)
-      data.company_size = mapCompanySize(dto.company_size) as unknown as enum_crm_companies_company_size;
+      data.company_size = mapCompanySize(dto.company_size);
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.address_line1 !== undefined) data.address_line1 = dto.address_line1;
     if (dto.address_line2 !== undefined) data.address_line2 = dto.address_line2;

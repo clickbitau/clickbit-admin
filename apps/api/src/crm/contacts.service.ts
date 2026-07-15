@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateContactDto,
@@ -10,7 +10,7 @@ import {
   ConvertToDealDto,
   PortalAccessBatchDto,
 } from './dto';
-import { asJsonInput, buildLegacyList, safeDate, toNumber } from './crm-utils';
+import { buildLegacyList, safeDate, toNumber } from './crm-utils';
 
 @Injectable()
 export class ContactsService {
@@ -99,7 +99,7 @@ export class ContactsService {
 
     await this.prisma.contacts.update({
       where: { id },
-      data: this.buildUpdateData(dto, existing as unknown as Record<string, unknown>) as unknown as Prisma.contactsUncheckedUpdateInput,
+      data: this.buildUpdateData(dto, existing as unknown as Record<string, unknown>),
     });
 
     if (dto.company_id) {
@@ -192,10 +192,7 @@ export class ContactsService {
     };
   }
 
-  async createPortalAccess(
-    id: number,
-    body: { sendWelcomeEmail?: boolean; frontendUrl?: string },
-  ) {
+  async createPortalAccess(id: number) {
     await this.ensureContactExists(id);
     const contact = await this.prisma.contacts.findUnique({ where: { id } });
     if (!contact?.email) {
@@ -247,7 +244,7 @@ export class ContactsService {
 
   async resendPortalEmail(id: number) {
     await this.ensureContactExists(id);
-    const result = await this.createPortalAccess(id, { sendWelcomeEmail: true });
+    const result = await this.createPortalAccess(id);
     return {
       success: result.success,
       alreadyExists: result.alreadyExists,
@@ -259,9 +256,7 @@ export class ContactsService {
     const results: unknown[] = [];
     for (const id of dto.contact_ids) {
       try {
-        const r = await this.createPortalAccess(id, {
-          sendWelcomeEmail: dto.sendWelcomeEmail,
-        });
+        const r = await this.createPortalAccess(id);
         results.push({ contact_id: id, success: r.success, alreadyExists: r.alreadyExists });
       } catch (e) {
         results.push({ contact_id: id, success: false, error: (e as Error).message });
@@ -494,7 +489,7 @@ export class ContactsService {
       company_id: dto.company_id,
       linkedin_url: dto.linkedin_url,
       twitter_url: dto.twitter_url,
-      date_of_birth: safeDate(dto.date_of_birth as string | undefined),
+      date_of_birth: safeDate(dto.date_of_birth),
       preferred_contact_method: dto.preferred_contact_method || 'email',
       is_demo: dto.is_demo,
     };
@@ -504,7 +499,6 @@ export class ContactsService {
   private buildUpdateData(dto: UpdateContactDto, existing: { [key: string]: unknown }) {
     const data: Record<string, unknown> = {};
     const dtoRecord = dto as unknown as Record<string, unknown>;
-    const existingRecord = existing as Record<string, unknown>;
     const fields = [
       'name',
       'email',

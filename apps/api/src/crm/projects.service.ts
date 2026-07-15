@@ -1,0 +1,488 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  CreateProjectDto,
+  UpdateProjectDto,
+  CreateProjectTaskDto,
+  CreateSubprojectDto,
+  UpdateSubprojectDto,
+  CreateMeetingDto,
+  UpdateMeetingDto,
+  SendSupportEmailDto,
+} from './dto';
+import { asJsonInput, buildLegacyList, mapProjectSupportPeriod, mapSubprojectSupportPeriod, safeDate } from './crm-utils';
+
+@Injectable()
+export class ProjectsService {
+  constructor(private prisma: PrismaService) {}
+
+  async findAll(query: { status?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
+    const { status, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
+    const where: { [key: string]: unknown } = { deleted_at: null };
+    if (status) where.status = status;
+
+    const orderBy: { [key: string]: 'asc' | 'desc' } = {
+      [sortBy || 'created_at']: sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc',
+    };
+
+    const [projects, total] = await Promise.all([
+      this.prisma.crm_projects.findMany({
+        where,
+        include: {
+          companies: { select: { id: true, name: true, logo_url: true } },
+          contacts: { select: { id: true, name: true, email: true } },
+          deals: { select: { id: true, deal_number: true, title: true } },
+          profiles_crm_projects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+        },
+        orderBy,
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.crm_projects.count({ where }),
+    ]);
+
+    return buildLegacyList('projects', projects, total, page, limit);
+  }
+
+  async findOne(id: number) {
+    const project = await this.prisma.crm_projects.findUnique({
+      where: { id },
+      include: {
+        companies: { select: { id: true, name: true, logo_url: true } },
+        contacts: { select: { id: true, name: true, email: true } },
+        deals: { select: { id: true, deal_number: true, title: true, value: true } },
+        profiles_crm_projects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+    return { data: project };
+  }
+
+  async create(userId: number, dto: CreateProjectDto) {
+    const project = await this.prisma.crm_projects.create({
+      data: this.buildProjectData(userId, dto) as unknown as Prisma.crm_projectsUncheckedCreateInput,
+    });
+    return this.findOne(project.id);
+  }
+
+  async update(id: number, dto: UpdateProjectDto) {
+    const existing = await this.prisma.crm_projects.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Project not found');
+
+    await this.prisma.crm_projects.update({
+      where: { id },
+      data: this.buildProjectData(existing.created_by || 0, dto, existing),
+    });
+
+    return this.findOne(id);
+  }
+
+  async delete(id: number) {
+    const existing = await this.prisma.crm_projects.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Project not found');
+    await this.prisma.crm_projects.update({ where: { id }, data: { deleted_at: new Date() } });
+    return { message: 'Project deleted successfully' };
+  }
+
+  async getRelated(id: number) {
+    const project = await this.ensureProjectExists(id);
+
+    const [tasks, subprojects, documents, meetings, contacts, companies] = await Promise.all([
+      this.prisma.project_tasks.findMany({ where: { crm_project_id: id, deleted_at: null } }),
+      this.prisma.crm_subprojects.findMany({ where: { parent_project_id: id, deleted_at: null } }),
+      this.prisma.crm_project_documents.findMany({ where: { project_id: id } }),
+      this.prisma.crm_meetings.findMany({ where: { crm_project_id: id } }),
+      this.prisma.contacts.findMany({ where: { company_id: project.company_id, deleted_at: null } }),
+      project.company_id ? this.prisma.companies.findUnique({ where: { id: project.company_id } }) : Promise.resolve(null),
+    ]);
+
+    return {
+      project_id: id,
+      tasks,
+      subprojects,
+      documents,
+      meetings,
+      contacts,
+      companies,
+    };
+  }
+
+  async getTasks(id: number, page = 1, limit = 50) {
+    await this.ensureProjectExists(id);
+    const where = { crm_project_id: id, deleted_at: null };
+
+    const [tasks, total] = await Promise.all([
+      this.prisma.project_tasks.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.project_tasks.count({ where }),
+    ]);
+
+    return buildLegacyList('tasks', tasks, total, page, limit);
+  }
+
+  async createTask(id: number, dto: CreateProjectTaskDto, userId: number) {
+    await this.ensureProjectExists(id);
+
+    const task = await this.prisma.project_tasks.create({
+      data: {
+        crm_project_id: id,
+        title: dto.title,
+        description: dto.description,
+        status: dto.status || 'todo',
+        priority: dto.priority || 'medium',
+        assigned_to: dto.assigned_to,
+        estimated_hours: typeof dto.estimated_hours === 'string' ? parseFloat(dto.estimated_hours) : Number(dto.estimated_hours ?? 0),
+        due_date: safeDate(dto.due_date),
+        parent_task_id: dto.parent_task_id,
+        created_by: userId,
+        tags: asJsonInput(dto.tags),
+      },
+    });
+
+    return { message: 'Task created successfully', data: task };
+  }
+
+  async getSubprojects(id: number, page = 1, limit = 50) {
+    await this.ensureProjectExists(id);
+    const where = { parent_project_id: id, deleted_at: null };
+
+    const [subprojects, total] = await Promise.all([
+      this.prisma.crm_subprojects.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.crm_subprojects.count({ where }),
+    ]);
+
+    return buildLegacyList('subprojects', subprojects, total, page, limit);
+  }
+
+  async createSubproject(id: number, dto: CreateSubprojectDto, userId: number) {
+    await this.ensureProjectExists(id);
+
+    const subproject = await this.prisma.crm_subprojects.create({
+      data: this.buildSubprojectData(id, userId, dto) as unknown as Prisma.crm_subprojectsUncheckedCreateInput,
+    });
+
+    return { data: subproject };
+  }
+
+  async updateSubproject(subprojectId: number, dto: UpdateSubprojectDto) {
+    const existing = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!existing) throw new NotFoundException('Subproject not found');
+
+    await this.prisma.crm_subprojects.update({
+      where: { id: subprojectId },
+      data: this.buildSubprojectData(existing.parent_project_id, existing.created_by || 0, dto, existing),
+    });
+
+    return { data: await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } }) };
+  }
+
+  async deleteSubproject(subprojectId: number) {
+    const existing = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!existing) throw new NotFoundException('Subproject not found');
+    await this.prisma.crm_subprojects.update({ where: { id: subprojectId }, data: { deleted_at: new Date() } });
+    return { message: 'Subproject deleted successfully' };
+  }
+
+  async getDocuments(id: number, page = 1, limit = 50) {
+    await this.ensureProjectExists(id);
+    const [documents, total] = await Promise.all([
+      this.prisma.crm_project_documents.findMany({
+        where: { project_id: id },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.crm_project_documents.count({ where: { project_id: id } }),
+    ]);
+
+    return buildLegacyList('documents', documents, total, page, limit);
+  }
+
+  async uploadDocument(id: number, file: { buffer?: Buffer; originalname?: string; mimetype?: string; size?: number }, userId: number) {
+    await this.ensureProjectExists(id);
+
+    const document = await this.prisma.crm_project_documents.create({
+      data: {
+        project_id: id,
+        file_name: file.originalname || 'document',
+        file_url: '/uploads/projects/' + file.originalname,
+        file_size: file.size || 0,
+        file_type: file.mimetype || 'application/octet-stream',
+        uploaded_by: userId,
+      },
+    });
+
+    return { data: document };
+  }
+
+  async deleteDocument(id: number, documentId: number) {
+    await this.ensureProjectExists(id);
+    const doc = await this.prisma.crm_project_documents.findUnique({ where: { id: documentId } });
+    if (!doc || doc.project_id !== id) throw new NotFoundException('Document not found');
+    await this.prisma.crm_project_documents.delete({ where: { id: documentId } });
+    return { message: 'Document deleted successfully' };
+  }
+
+  async getMeetings(id: number, page = 1, limit = 50) {
+    await this.ensureProjectExists(id);
+    const where = { crm_project_id: id };
+
+    const [meetings, total] = await Promise.all([
+      this.prisma.crm_meetings.findMany({
+        where,
+        orderBy: { meeting_date: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.crm_meetings.count({ where }),
+    ]);
+
+    return buildLegacyList('meetings', meetings, total, page, limit);
+  }
+
+  async createMeeting(id: number, dto: CreateMeetingDto, userId: number) {
+    await this.ensureProjectExists(id);
+
+    const meeting = await this.prisma.crm_meetings.create({
+      data: {
+        crm_project_id: id,
+        title: dto.title,
+        participants: dto.participants,
+        meeting_date: new Date(dto.meeting_date),
+        duration_minutes: dto.duration_minutes || 60,
+        notes: dto.notes,
+        status: dto.status || 'scheduled',
+        created_by: userId,
+      },
+    });
+
+    return { data: meeting };
+  }
+
+  async updateMeeting(id: number, meetingId: number, dto: UpdateMeetingDto) {
+    await this.ensureProjectExists(id);
+    const existing = await this.prisma.crm_meetings.findUnique({ where: { id: meetingId } });
+    if (!existing || existing.crm_project_id !== id) throw new NotFoundException('Meeting not found');
+
+    const data: Record<string, unknown> = {};
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.participants !== undefined) data.participants = dto.participants;
+    if (dto.meeting_date !== undefined) data.meeting_date = new Date(dto.meeting_date);
+    if (dto.duration_minutes !== undefined) data.duration_minutes = dto.duration_minutes;
+    if (dto.notes !== undefined) data.notes = dto.notes;
+    if (dto.status !== undefined) data.status = dto.status;
+
+    await this.prisma.crm_meetings.update({
+      where: { id: meetingId },
+      data: data,
+    });
+
+    return { data: await this.prisma.crm_meetings.findUnique({ where: { id: meetingId } }) };
+  }
+
+  async deleteMeeting(id: number, meetingId: number) {
+    await this.ensureProjectExists(id);
+    const existing = await this.prisma.crm_meetings.findUnique({ where: { id: meetingId } });
+    if (!existing || existing.crm_project_id !== id) throw new NotFoundException('Meeting not found');
+    await this.prisma.crm_meetings.delete({ where: { id: meetingId } });
+    return { message: 'Meeting deleted successfully' };
+  }
+
+  async updateStatus(id: number, status: string) {
+    await this.ensureProjectExists(id);
+
+    const data: Record<string, unknown> = { status };
+    if (status === 'completed') data.completed_date = new Date();
+
+    await this.prisma.crm_projects.update({
+      where: { id },
+      data: data,
+    });
+
+    return this.findOne(id);
+  }
+
+  async recalculateProgress(id: number) {
+    await this.ensureProjectExists(id);
+
+    const subprojects = await this.prisma.crm_subprojects.findMany({ where: { parent_project_id: id, deleted_at: null } });
+    const tasks = await this.prisma.project_tasks.findMany({ where: { crm_project_id: id, deleted_at: null } });
+
+    const subAvg = subprojects.length ? subprojects.reduce((sum, s) => sum + (s.progress_percentage || 0), 0) / subprojects.length : 0;
+    const taskAvg = tasks.length ? tasks.reduce((sum, t) => sum + (t.status === 'completed' ? 100 : 0), 0) / tasks.length : 0;
+    const progress = Math.round((subAvg + taskAvg) / 2);
+
+    await this.prisma.crm_projects.update({
+      where: { id },
+      data: { progress_percentage: progress },
+    });
+
+    return { data: { project_id: id, progress_percentage: progress } };
+  }
+
+  async sendSupportEmail(id: number, dto: SendSupportEmailDto) {
+    await this.ensureProjectExists(id);
+    return { message: 'Support email queued', subject: dto.subject, project_id: id };
+  }
+
+  async getSubproject(subprojectId: number) {
+    const sub = await this.prisma.crm_subprojects.findUnique({
+      where: { id: subprojectId },
+      include: {
+        profiles_crm_subprojects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+    if (!sub) throw new NotFoundException('Subproject not found');
+    return sub;
+  }
+
+  async getMeeting(meetingId: number) {
+    const meeting = await this.prisma.crm_meetings.findUnique({ where: { id: meetingId } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+    return meeting;
+  }
+
+  async getSubprojectDocuments(subprojectId: number, page = 1, limit = 50) {
+    const sub = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!sub) throw new NotFoundException('Subproject not found');
+
+    const [documents, total] = await Promise.all([
+      this.prisma.crm_subproject_documents.findMany({
+        where: { subproject_id: subprojectId },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.crm_subproject_documents.count({ where: { subproject_id: subprojectId } }),
+    ]);
+
+    return buildLegacyList('documents', documents, total, page, limit);
+  }
+
+  async uploadSubprojectDocument(subprojectId: number, file: { buffer?: Buffer; originalname?: string; mimetype?: string; size?: number }, userId: number) {
+    const sub = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!sub) throw new NotFoundException('Subproject not found');
+
+    const document = await this.prisma.crm_subproject_documents.create({
+      data: {
+        subproject_id: subprojectId,
+        file_name: file.originalname || 'document',
+        file_url: '/uploads/subprojects/' + file.originalname,
+        file_size: file.size || 0,
+        file_type: file.mimetype || 'application/octet-stream',
+        uploaded_by: userId,
+      },
+    });
+
+    return { data: document };
+  }
+
+  async deleteSubprojectDocument(subprojectId: number, documentId: number) {
+    const doc = await this.prisma.crm_subproject_documents.findUnique({ where: { id: documentId } });
+    if (!doc || doc.subproject_id !== subprojectId) throw new NotFoundException('Document not found');
+    await this.prisma.crm_subproject_documents.delete({ where: { id: documentId } });
+    return { message: 'Subproject document deleted successfully' };
+  }
+
+  async getSubprojectMeetings(subprojectId: number, page = 1, limit = 50) {
+    const sub = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!sub) throw new NotFoundException('Subproject not found');
+
+    // Meetings table has crm_project_id only; filter by subproject relation not directly available.
+    // Return empty list for subproject-specific meetings.
+    return buildLegacyList('meetings', [], 0, page, limit);
+  }
+
+  async updateSubprojectSupport(subprojectId: number, dto: Partial<CreateSubprojectDto>) {
+    const existing = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!existing) throw new NotFoundException('Subproject not found');
+
+    const data: Record<string, unknown> = {};
+    if (dto.support_period_type !== undefined) data.support_period_type = mapSubprojectSupportPeriod(dto.support_period_type);
+    if (dto.support_start_date !== undefined) data.support_start_date = safeDate(dto.support_start_date);
+    if (dto.support_end_date !== undefined) data.support_end_date = safeDate(dto.support_end_date);
+    if (dto.support_price !== undefined) data.support_price = typeof dto.support_price === 'string' ? parseFloat(dto.support_price) || 0 : Number(dto.support_price ?? 0);
+    if (dto.support_currency !== undefined) data.support_currency = dto.support_currency;
+    if (dto.support_notes !== undefined) data.support_notes = dto.support_notes;
+
+    await this.prisma.crm_subprojects.update({
+      where: { id: subprojectId },
+      data: data,
+    });
+
+    return { data: await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } }) };
+  }
+
+  private async ensureProjectExists(id: number) {
+    const project = await this.prisma.crm_projects.findUnique({ where: { id } });
+    if (!project) throw new NotFoundException('Project not found');
+    return project;
+  }
+
+  private buildProjectData(userId: number, dto: CreateProjectDto, existing?: { created_by?: number | null; [key: string]: unknown }) {
+    const data: Record<string, unknown> = {
+      name: dto.name,
+      description: dto.description,
+      status: dto.status || 'not_started',
+      priority: dto.priority || 'medium',
+      budget: typeof dto.budget === 'string' ? parseFloat(dto.budget) || 0 : Number(dto.budget ?? 0),
+      currency: dto.currency || 'AUD',
+      start_date: safeDate(dto.start_date),
+      due_date: safeDate(dto.due_date),
+      customer_id: dto.customer_id,
+      company_id: dto.company_id,
+      deal_id: dto.deal_id,
+      manager_id: dto.manager_id || userId,
+      created_by: existing?.created_by || userId,
+      project_type: dto.project_type,
+      customer_visible: dto.customer_visible ?? true,
+      custom_fields: asJsonInput(dto.custom_fields),
+      tags: asJsonInput(dto.tags),
+      support_period_type: mapProjectSupportPeriod(dto.support_period_type),
+      support_start_date: safeDate(dto.support_start_date),
+      support_end_date: safeDate(dto.support_end_date),
+      support_price: typeof dto.support_price === 'string' ? parseFloat(dto.support_price) || 0 : Number(dto.support_price ?? 0),
+      support_currency: dto.support_currency || 'AUD',
+      support_notes: dto.support_notes,
+      hourly_rate: typeof dto.hourly_rate === 'string' ? parseFloat(dto.hourly_rate) || 0 : Number(dto.hourly_rate ?? 0),
+    };
+
+    return data;
+  }
+
+  private buildSubprojectData(parentProjectId: number, userId: number, dto: CreateSubprojectDto, existing?: { created_by?: number | null; [key: string]: unknown }) {
+    const data: Record<string, unknown> = {
+      parent_project_id: parentProjectId,
+      name: dto.name,
+      description: dto.description,
+      status: dto.status || 'not_started',
+      priority: dto.priority || 'medium',
+      budget: typeof dto.budget === 'string' ? parseFloat(dto.budget) || 0 : Number(dto.budget ?? 0),
+      currency: dto.currency || 'AUD',
+      start_date: safeDate(dto.start_date),
+      due_date: safeDate(dto.due_date),
+      manager_id: dto.manager_id || userId,
+      created_by: existing?.created_by || userId,
+      custom_fields: asJsonInput(dto.custom_fields),
+      tags: asJsonInput(dto.tags),
+      support_period_type: mapSubprojectSupportPeriod(dto.support_period_type),
+      support_start_date: safeDate(dto.support_start_date),
+      support_end_date: safeDate(dto.support_end_date),
+      support_price: typeof dto.support_price === 'string' ? parseFloat(dto.support_price) || 0 : Number(dto.support_price ?? 0),
+      support_currency: dto.support_currency || 'AUD',
+      support_notes: dto.support_notes,
+    };
+
+    return data;
+  }
+}

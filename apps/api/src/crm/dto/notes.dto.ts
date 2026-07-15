@@ -1,9 +1,10 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsBoolean, Min, IsIn } from 'class-validator';
+import { PaginationQueryDto } from './common.dto';
 
-export const NOTE_TYPES = ['general', 'call', 'meeting', 'internal', 'important'] as const;
+export const NOTE_TYPES = ['general', 'meeting', 'call', 'email', 'follow_up', 'system'] as const;
 
-export class GetNotesQueryDto {
+export class GetNotesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -29,10 +30,8 @@ export class GetNotesQueryDto {
   activity_id?: number;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  limit?: number = 50;
+  @IsIn(NOTE_TYPES)
+  note_type?: typeof NOTE_TYPES[number];
 }
 
 export class CreateNoteDto {
@@ -69,11 +68,11 @@ export class CreateNoteDto {
 
   @IsOptional()
   @IsBoolean()
-  is_pinned?: boolean;
+  is_pinned?: boolean = false;
 
   @IsOptional()
   @IsBoolean()
-  is_private?: boolean;
+  is_private?: boolean = false;
 
   @IsOptional()
   attachments?: Record<string, unknown>[];

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Query,
   Param,
@@ -16,67 +17,53 @@ import { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { DealsService } from './deals.service';
-import {
-  CreateDealDto,
-  UpdateDealDto,
-  MoveDealDto,
-  WonDealDto,
-  LostDealDto,
-  BulkUpdateDealsDto,
-  BulkDeleteDealsDto,
-  CreateProjectFromDealDto,
-} from './dto';
+import { LeadsService } from './leads.service';
+import { CreateLeadDto, UpdateLeadDto, MoveLeadDto, WinLeadDto, LoseLeadDto } from './dto';
 import { setNoCache } from './crm-utils';
 import { RequestWithUser } from '../types/request-with-user';
 
-@Controller('crm/deals')
+@Controller('crm/leads')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
 @Roles('admin', 'manager')
-export class DealsController {
-  constructor(private readonly dealsService: DealsService) {}
+export class LeadsController {
+  constructor(private readonly leadsService: LeadsService) {}
 
   @Get()
   async findAll(
     @Query() query: {
       pipeline_id?: string;
       stage_id?: string;
-      status?: 'open' | 'won' | 'lost';
+      status?: string;
       owner_id?: string;
-      company_id?: string;
-      contact_id?: string;
       search?: string;
-      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      priority?: string;
       page?: string;
       limit?: string;
-      sortBy?: string;
-      sortOrder?: string;
+      sort?: string;
+      order?: string;
     },
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.findAll({
+    return this.leadsService.findAll({
       ...query,
       pipeline_id: query.pipeline_id ? Number(query.pipeline_id) : undefined,
       stage_id: query.stage_id ? Number(query.stage_id) : undefined,
       owner_id: query.owner_id ? Number(query.owner_id) : undefined,
-      company_id: query.company_id ? Number(query.company_id) : undefined,
-      contact_id: query.contact_id ? Number(query.contact_id) : undefined,
       page: Number(query.page || 1),
       limit: Number(query.limit || 50),
+      order: (query.order?.toLowerCase() as 'asc' | 'desc') || 'DESC',
     });
   }
 
   @Post()
   async create(
-    @Body() dto: CreateDealDto,
+    @Body() dto: CreateLeadDto,
     @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    const deal = await this.dealsService.create(req.user.id, dto);
-    res.status(201);
-    return deal;
+    return this.leadsService.create(req.user.id, dto);
   }
 
   @Get(':id')
@@ -85,60 +72,48 @@ export class DealsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.findOne(id);
+    return this.leadsService.findOne(id);
   }
 
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateDealDto,
+    @Body() dto: UpdateLeadDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.update(id, dto);
+    return this.leadsService.update(id, dto);
   }
 
-  @Put(':id/move')
+  @Patch(':id/move')
   async move(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: MoveDealDto,
-    @Req() req: RequestWithUser,
+    @Body() dto: MoveLeadDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.move(id, dto, req.user.id);
+    return this.leadsService.move(id, dto);
   }
 
-  @Put(':id/won')
-  async won(
+  @Post(':id/win')
+  async win(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: WonDealDto,
+    @Body() dto: WinLeadDto,
     @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.won(id, dto, req.user.id);
+    return this.leadsService.win(id, dto, req.user.id);
   }
 
-  @Put(':id/lost')
-  async lost(
+  @Post(':id/lose')
+  async lose(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LostDealDto,
-    @Req() req: RequestWithUser,
+    @Body() dto: LoseLeadDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.lost(id, dto, req.user.id);
-  }
-
-  @Put(':id/reopen')
-  async reopen(
-    @Param('id', ParseIntPipe) id: number,
-    @Req() req: RequestWithUser,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.dealsService.reopen(id, req.user.id);
+    return this.leadsService.lose(id, dto);
   }
 
   @Delete(':id')
@@ -148,46 +123,59 @@ export class DealsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.delete(id);
+    return this.leadsService.delete(id);
   }
 
-  @Post('bulk-update')
-  async bulkUpdate(
-    @Body() dto: BulkUpdateDealsDto,
+  @Get('pipeline/:pipelineId')
+  async getByPipeline(
+    @Param('pipelineId', ParseIntPipe) pipelineId: number,
+    @Query('status') status: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.bulkUpdate(dto);
+    return this.leadsService.getByPipeline(pipelineId, status);
   }
 
-  @Post('bulk-delete')
-  @Roles('admin')
-  async bulkDelete(
-    @Body() dto: BulkDeleteDealsDto,
+  @Get('hot')
+  async getHot(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.bulkDelete(dto);
+    return this.leadsService.getHot(Number(page || 1), Number(limit || 50));
   }
 
-  @Put(':id/create-project')
-  async createProject(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateProjectFromDealDto,
-    @Req() req: RequestWithUser,
+  @Get('uncontacted')
+  async getUncontacted(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.createProjectFromDeal(id, dto, req.user.id);
+    return this.leadsService.getUncontacted(Number(page || 1), Number(limit || 50));
   }
 
-  @Put(':id/update-value')
-  async updateValue(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { value: number | string },
+  @Get('by-stage/:stage')
+  async getByStage(
+    @Param('stage', ParseIntPipe) stageId: number,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.updateValue(id, body);
+    return this.leadsService.getByStage(stageId, Number(page || 1), Number(limit || 50));
+  }
+
+  @Post('recalculate-scores')
+  async recalculateScores(@Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    return this.leadsService.recalculateScores();
+  }
+
+  @Post('auto-assign')
+  async autoAssign(@Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    return this.leadsService.autoAssign();
   }
 }
