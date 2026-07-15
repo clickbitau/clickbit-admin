@@ -124,6 +124,10 @@ export class CreateDealDto {
   priority?: typeof DEAL_PRIORITIES[number] = 'medium';
 
   @IsOptional()
+  @IsIn(DEAL_STATUSES)
+  status?: typeof DEAL_STATUSES[number];
+
+  @IsOptional()
   custom_fields?: Record<string, unknown>;
 
   @IsOptional()

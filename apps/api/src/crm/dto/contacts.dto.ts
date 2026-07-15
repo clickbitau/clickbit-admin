@@ -98,6 +98,26 @@ export class CreateContactDto {
   lead_status?: string;
 
   @IsOptional()
+  @IsString()
+  linkedin_url?: string;
+
+  @IsOptional()
+  @IsString()
+  twitter_url?: string;
+
+  @IsOptional()
+  @IsString()
+  date_of_birth?: string;
+
+  @IsOptional()
+  @IsString()
+  preferred_contact_method?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_demo?: boolean;
+
+  @IsOptional()
   custom_fields?: Record<string, unknown>;
 
   @IsOptional()
@@ -163,12 +183,15 @@ export class ConvertToDealDto {
   title?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  value?: number;
+  value?: number | string;
 
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  expected_close_date?: string;
 }
 
 export class PortalAccessBatchDto {
