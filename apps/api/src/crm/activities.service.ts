@@ -83,7 +83,7 @@ export class ActivitiesService {
       },
     });
     if (!activity) throw new NotFoundException('Activity not found');
-    return { data: activity };
+    return { activity };
   }
 
   async create(userId: number, dto: CreateActivityDto) {

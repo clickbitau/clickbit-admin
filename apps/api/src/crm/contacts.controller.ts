@@ -56,6 +56,28 @@ export class ContactsController {
     return contact;
   }
 
+  @Get('with-portal-status')
+  async getWithPortalStatus(
+    @Query() query: { search?: string; has_portal_access?: string; lifecycle_stage?: string; status?: string; page?: string; limit?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.contactsService.getWithPortalStatus({
+      ...query,
+      page: Number(query.page || 1),
+      limit: Number(query.limit || 50),
+    });
+  }
+
+  @Get('stats')
+  async getStats(
+    @Query('owner_id') ownerId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.contactsService.getStats(ownerId ? Number(ownerId) : undefined);
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -155,28 +177,6 @@ export class ContactsController {
   ) {
     setNoCache(res);
     return this.contactsService.batchPortalAccess(dto);
-  }
-
-  @Get('with-portal-status')
-  async getWithPortalStatus(
-    @Query() query: { search?: string; has_portal_access?: string; lifecycle_stage?: string; status?: string; page?: string; limit?: string },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.contactsService.getWithPortalStatus({
-      ...query,
-      page: Number(query.page || 1),
-      limit: Number(query.limit || 50),
-    });
-  }
-
-  @Get('stats')
-  async getStats(
-    @Query('owner_id') ownerId: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.contactsService.getStats(ownerId ? Number(ownerId) : undefined);
   }
 
   @Put(':id/lead-score')

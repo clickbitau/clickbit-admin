@@ -52,7 +52,7 @@ export class NotesService {
       include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
     });
     if (!note) throw new NotFoundException('Note not found');
-    return { data: note };
+    return { note };
   }
 
   async create(userId: number, dto: CreateNoteDto) {

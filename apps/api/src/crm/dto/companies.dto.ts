@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsInt, IsOptional, IsString, IsIn, Min, IsEmail } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -145,7 +146,7 @@ export class CreateCompanyDto {
   is_active?: boolean;
 }
 
-export class UpdateCompanyDto extends CreateCompanyDto {}
+export class UpdateCompanyDto extends PartialType(CreateCompanyDto) {}
 
 export class CompanyDocumentUploadDto {
   @IsOptional()

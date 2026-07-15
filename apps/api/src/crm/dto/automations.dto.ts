@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -88,4 +89,4 @@ export class CreateAutomationDto {
   is_active?: boolean = true;
 }
 
-export class UpdateAutomationDto extends CreateAutomationDto {}
+export class UpdateAutomationDto extends PartialType(CreateAutomationDto) {}

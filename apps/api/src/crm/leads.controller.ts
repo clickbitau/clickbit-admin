@@ -66,6 +66,47 @@ export class LeadsController {
     return this.leadsService.create(req.user.id, dto);
   }
 
+  @Get('pipeline/:pipelineId')
+  async getByPipeline(
+    @Param('pipelineId', ParseIntPipe) pipelineId: number,
+    @Query('status') status: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.leadsService.getByPipeline(pipelineId, status);
+  }
+
+  @Get('hot')
+  async getHot(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.leadsService.getHot(Number(page || 1), Number(limit || 50));
+  }
+
+  @Get('uncontacted')
+  async getUncontacted(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.leadsService.getUncontacted(Number(page || 1), Number(limit || 50));
+  }
+
+  @Get('by-stage/:stage')
+  async getByStage(
+    @Param('stage', ParseIntPipe) stageId: number,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.leadsService.getByStage(stageId, Number(page || 1), Number(limit || 50));
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -124,47 +165,6 @@ export class LeadsController {
   ) {
     setNoCache(res);
     return this.leadsService.delete(id);
-  }
-
-  @Get('pipeline/:pipelineId')
-  async getByPipeline(
-    @Param('pipelineId', ParseIntPipe) pipelineId: number,
-    @Query('status') status: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.leadsService.getByPipeline(pipelineId, status);
-  }
-
-  @Get('hot')
-  async getHot(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.leadsService.getHot(Number(page || 1), Number(limit || 50));
-  }
-
-  @Get('uncontacted')
-  async getUncontacted(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.leadsService.getUncontacted(Number(page || 1), Number(limit || 50));
-  }
-
-  @Get('by-stage/:stage')
-  async getByStage(
-    @Param('stage', ParseIntPipe) stageId: number,
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    return this.leadsService.getByStage(stageId, Number(page || 1), Number(limit || 50));
   }
 
   @Post('recalculate-scores')
