@@ -43,7 +43,7 @@ export class ProjectsController {
 
   @Get()
   async findAll(
-    @Query() query: { status?: string; page?: string; limit?: string; sortBy?: string; sortOrder?: string },
+    @Query() query: { status?: string; search?: string; page?: string; limit?: string; sortBy?: string; sortOrder?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
