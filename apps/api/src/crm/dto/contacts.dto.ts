@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsEmail, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -124,7 +125,7 @@ export class CreateContactDto {
   tags?: string[];
 }
 
-export class UpdateContactDto extends CreateContactDto {}
+export class UpdateContactDto extends PartialType(CreateContactDto) {}
 
 export class UpdateLeadScoreDto {
   @IsOptional()

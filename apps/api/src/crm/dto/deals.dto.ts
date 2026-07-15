@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
@@ -134,7 +135,7 @@ export class CreateDealDto {
   tags?: string[];
 }
 
-export class UpdateDealDto extends CreateDealDto {}
+export class UpdateDealDto extends PartialType(CreateDealDto) {}
 
 export class MoveDealDto {
   @Type(() => Number)

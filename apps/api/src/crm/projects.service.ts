@@ -11,38 +11,50 @@ import {
   UpdateMeetingDto,
   SendSupportEmailDto,
 } from './dto';
-import { asJsonInput, buildLegacyList, mapProjectSupportPeriod, mapSubprojectSupportPeriod, safeDate } from './crm-utils';
+import { asJsonInput, buildLegacyList, buildPagination, mapProjectSupportPeriod, mapSubprojectSupportPeriod, safeDate } from './crm-utils';
 
 @Injectable()
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: { status?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
-    const { status, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
+  async findAll(query: { status?: string; search?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
+    const { status, search, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
     const where: { [key: string]: unknown } = { deleted_at: null };
     if (status) where.status = status;
+    if (search) {
+      (where as { AND: unknown[] }).AND = [
+        {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { project_number: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
 
     const orderBy: { [key: string]: 'asc' | 'desc' } = {
       [sortBy || 'created_at']: sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc',
     };
 
-    const [projects, total] = await Promise.all([
+    const [projects, total, stats] = await Promise.all([
       this.prisma.crm_projects.findMany({
         where,
         include: {
           companies: { select: { id: true, name: true, logo_url: true } },
           contacts: { select: { id: true, name: true, email: true } },
-          deals: { select: { id: true, deal_number: true, title: true } },
+          deals: { select: { id: true, deal_number: true, title: true, value: true } },
           profiles_crm_projects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+          profiles_crm_projects_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
         },
         orderBy,
         take: limit,
         skip: (page - 1) * limit,
       }),
       this.prisma.crm_projects.count({ where }),
+      this.projectStats(where),
     ]);
 
-    return buildLegacyList('projects', projects, total, page, limit);
+    return { ...buildLegacyList('projects', projects.map((p) => this.mapProject(p)), total, page, limit), stats };
   }
 
   async findOne(id: number) {
@@ -53,10 +65,11 @@ export class ProjectsService {
         contacts: { select: { id: true, name: true, email: true } },
         deals: { select: { id: true, deal_number: true, title: true, value: true } },
         profiles_crm_projects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+        profiles_crm_projects_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
       },
     });
     if (!project) throw new NotFoundException('Project not found');
-    return { data: project };
+    return { project: this.mapProject(project) };
   }
 
   async create(userId: number, dto: CreateProjectDto) {
@@ -115,6 +128,16 @@ export class ProjectsService {
     const [tasks, total] = await Promise.all([
       this.prisma.project_tasks.findMany({
         where,
+        include: {
+          crm_projects: { select: { id: true, project_number: true, name: true } },
+          profiles_project_tasks_assigned_toToprofiles: {
+            select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
+          },
+          profiles_project_tasks_created_byToprofiles: {
+            select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
+          },
+          contacts: { select: { id: true, name: true, email: true, avatar_url: true } },
+        },
         orderBy: { created_at: 'desc' },
         take: limit,
         skip: (page - 1) * limit,
@@ -122,7 +145,8 @@ export class ProjectsService {
       this.prisma.project_tasks.count({ where }),
     ]);
 
-    return buildLegacyList('tasks', tasks, total, page, limit);
+    const stats = await this.taskStats(where);
+    return { tasks: tasks.map((t) => this.mapTask(t)), stats, pagination: buildPagination(total, page, limit) };
   }
 
   async createTask(id: number, dto: CreateProjectTaskDto, userId: number) {
@@ -429,58 +453,166 @@ export class ProjectsService {
     return project;
   }
 
-  private buildProjectData(userId: number, dto: CreateProjectDto, existing?: { created_by?: number | null; [key: string]: unknown }) {
+  private async projectStats(where: { [key: string]: unknown }) {
+    const counts = await this.prisma.crm_projects.groupBy({
+      by: ['status'],
+      where: where as any,
+      _count: { status: true },
+    });
+    const statusMap: Record<string, string> = {
+      not_started: 'notStarted',
+      in_progress: 'inProgress',
+      completed: 'completed',
+      on_hold: 'onHold',
+      cancelled: 'cancelled',
+    };
+    const stats: Record<string, number> = { total: 0, notStarted: 0, inProgress: 0, completed: 0, onHold: 0, cancelled: 0 };
+    for (const row of counts) {
+      const count = Number(row._count.status || 0);
+      stats.total += count;
+      const key = statusMap[row.status || ''];
+      if (key) stats[key] += count;
+    }
+    return stats as { total: number; notStarted: number; inProgress: number; completed: number; onHold: number; cancelled: number };
+  }
+
+  private async taskStats(where: { [key: string]: unknown }) {
+    const counts = await this.prisma.project_tasks.groupBy({
+      by: ['status'],
+      where: where as any,
+      _count: { status: true },
+      _sum: { estimated_hours: true, actual_hours: true },
+    });
+    const byStatus = { total: 0, todo: 0, in_progress: 0, review: 0, completed: 0, blocked: 0 };
+    for (const row of counts) {
+      const count = Number(row._count.status || 0);
+      byStatus.total += count;
+      if (row.status in byStatus) {
+        (byStatus as any)[row.status] += count;
+      }
+    }
+    return {
+      ...byStatus,
+      totalEstimatedHours: Number(counts.reduce((sum, r) => sum + Number(r._sum.estimated_hours || 0), 0)),
+      totalActualHours: Number(counts.reduce((sum, r) => sum + Number(r._sum.actual_hours || 0), 0)),
+    };
+  }
+
+  private mapProject(project: any) {
+    return {
+      ...project,
+      company: project.companies || null,
+      customer: project.contacts || null,
+      deal: project.deals || null,
+      manager: project.profiles_crm_projects_manager_idToprofiles
+        ? { id: project.profiles_crm_projects_manager_idToprofiles.id, name: `${project.profiles_crm_projects_manager_idToprofiles.first_name || ''} ${project.profiles_crm_projects_manager_idToprofiles.last_name || ''}`.trim() }
+        : null,
+      companies: undefined,
+      contacts: undefined,
+      deals: undefined,
+      profiles_crm_projects_manager_idToprofiles: undefined,
+    };
+  }
+
+  private mapTask(t: any) {
+    return {
+      ...t,
+      estimated_hours: t.estimated_hours ? Number(t.estimated_hours) : undefined,
+      actual_hours: t.actual_hours ? Number(t.actual_hours) : undefined,
+      crmProject: t.crm_projects ? { id: t.crm_projects.id, project_number: t.crm_projects.project_number, name: t.crm_projects.name } : null,
+      project: t.crm_projects ? { id: t.crm_projects.id, title: t.crm_projects.name } : null,
+      assignee: t.profiles_project_tasks_assigned_toToprofiles
+        ? this.mapUser(t.profiles_project_tasks_assigned_toToprofiles)
+        : null,
+      creator: t.profiles_project_tasks_created_byToprofiles
+        ? this.mapUser(t.profiles_project_tasks_created_byToprofiles)
+        : null,
+      customer: t.contacts ? { ...t.contacts, avatar: t.contacts.avatar_url } : null,
+    };
+  }
+
+  private mapUser(u: any) {
+    return {
+      ...u,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+      avatar: u.avatar,
+    };
+  }
+
+  private buildProjectData(userId: number, dto: any, existing?: { created_by?: number | null; [key: string]: unknown }) {
+    const pick = (key: string, fallback?: unknown) => {
+      if (dto[key] !== undefined) return dto[key];
+      if (existing && existing[key] !== undefined) return existing[key];
+      return fallback;
+    };
+    const num = (key: string, fallback: number) => {
+      const v = pick(key);
+      if (v === undefined || v === null || v === '') return fallback;
+      return typeof v === 'string' ? parseFloat(v) || fallback : Number(v);
+    };
+
     const data: Record<string, unknown> = {
-      name: dto.name,
-      description: dto.description,
-      status: dto.status || 'not_started',
-      priority: dto.priority || 'medium',
-      budget: typeof dto.budget === 'string' ? parseFloat(dto.budget) || 0 : Number(dto.budget ?? 0),
-      currency: dto.currency || 'AUD',
-      start_date: safeDate(dto.start_date),
-      due_date: safeDate(dto.due_date),
-      customer_id: dto.customer_id,
-      company_id: dto.company_id,
-      deal_id: dto.deal_id,
-      manager_id: dto.manager_id || userId,
+      name: pick('name'),
+      description: pick('description'),
+      status: pick('status') ?? 'not_started',
+      priority: pick('priority') ?? 'medium',
+      budget: num('budget', 0),
+      currency: pick('currency') ?? 'AUD',
+      start_date: safeDate(pick('start_date') as string | undefined),
+      due_date: safeDate(pick('due_date') as string | undefined),
+      customer_id: pick('customer_id'),
+      company_id: pick('company_id'),
+      deal_id: pick('deal_id'),
+      manager_id: pick('manager_id') || userId,
       created_by: existing?.created_by || userId,
-      project_type: dto.project_type,
-      customer_visible: dto.customer_visible ?? true,
-      custom_fields: asJsonInput(dto.custom_fields),
-      tags: asJsonInput(dto.tags),
-      support_period_type: mapProjectSupportPeriod(dto.support_period_type),
-      support_start_date: safeDate(dto.support_start_date),
-      support_end_date: safeDate(dto.support_end_date),
-      support_price: typeof dto.support_price === 'string' ? parseFloat(dto.support_price) || 0 : Number(dto.support_price ?? 0),
-      support_currency: dto.support_currency || 'AUD',
-      support_notes: dto.support_notes,
-      hourly_rate: typeof dto.hourly_rate === 'string' ? parseFloat(dto.hourly_rate) || 0 : Number(dto.hourly_rate ?? 0),
+      project_type: pick('project_type'),
+      customer_visible: pick('customer_visible') ?? true,
+      custom_fields: asJsonInput(pick('custom_fields')),
+      tags: asJsonInput(pick('tags')),
+      support_period_type: mapProjectSupportPeriod(pick('support_period_type') as string | undefined),
+      support_start_date: safeDate(pick('support_start_date') as string | undefined),
+      support_end_date: safeDate(pick('support_end_date') as string | undefined),
+      support_price: num('support_price', 0),
+      support_currency: pick('support_currency') ?? 'AUD',
+      support_notes: pick('support_notes'),
+      hourly_rate: num('hourly_rate', 0),
     };
 
     return data;
   }
 
-  private buildSubprojectData(parentProjectId: number, userId: number, dto: CreateSubprojectDto, existing?: { created_by?: number | null; [key: string]: unknown }) {
+  private buildSubprojectData(parentProjectId: number, userId: number, dto: any, existing?: { created_by?: number | null; [key: string]: unknown }) {
+    const pick = (key: string, fallback?: unknown) => {
+      if (dto[key] !== undefined) return dto[key];
+      if (existing && existing[key] !== undefined) return existing[key];
+      return fallback;
+    };
+    const num = (key: string, fallback: number) => {
+      const v = pick(key);
+      if (v === undefined || v === null || v === '') return fallback;
+      return typeof v === 'string' ? parseFloat(v) || fallback : Number(v);
+    };
+
     const data: Record<string, unknown> = {
       parent_project_id: parentProjectId,
-      name: dto.name,
-      description: dto.description,
-      status: dto.status || 'not_started',
-      priority: dto.priority || 'medium',
-      budget: typeof dto.budget === 'string' ? parseFloat(dto.budget) || 0 : Number(dto.budget ?? 0),
-      currency: dto.currency || 'AUD',
-      start_date: safeDate(dto.start_date),
-      due_date: safeDate(dto.due_date),
-      manager_id: dto.manager_id || userId,
+      name: pick('name'),
+      description: pick('description'),
+      status: pick('status') ?? 'not_started',
+      priority: pick('priority') ?? 'medium',
+      budget: num('budget', 0),
+      currency: pick('currency') ?? 'AUD',
+      start_date: safeDate(pick('start_date') as string | undefined),
+      due_date: safeDate(pick('due_date') as string | undefined),
+      manager_id: pick('manager_id') || userId,
       created_by: existing?.created_by || userId,
-      custom_fields: asJsonInput(dto.custom_fields),
-      tags: asJsonInput(dto.tags),
-      support_period_type: mapSubprojectSupportPeriod(dto.support_period_type),
-      support_start_date: safeDate(dto.support_start_date),
-      support_end_date: safeDate(dto.support_end_date),
-      support_price: typeof dto.support_price === 'string' ? parseFloat(dto.support_price) || 0 : Number(dto.support_price ?? 0),
-      support_currency: dto.support_currency || 'AUD',
-      support_notes: dto.support_notes,
+      custom_fields: asJsonInput(pick('custom_fields')),
+      tags: asJsonInput(pick('tags')),
+      support_period_type: mapSubprojectSupportPeriod(pick('support_period_type') as string | undefined),
+      support_start_date: safeDate(pick('support_start_date') as string | undefined),
+      support_end_date: safeDate(pick('support_end_date') as string | undefined),
+      support_price: num('support_price', 0),
+      support_currency: pick('support_currency') ?? 'AUD',
+      support_notes: pick('support_notes'),
     };
 
     return data;

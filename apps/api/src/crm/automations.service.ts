@@ -32,7 +32,7 @@ export class AutomationsService {
   async findOne(id: number) {
     const automation = await this.prisma.crm_automations.findUnique({ where: { id } });
     if (!automation) throw new NotFoundException('Automation not found');
-    return { data: automation };
+    return { automation };
   }
 
   async create(userId: number, dto: CreateAutomationDto) {

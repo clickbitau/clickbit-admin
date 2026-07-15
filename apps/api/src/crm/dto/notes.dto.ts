@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, IsBoolean, Min, IsIn } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -81,4 +82,4 @@ export class CreateNoteDto {
   mentions?: number[];
 }
 
-export class UpdateNoteDto extends CreateNoteDto {}
+export class UpdateNoteDto extends PartialType(CreateNoteDto) {}
