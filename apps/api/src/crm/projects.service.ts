@@ -42,7 +42,7 @@ export class ProjectsService {
         include: {
           companies: { select: { id: true, name: true, logo_url: true } },
           contacts: { select: { id: true, name: true, email: true } },
-          deals: { select: { id: true, deal_number: true, title: true } },
+          deals: { select: { id: true, deal_number: true, title: true, value: true } },
           profiles_crm_projects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
           profiles_crm_projects_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
         },
@@ -54,7 +54,6 @@ export class ProjectsService {
       this.projectStats(where),
     ]);
 
-    const stats = await this.projectStats(where);
     return { ...buildLegacyList('projects', projects.map((p) => this.mapProject(p)), total, page, limit), stats };
   }
 
@@ -446,40 +445,6 @@ export class ProjectsService {
     });
 
     return { data: await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } }) };
-  }
-
-  private mapProject(p: any) {
-    const company = p.companies;
-    const customer = p.contacts;
-    const deal = p.deals;
-    const manager = p.profiles_crm_projects_manager_idToprofiles;
-    const creator = p.profiles_crm_projects_created_byToprofiles;
-    return {
-      ...p,
-      company: company ? { id: company.id, name: company.name, logo_url: company.logo_url } : null,
-      customer: customer ? { id: customer.id, name: customer.name, email: customer.email } : null,
-      deal: deal ? { id: deal.id, deal_number: deal.deal_number, title: deal.title, value: deal.value } : null,
-      manager: manager ? { id: manager.id, name: `${manager.first_name || ''} ${manager.last_name || ''}`.trim() || undefined } : null,
-      creator: creator ? { id: creator.id, name: `${creator.first_name || ''} ${creator.last_name || ''}`.trim() || undefined } : null,
-    };
-  }
-
-  private async projectStats(where: { [key: string]: unknown }) {
-    const counts = await this.prisma.crm_projects.groupBy({
-      by: ['status'],
-      where,
-      _count: { status: true },
-    });
-    const total = await this.prisma.crm_projects.count({ where });
-    const byStatus = Object.fromEntries(counts.map((c) => [c.status, Number(c._count.status)]));
-    return {
-      total,
-      notStarted: byStatus['not_started'] || 0,
-      inProgress: byStatus['in_progress'] || 0,
-      completed: byStatus['completed'] || 0,
-      onHold: byStatus['on_hold'] || 0,
-      cancelled: byStatus['cancelled'] || 0,
-    };
   }
 
   private async ensureProjectExists(id: number) {

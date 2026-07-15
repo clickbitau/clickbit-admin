@@ -622,67 +622,6 @@ export class ContactsService {
     });
   }
 
-  private async enrichContact(contact: { id: number; user_id?: number | null; owner_id?: number | null; company_id?: number | null; total_revenue?: unknown; lead_score?: number | null; email?: string | null }) {
-    const owner = contact.owner_id
-      ? await this.prisma.profiles.findUnique({
-          where: { id: contact.owner_id },
-          select: { id: true, first_name: true, last_name: true, email: true, avatar: true },
-        })
-      : null;
-
-    const ownerIds = [...new Set(contacts.map((c) => c.owner_id).filter((id): id is number => id != null))];
-    const contactIds = contacts.map((c) => c.id);
-    const emails = [...new Set(contacts.map((c) => c.email).filter((email): email is string => Boolean(email)))];
-
-    const [owners, contactCompanies, portalProfiles] = await Promise.all([
-      ownerIds.length > 0
-        ? this.prisma.profiles.findMany({
-            where: { id: { in: ownerIds } },
-            select: { id: true, first_name: true, last_name: true, email: true, avatar: true },
-          })
-        : Promise.resolve([] as any[]),
-      this.prisma.crm_contact_companies.findMany({
-        where: { contact_id: { in: contactIds } },
-        include: { companies: { select: { id: true, name: true, logo_url: true } } },
-      }),
-      emails.length > 0
-        ? this.prisma.profiles.findMany({
-            where: { email: { in: emails } },
-            select: { id: true, email: true, role: true },
-          })
-        : Promise.resolve([] as any[]),
-    ]);
-
-    const ownerById = new Map(owners.map((o) => [o.id, o]));
-    const portalByEmail = new Map(portalProfiles.map((p) => [p.email, p]));
-    const companiesByContact = contactCompanies.reduce((acc, cc) => {
-      const list = acc.get(cc.contact_id) || [];
-      list.push(cc);
-      acc.set(cc.contact_id, list);
-      return acc;
-    }, new Map<number, typeof contactCompanies>());
-
-    return contacts.map((contact) => {
-      const companies = companiesByContact.get(contact.id) || [];
-      const primaryCompany = companies.find((c) => c.is_primary)?.companies || companies[0]?.companies || null;
-      const owner = contact.owner_id ? ownerById.get(contact.owner_id) || null : null;
-      const portalUser = contact.email ? portalByEmail.get(contact.email) : undefined;
-      return {
-        ...contact,
-        owner,
-        primary_company: primaryCompany,
-        companies: companies.map((c) => c.companies),
-        portalAccess: {
-          hasAccess: Boolean(portalUser?.id),
-          user: portalUser ? { id: portalUser.id, email: portalUser.email, role: portalUser.role } : null,
-          linkType: portalUser ? 'linked' : 'none',
-        },
-        total_revenue: toNumber(contact.total_revenue),
-        lead_score: contact.lead_score ?? 0,
-      };
-    });
-  }
-
   private async enrichContact(contact: { id: number; email?: string | null; owner_id?: number | null; total_revenue?: unknown; lead_score?: number | null }) {
     const enriched = await this.enrichContacts([contact]);
     return enriched[0];
