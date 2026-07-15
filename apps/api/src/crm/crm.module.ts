@@ -24,6 +24,9 @@ import { IntegrationsController } from './integrations.controller';
 import { IntegrationsService } from './integrations.service';
 import { InvoicesController } from './invoices.controller';
 import { CrmProjectsController } from './crm-projects.controller';
+import { UsersController } from './users.controller';
+import { AdminContactsController } from './admin-contacts.controller';
+import { TasksController } from './tasks.controller';
 
 @Module({
   imports: [AuthModule],
@@ -41,6 +44,9 @@ import { CrmProjectsController } from './crm-projects.controller';
     IntegrationsController,
     InvoicesController,
     CrmProjectsController,
+    UsersController,
+    AdminContactsController,
+    TasksController,
   ],
   providers: [
     CompaniesService,
