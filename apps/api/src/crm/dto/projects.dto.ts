@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -113,7 +114,7 @@ export class CreateProjectDto {
   hourly_rate?: number | string;
 }
 
-export class UpdateProjectDto extends CreateProjectDto {}
+export class UpdateProjectDto extends PartialType(CreateProjectDto) {}
 
 export class ProjectStatusDto {
   @IsIn(PROJECT_STATUSES)
@@ -161,7 +162,7 @@ export class CreateProjectTaskDto {
 
 export class CreateSubprojectDto extends CreateProjectDto {}
 
-export class UpdateSubprojectDto extends CreateProjectDto {}
+export class UpdateSubprojectDto extends PartialType(CreateProjectDto) {}
 
 export class CreateMeetingDto {
   @IsString()
@@ -189,7 +190,7 @@ export class CreateMeetingDto {
   status?: string = 'scheduled';
 }
 
-export class UpdateMeetingDto extends CreateMeetingDto {}
+export class UpdateMeetingDto extends PartialType(CreateMeetingDto) {}
 
 export class ProjectDocumentUploadDto {
   @IsOptional()

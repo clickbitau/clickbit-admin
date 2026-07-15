@@ -96,7 +96,7 @@ export class DealsService {
       },
     });
     if (!deal) throw new NotFoundException('Deal not found');
-    return { data: deal };
+    return { deal };
   }
 
   async create(userId: number, dto: CreateDealDto) {
@@ -304,7 +304,7 @@ export class DealsService {
     const updatedDeal = await this.findOne(id);
 
     return {
-      ...updatedDeal.data,
+      ...updatedDeal.deal,
       portalAccess: portalResult
         ? {
             created: portalResult.success && !portalResult.alreadyExists,

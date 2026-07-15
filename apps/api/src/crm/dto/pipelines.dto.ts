@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsHexColor, IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
@@ -25,7 +26,7 @@ export class CreatePipelineDto {
   is_default?: boolean;
 }
 
-export class UpdatePipelineDto extends CreatePipelineDto {}
+export class UpdatePipelineDto extends PartialType(CreatePipelineDto) {}
 
 export class PipelineStageDto {
   @IsOptional()

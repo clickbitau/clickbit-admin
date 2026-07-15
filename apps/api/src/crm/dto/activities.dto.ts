@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -189,7 +190,7 @@ export class CreateActivityDto {
   outcome?: string;
 }
 
-export class UpdateActivityDto extends CreateActivityDto {}
+export class UpdateActivityDto extends PartialType(CreateActivityDto) {}
 
 export class CompleteActivityDto {
   @IsOptional()

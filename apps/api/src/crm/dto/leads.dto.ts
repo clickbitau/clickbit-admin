@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
@@ -132,7 +133,7 @@ export class CreateLeadDto {
   tags?: string[];
 }
 
-export class UpdateLeadDto extends CreateLeadDto {}
+export class UpdateLeadDto extends PartialType(CreateLeadDto) {}
 
 export class MoveLeadDto {
   @Type(() => Number)

@@ -68,9 +68,7 @@ export class ContactsService {
       this.prisma.contacts.count({ where }),
     ]);
 
-    const withCompanies = await Promise.all(
-      contacts.map(async (c) => this.enrichContact(c)),
-    );
+    const withCompanies = await this.enrichContacts(contacts);
 
     return buildLegacyList('contacts', withCompanies, total, page, limit);
   }
@@ -78,7 +76,7 @@ export class ContactsService {
   async findOne(id: number) {
     const contact = await this.prisma.contacts.findUnique({ where: { id } });
     if (!contact) throw new NotFoundException('Contact not found');
-    return this.enrichContact(contact);
+    return { data: await this.enrichContact(contact) };
   }
 
   async create(dto: CreateContactDto) {
@@ -288,7 +286,7 @@ export class ContactsService {
     }
 
     const contacts = await this.prisma.contacts.findMany({ where });
-    const enriched = await Promise.all(contacts.map((c) => this.enrichContact(c)));
+    const enriched = await this.enrichContacts(contacts);
 
     let filtered = enriched;
     if (has_portal_access === 'true') {
@@ -564,7 +562,67 @@ export class ContactsService {
     return Math.min(100, score);
   }
 
-  private async enrichContact(contact: { id: number; user_id?: number | null; owner_id?: number | null; company_id?: number | null; total_revenue?: unknown; lead_score?: number | null }) {
+  private async enrichContacts(contacts: any[]) {
+    const contactIds = contacts.map((c) => c.id);
+    const ownerIds = contacts.map((c) => c.owner_id).filter(Boolean) as number[];
+    const emails = contacts.map((c) => c.email).filter(Boolean) as string[];
+    const companyIds = contacts.map((c) => c.company_id).filter(Boolean) as number[];
+
+    const [owners, contactCompanies, portalProfiles, companies] = await Promise.all([
+      this.prisma.profiles.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, first_name: true, last_name: true, email: true, avatar: true, role: true },
+      }),
+      this.prisma.crm_contact_companies.findMany({
+        where: { contact_id: { in: contactIds } },
+        include: { companies: { select: { id: true, name: true, logo_url: true } } },
+      }),
+      this.prisma.profiles.findMany({
+        where: { email: { in: emails } },
+        select: { id: true, email: true, role: true },
+      }),
+      companyIds.length ? this.prisma.companies.findMany({
+        where: { id: { in: companyIds } },
+        select: { id: true, name: true, logo_url: true },
+      }) : Promise.resolve([] as any[]),
+    ]);
+
+    const ownerMap = new Map(owners.map((o) => [o.id, { ...o, name: `${o.first_name || ''} ${o.last_name || ''}`.trim() || o.email }]));
+    const portalMap = new Map(portalProfiles.map((p) => [p.email, p]));
+    const companyMap = new Map(companies.map((c) => [c.id, c]));
+    const contactCompaniesMap = new Map<number, any[]>();
+    for (const cc of contactCompanies) {
+      if (!contactCompaniesMap.has(cc.contact_id)) contactCompaniesMap.set(cc.contact_id, []);
+      contactCompaniesMap.get(cc.contact_id)!.push(cc);
+    }
+
+    return contacts.map((contact) => {
+      const owner = contact.owner_id ? ownerMap.get(contact.owner_id) || null : null;
+      const companyList = contactCompaniesMap.get(contact.id) || [];
+      const primaryCompany =
+        companyList.find((c) => c.is_primary)?.companies ||
+        companyList[0]?.companies ||
+        (contact.company_id ? companyMap.get(contact.company_id) || null : null) ||
+        null;
+      const portalProfile = contact.email ? portalMap.get(contact.email) : undefined;
+      const portalAccess = {
+        hasAccess: Boolean(portalProfile?.id),
+        user: portalProfile ? { id: portalProfile.id, email: portalProfile.email, role: portalProfile.role } : null,
+        linkType: portalProfile ? 'linked' : 'none',
+      };
+      return {
+        ...contact,
+        owner,
+        primary_company: primaryCompany,
+        companies: companyList.map((c) => c.companies),
+        portalAccess,
+        total_revenue: toNumber(contact.total_revenue),
+        lead_score: contact.lead_score ?? 0,
+      };
+    });
+  }
+
+  private async enrichContact(contact: { id: number; user_id?: number | null; owner_id?: number | null; company_id?: number | null; total_revenue?: unknown; lead_score?: number | null; email?: string | null }) {
     const owner = contact.owner_id
       ? await this.prisma.profiles.findUnique({
           where: { id: contact.owner_id },
