@@ -1,137 +1,208 @@
-# CRM Endpoint Parity Report
+# CRM Endpoint Parity Audit
 
-Source of truth: `clickbit/server/routes/crm.js`  
-New implementation: `clickbit-admin/apps/api/src/crm/`
+Generated from `clickbit/server/routes/crm.js` vs `clickbit-admin/apps/api/src/crm/**`.
 
-## Summary
+## Legend
 
-- Existing new NestJS endpoint: `GET /api/crm/companies` (implemented in `companies.controller.ts`)
-- All other CRM endpoints are missing in `clickbit-admin` as of this audit.
-- Legacy CRM routes are mounted at `/api/crm` in `clickbit/server/index.js`.
+- **Implemented** — route exists in `apps/api` and returns the legacy envelope.
+- **Partial** — route exists but envelope, status codes, or roles differ.
+- **Missing** — route not yet ported.
 
-## Existing endpoint envelope check
+## Endpoint parity table
 
-`GET /api/crm/companies` in `apps/api/src/crm/companies.controller.ts` returns the same envelope as the legacy Express route:
+| Method | Legacy path | New path | Legacy auth roles | Response envelope keys | Success | Errors | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/crm/dashboard` | `/api/crm/dashboard` | admin, manager | dealsByStage, overview, period, pipelineValue, recentDeals, topPerformers | 200 | 500 | Missing |
+| GET | `/api/crm/contacts` | `/api/crm/contacts` | admin, manager | contacts, pagination | 200 | 500 | Missing |
+| GET | `/api/crm/contacts/:id` | `/api/crm/contacts/:id` | admin, manager | data | 200 | 404, 500 | Missing |
+| GET | `/api/crm/pipelines` | `/api/crm/pipelines` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| GET | `/api/crm/pipelines/:id` | `/api/crm/pipelines/:id` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| POST | `/api/crm/pipelines` | `/api/crm/pipelines` | admin | (variable / entity) | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/pipelines/:id` | `/api/crm/pipelines/:id` | admin | (variable / entity) | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/pipelines/:id/stages` | `/api/crm/pipelines/:id/stages` | admin | (variable / entity) | 200 | 400, 404, 500 | Missing |
+| GET | `/api/crm/deals` | `/api/crm/deals` | admin, manager | deals, pagination | 200 | 500 | Missing |
+| GET | `/api/crm/deals/:id` | `/api/crm/deals/:id` | admin, manager | deal | 200 | 404, 500 | Missing |
+| POST | `/api/crm/deals` | `/api/crm/deals` | admin, manager | (variable / entity) | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/deals/:id` | `/api/crm/deals/:id` | admin, manager | (variable / entity) | 200 | 400, 404, 500 | Missing |
+| PUT | `/api/crm/deals/:id/move` | `/api/crm/deals/:id/move` | admin, manager | (variable / entity) | 200 | 400, 404, 500 | Missing |
+| PUT | `/api/crm/deals/:id/won` | `/api/crm/deals/:id/won` | admin, manager | ...updatedDeal.toJSON, portalAccess | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/deals/:id/lost` | `/api/crm/deals/:id/lost` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/deals/:id/reopen` | `/api/crm/deals/:id/reopen` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/deals/:id` | `/api/crm/deals/:id` | admin, manager | message | 200 | 404, 500 | Missing |
+| GET | `/api/crm/companies` | `/api/crm/companies` | admin, manager | companies, pagination | 200 | 500 | Implemented |
+| GET | `/api/crm/companies/:id` | `/api/crm/companies/:id` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| GET | `/api/crm/companies/:id/users` | `/api/crm/companies/:id/users` | admin, manager | users | 200 | 404, 500 | Missing |
+| GET | `/api/crm/companies/:id/invoices` | `/api/crm/companies/:id/invoices` | admin, manager | invoices, pagination | 200 | 404, 500 | Missing |
+| GET | `/api/crm/companies/:id/payments` | `/api/crm/companies/:id/payments` | admin, manager | pagination, payments | 200 | 404, 500 | Missing |
+| GET | `/api/crm/companies/:id/value-breakdown` | `/api/crm/companies/:id/value-breakdown` | admin, manager | breakdown, company_id, company_name, counts, currency, total | 200 | 404, 500 | Missing |
+| POST | `/api/crm/companies` | `/api/crm/companies` | admin, manager | (variable / entity) | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/companies/:id` | `/api/crm/companies/:id` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/companies/:id` | `/api/crm/companies/:id` | admin | message | 200 | 404, 500 | Missing |
+| GET | `/api/crm/activities` | `/api/crm/activities` | admin, manager | activities, pagination | 200 | 500 | Missing |
+| GET | `/api/crm/activities/:id` | `/api/crm/activities/:id` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| POST | `/api/crm/activities` | `/api/crm/activities` | admin, manager | (variable / entity) | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/activities/:id` | `/api/crm/activities/:id` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/activities/:id/complete` | `/api/crm/activities/:id/complete` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/activities/:id` | `/api/crm/activities/:id` | admin | message | 200 | 404, 500 | Missing |
+| GET | `/api/crm/notes` | `/api/crm/notes` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| POST | `/api/crm/notes` | `/api/crm/notes` | admin, manager | (variable / entity) | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/notes/:id` | `/api/crm/notes/:id` | admin, manager | (variable / entity) | 200 | 403, 404, 500 | Missing |
+| DELETE | `/api/crm/notes/:id` | `/api/crm/notes/:id` | admin | message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/contacts/:contactId/companies` | `/api/crm/contacts/:contactId/companies` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/contacts/:contactId/companies/:companyId` | `/api/crm/contacts/:contactId/companies/:companyId` | admin, manager | message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/deals/bulk-update` | `/api/crm/deals/bulk-update` | admin, manager | message, updated_count | 200 | 400, 500 | Missing |
+| POST | `/api/crm/deals/bulk-delete` | `/api/crm/deals/bulk-delete` | admin, manager | deleted_count, message | 200 | 400, 500 | Missing |
+| GET | `/api/crm/automations` | `/api/crm/automations` | admin, manager | automations, pagination | 200 | 500 | Missing |
+| GET | `/api/crm/automations/:id` | `/api/crm/automations/:id` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| POST | `/api/crm/automations` | `/api/crm/automations` | admin | (variable / entity) | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/automations/:id` | `/api/crm/automations/:id` | admin | (variable / entity) | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/automations/:id/toggle` | `/api/crm/automations/:id/toggle` | admin | automation, message | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/automations/:id` | `/api/crm/automations/:id` | admin | message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/automations/:id/test` | `/api/crm/automations/:id/test` | admin | (variable / entity) | 200 | 404, 500 | Missing |
+| POST | `/api/crm/integrations/order/:orderId/create-deal` | `/api/crm/integrations/order/:orderId/create-deal` | admin, manager | (variable / entity) | 201 | 404, 500 | Missing |
+| POST | `/api/crm/integrations/custom-package/:packageId/create-deal` | `/api/crm/integrations/custom-package/:packageId/create-deal` | admin, manager | (variable / entity) | 201 | 404, 500 | Missing |
+| GET | `/api/crm/reports/forecast` | `/api/crm/reports/forecast` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| GET | `/api/crm/reports/velocity` | `/api/crm/reports/velocity` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| POST | `/api/crm/leads/recalculate-scores` | `/api/crm/leads/recalculate-scores` | admin | (variable / entity) | 200 | 500 | Missing |
+| POST | `/api/crm/leads/auto-assign` | `/api/crm/leads/auto-assign` | admin | assigned_count, message | 200 | 500 | Missing |
+| GET | `/api/crm/leads/hot` | `/api/crm/leads/hot` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| GET | `/api/crm/leads/uncontacted` | `/api/crm/leads/uncontacted` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| GET | `/api/crm/leads/by-stage/:stage` | `/api/crm/leads/by-stage/:stage` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| PUT | `/api/crm/contacts/:id/lead-score` | `/api/crm/contacts/:id/lead-score` | admin, manager | lead_score | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/contacts/:id/lifecycle-stage` | `/api/crm/contacts/:id/lifecycle-stage` | admin, manager | (variable / entity) | 200 | 400, 404, 500 | Missing |
+| GET | `/api/crm/contacts/stats` | `/api/crm/contacts/stats` | admin, manager | (variable / entity) | 200 | 500 | Missing |
+| GET | `/api/crm/customers` | `/api/crm/customers` | admin, manager | data, pagination, success | 200 | 500 | Missing |
+| GET | `/api/crm/contacts/:id/invoices` | `/api/crm/contacts/:id/invoices` | admin, manager | invoices, pagination | 200 | 404, 500 | Missing |
+| GET | `/api/crm/contacts/:id/payments` | `/api/crm/contacts/:id/payments` | admin, manager | pagination, payments | 200 | 404, 500 | Missing |
+| GET | `/api/crm/contacts/:id/portal-access` | `/api/crm/contacts/:id/portal-access` | admin, manager | hasAccess, linkType, user | 200 | 500 | Missing |
+| POST | `/api/crm/contacts/:id/portal-access` | `/api/crm/contacts/:id/portal-access` | admin, manager | alreadyExists, linkedExisting, message, success, user | 200 / 201 | 400, 500 | Missing |
+| POST | `/api/crm/contacts/:id/portal-access/resend` | `/api/crm/contacts/:id/portal-access/resend` | admin, manager | message, success | 200 | 400, 500 | Missing |
+| POST | `/api/crm/contacts/portal-access/batch` | `/api/crm/contacts/portal-access/batch` | admin | (variable / entity) | 200 | 400, 500 | Missing |
+| GET | `/api/crm/contacts/with-portal-status` | `/api/crm/contacts/with-portal-status` | admin, manager | contacts, pagination | 200 | 500 | Missing |
+| GET | `/api/crm/companies/:id/documents` | `/api/crm/companies/:id/documents` | admin, manager | company, documents, pagination, subprojectDocuments | 200 | 404, 500 | Missing |
+| POST | `/api/crm/companies/:id/documents` | `/api/crm/companies/:id/documents` | admin, manager | document, message | 201 | 400, 404, 500 | Missing |
+| PUT | `/api/crm/companies/:companyId/documents/:docId` | `/api/crm/companies/:companyId/documents/:docId` | admin, manager | document, message | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/companies/:companyId/documents/:docId` | `/api/crm/companies/:companyId/documents/:docId` | admin, manager | message | 200 | 404, 500 | Missing |
+| GET | `/api/crm/companies/:companyId/documents/:docId` | `/api/crm/companies/:companyId/documents/:docId` | admin, manager | (variable / entity) | 200 | 404, 500 | Missing |
+| POST | `/api/crm/companies/:companyId/documents/:docId/download` | `/api/crm/companies/:companyId/documents/:docId/download` | any authenticated | download_url, message | 200 | 404, 500 | Missing |
+| GET | `/api/crm/projects` | `/api/crm/projects` | admin, manager | pagination, projects, stats | 200 | 500 | Missing |
+| PATCH | `/api/crm/projects/:id/status` | `/api/crm/projects/:id/status` | admin, manager | message, project | 200 | 404, 500 | Missing |
+| GET | `/api/crm/projects/:id/related` | `/api/crm/projects/:id/related` | admin, manager | project, related, summary | 200 | 404, 500 | Missing |
+| POST | `/api/crm/contacts/:id/convert-to-deal` | `/api/crm/contacts/:id/convert-to-deal` | admin, manager | deal, message | 201 | 400, 404, 500 | Missing |
+| GET | `/api/crm/leads` | `/api/crm/leads` | admin, manager | leads, pagination | 200 | 500 | Missing |
+| GET | `/api/crm/leads/pipeline/:pipelineId` | `/api/crm/leads/pipeline/:pipelineId` | admin, manager | pipeline, stages, stats | 200 | 404, 500 | Missing |
+| POST | `/api/crm/leads` | `/api/crm/leads` | admin, manager | lead, message | 201 | 400, 500 | Missing |
+| GET | `/api/crm/leads/:id` | `/api/crm/leads/:id` | admin, manager | lead | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/leads/:id` | `/api/crm/leads/:id` | admin, manager | lead, message | 200 | 404, 500 | Missing |
+| PATCH | `/api/crm/leads/:id/move` | `/api/crm/leads/:id/move` | admin, manager | lead, message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/leads/:id/win` | `/api/crm/leads/:id/win` | admin, manager | customer, deal, lead, message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/leads/:id/lose` | `/api/crm/leads/:id/lose` | admin, manager | lead, message | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/leads/:id` | `/api/crm/leads/:id` | admin | message | 200 | 404, 500 | Missing |
+| GET | `/api/crm/projects-new` | `/api/crm/projects-new` | admin, manager, employee | pagination, projects, stats | 200 | 500 | Missing |
+| POST | `/api/crm/projects-new/:id/tasks` | `/api/crm/projects-new/:id/tasks` | admin, manager | (variable / entity) | 201 | 404, 500 | Missing |
+| GET | `/api/crm/projects-new/:id/tasks` | `/api/crm/projects-new/:id/tasks` | admin, manager, employee | stats, tasks | 200 | 403, 404, 500 | Missing |
+| GET | `/api/crm/projects-new/:id/subprojects` | `/api/crm/projects-new/:id/subprojects` | admin, manager, employee | pagination, subprojects | 200 | 400, 404, 500 | Missing |
+| GET | `/api/crm/projects-new/:id/subprojects/:subprojectId` | `/api/crm/projects-new/:id/subprojects/:subprojectId` | admin, manager | subproject | 200 | 400, 404, 500 | Missing |
+| POST | `/api/crm/projects-new/:id/subprojects` | `/api/crm/projects-new/:id/subprojects` | admin, manager | message, subproject | 201 | 400, 404, 500 | Missing |
+| PUT | `/api/crm/projects-new/:id/subprojects/:subprojectId/support` | `/api/crm/projects-new/:id/subprojects/:subprojectId/support` | admin, manager | message, subproject | 200 | 404, 500 | Missing |
+| PUT | `/api/crm/projects-new/:id/subprojects/:subprojectId` | `/api/crm/projects-new/:id/subprojects/:subprojectId` | admin, manager | message, subproject | 200 | 400, 404, 500 | Missing |
+| DELETE | `/api/crm/projects-new/:id/subprojects/:subprojectId` | `/api/crm/projects-new/:id/subprojects/:subprojectId` | admin, manager | message | 200 | 400, 404, 500 | Missing |
+| DELETE | `/api/crm/projects-new/:id/subprojects/:subprojectId/documents/:documentId` | `/api/crm/projects-new/:id/subprojects/:subprojectId/documents/:documentId` | admin, manager | message | 200 | 400, 404, 500 | Missing |
+| POST | `/api/crm/projects-new/:id/subprojects/:subprojectId/send-support-email` | `/api/crm/projects-new/:id/subprojects/:subprojectId/send-support-email` | admin, manager | message, sentTo | 200 | 400, 404, 500 | Missing |
+| GET | `/api/crm/projects-new/:id/documents` | `/api/crm/projects-new/:id/documents` | admin, manager | documents | 200 | 400, 404, 500 | Missing |
+| GET | `/api/crm/projects-new/:id` | `/api/crm/projects-new/:id` | admin, manager, employee | project | 200 | 400, 403, 404, 500 | Missing |
+| POST | `/api/crm/projects-new/:id/documents` | `/api/crm/projects-new/:id/documents` | admin, manager | document, message | 201 | 400, 404, 500 | Missing |
+| DELETE | `/api/crm/projects-new/:id/documents/:documentId` | `/api/crm/projects-new/:id/documents/:documentId` | admin, manager | message | 200 | 400, 404, 500 | Missing |
+| GET | `/api/crm/projects-new/:id/meetings` | `/api/crm/projects-new/:id/meetings` | admin, manager, employee | (variable / entity) | 200 | 400, 403, 500 | Missing |
+| POST | `/api/crm/projects-new/:id/meetings` | `/api/crm/projects-new/:id/meetings` | admin, manager | meeting, message | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/projects-new/:id/meetings/:meetingId` | `/api/crm/projects-new/:id/meetings/:meetingId` | admin, manager | meeting, message | 200 | 404, 500 | Missing |
+| DELETE | `/api/crm/projects-new/:id/meetings/:meetingId` | `/api/crm/projects-new/:id/meetings/:meetingId` | admin, manager | message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/projects-new` | `/api/crm/projects-new` | admin, manager | message, project | 201 | 400, 500 | Missing |
+| PUT | `/api/crm/projects-new/:id` | `/api/crm/projects-new/:id` | admin, manager | message, project | 200 | 404, 500 | Missing |
+| POST | `/api/crm/projects-new/:id/recalculate-progress` | `/api/crm/projects-new/:id/recalculate-progress` | admin, manager | afterProgress, beforeProgress, message, project | 200 | 404, 500 | Missing |
+| PATCH | `/api/crm/projects-new/:id/status` | `/api/crm/projects-new/:id/status` | admin, manager | message, project | 200 | 404, 500 | Missing |
+| POST | `/api/crm/projects-new/:id/send-support-email` | `/api/crm/projects-new/:id/send-support-email` | admin, manager | message, sentTo | 200 | 400, 404, 500 | Missing |
+| DELETE | `/api/crm/projects-new/:id` | `/api/crm/projects-new/:id` | admin | message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/deals/:id/create-project` | `/api/crm/deals/:id/create-project` | admin, manager | message, project | 201 | 400, 404, 500 | Missing |
+| PUT | `/api/crm/invoices/:id/link-project` | `/api/crm/invoices/:id/link-project` | admin, manager | invoice, message | 200 | 404, 500 | Missing |
+| POST | `/api/crm/invoices/fix-project-links` | `/api/crm/invoices/fix-project-links` | admin | message, skipped_or_error, total_candidates, updated_count | 200 | 500 | Missing |
+| PUT | `/api/crm/deals/:id/update-value` | `/api/crm/deals/:id/update-value` | admin, manager | calculated_value, deal, invoice_count, message | 200 | 404, 500 | Missing |
+
+## Existing `GET /api/crm/companies` response envelope
+
+Legacy `GET /api/crm/companies` returns:
+
 ```json
-{ companies: [...], pagination: { currentPage, totalPages, totalItems, itemsPerPage }, aggregatedStats?: { totalValue, totalDeals, customerCount } }
+{
+  "companies": [ /* Company objects */ ],
+  "pagination": {
+    "currentPage": <number>,
+    "totalPages": <number>,
+    "totalItems": <number>,
+    "itemsPerPage": <number>
+  },
+  "aggregatedStats": {
+    "totalValue": <number>,
+    "totalDeals": <number>,
+    "customerCount": <number>
+  }
+}
 ```
-The NestJS service mirrors the legacy filtering (search, industry, lifecycle_stage, owner_id), sorting, pagination, primary-contact lateral join, per-company revenue/deal/project/task totals, and aggregated stats calculation. The envelope shape and `totalItems`/`totalPages` fields match.
 
-## CRM endpoint backlog
+The new `apps/api/src/crm/companies.service.ts` produces the same `{ companies, pagination }`
+shape and conditionally adds `aggregatedStats` when `includeStats !== "false"` and `mode !== "simple"`.
+The `CompaniesListResponse` type in `packages/shared` matches the legacy envelope.
+Pagination keys use `currentPage/totalPages/totalItems/itemsPerPage` in both old and new code.
+The new implementation also adds computed per-company fields (`total_deals`, `total_projects`, `total_tasks`, `total_revenue`) which preserve the legacy totals contract.
 
-| Method | Path | Legacy auth | Status |
-|--------|------|-------------|--------|
-| PUT | `/api/crm/deals/:id/move` | admin/manager | Missing |
-| PUT | `/api/crm/deals/:id/won` | admin/manager | Missing |
-| PUT | `/api/crm/deals/:id/lost` | admin/manager | Missing |
-| PUT | `/api/crm/deals/:id/reopen` | admin/manager | Missing |
-| DELETE | `/api/crm/deals/:id` | admin/manager | Missing |
-| GET | `/api/crm/companies` | admin/manager | Implemented |
-| GET | `/api/crm/companies/:id` | admin/manager | Missing |
-| GET | `/api/crm/companies/:id/users` | admin/manager | Missing |
-| GET | `/api/crm/companies/:id/invoices` | admin/manager | Missing |
-| GET | `/api/crm/companies/:id/payments` | admin/manager | Missing |
-| GET | `/api/crm/companies/:id/value-breakdown` | admin/manager | Missing |
-| POST | `/api/crm/companies` | admin/manager | Missing |
-| PUT | `/api/crm/companies/:id` | admin/manager | Missing |
-| DELETE | `/api/crm/companies/:id` | admin | Missing |
-| GET | `/api/crm/activities` | admin/manager | Missing |
-| GET | `/api/crm/activities/:id` | admin/manager | Missing |
-| POST | `/api/crm/activities` | admin/manager | Missing |
-| PUT | `/api/crm/activities/:id` | admin/manager | Missing |
-| PUT | `/api/crm/activities/:id/complete` | admin/manager | Missing |
-| DELETE | `/api/crm/activities/:id` | admin | Missing |
-| GET | `/api/crm/notes` | admin/manager | Missing |
-| POST | `/api/crm/notes` | admin/manager | Missing |
-| PUT | `/api/crm/notes/:id` | admin/manager | Missing |
-| DELETE | `/api/crm/notes/:id` | admin | Missing |
-| POST | `/api/crm/contacts/:contactId/companies` | admin/manager | Missing |
-| DELETE | `/api/crm/contacts/:contactId/companies/:companyId` | admin/manager | Missing |
-| POST | `/api/crm/deals/bulk-update` | admin/manager | Missing |
-| POST | `/api/crm/deals/bulk-delete` | admin/manager | Missing |
-| GET | `/api/crm/automations` | admin/manager | Missing |
-| GET | `/api/crm/automations/:id` | admin/manager | Missing |
-| POST | `/api/crm/automations` | admin | Missing |
-| PUT | `/api/crm/automations/:id` | admin | Missing |
-| PUT | `/api/crm/automations/:id/toggle` | admin | Missing |
-| DELETE | `/api/crm/automations/:id` | admin | Missing |
-| POST | `/api/crm/automations/:id/test` | admin | Missing |
-| POST | `/api/crm/integrations/order/:orderId/create-deal` | admin/manager | Missing |
-| POST | `/api/crm/integrations/custom-package/:packageId/create-deal` | admin/manager | Missing |
-| GET | `/api/crm/reports/forecast` | admin/manager | Missing |
-| GET | `/api/crm/reports/velocity` | admin/manager | Missing |
-| POST | `/api/crm/leads/recalculate-scores` | admin | Missing |
-| POST | `/api/crm/leads/auto-assign` | admin | Missing |
-| GET | `/api/crm/leads/hot` | admin/manager | Missing |
-| GET | `/api/crm/leads/uncontacted` | admin/manager | Missing |
-| GET | `/api/crm/leads/by-stage/:stage` | admin/manager | Missing |
-| PUT | `/api/crm/contacts/:id/lead-score` | admin/manager | Missing |
-| PUT | `/api/crm/contacts/:id/lifecycle-stage` | admin/manager | Missing |
-| GET | `/api/crm/contacts/stats` | admin/manager | Missing |
-| GET | `/api/crm/customers` | admin/manager | Missing |
-| GET | `/api/crm/contacts/:id/invoices` | admin/manager | Missing |
-| GET | `/api/crm/contacts/:id/payments` | admin/manager | Missing |
-| GET | `/api/crm/contacts/:id/portal-access` | admin/manager | Missing |
-| POST | `/api/crm/contacts/:id/portal-access` | admin/manager | Missing |
-| POST | `/api/crm/contacts/:id/portal-access/resend` | admin/manager | Missing |
-| POST | `/api/crm/contacts/portal-access/batch` | admin | Missing |
-| GET | `/api/crm/contacts/with-portal-status` | admin/manager | Missing |
-| GET | `/api/crm/companies/:id/documents` | admin/manager | Missing |
-| POST | `/api/crm/companies/:id/documents` | admin/manager | Missing |
-| PUT | `/api/crm/companies/:companyId/documents/:docId` | admin/manager | Missing |
-| DELETE | `/api/crm/companies/:companyId/documents/:docId` | admin/manager | Missing |
-| GET | `/api/crm/companies/:companyId/documents/:docId` | admin/manager | Missing |
-| POST | `/api/crm/companies/:companyId/documents/:docId/download` | admin/manager | Missing |
-| GET | `/api/crm/projects` | admin/manager | Missing |
-| PATCH | `/api/crm/projects/:id/status` | admin/manager | Missing |
-| GET | `/api/crm/projects/:id/related` | admin/manager | Missing |
-| POST | `/api/crm/contacts/:id/convert-to-deal` | admin/manager | Missing |
-| GET | `/api/crm/leads` | admin/manager | Missing |
-| GET | `/api/crm/leads/pipeline/:pipelineId` | admin/manager | Missing |
-| POST | `/api/crm/leads` | admin/manager | Missing |
-| GET | `/api/crm/leads/:id` | admin/manager | Missing |
-| PUT | `/api/crm/leads/:id` | admin/manager | Missing |
-| PATCH | `/api/crm/leads/:id/move` | admin/manager | Missing |
-| POST | `/api/crm/leads/:id/win` | admin/manager | Missing |
-| POST | `/api/crm/leads/:id/lose` | admin/manager | Missing |
-| DELETE | `/api/crm/leads/:id` | admin | Missing |
-| GET | `/api/crm/projects-new` | admin/manager/employee | Missing |
-| POST | `/api/crm/projects-new/:id/tasks` | admin/manager | Missing |
-| GET | `/api/crm/projects-new/:id/tasks` | admin/manager/employee | Missing |
-| GET | `/api/crm/projects-new/:id/subprojects` | admin/manager/employee | Missing |
-| GET | `/api/crm/projects-new/:id/subprojects/:subprojectId` | admin/manager | Missing |
-| POST | `/api/crm/projects-new/:id/subprojects` | admin/manager | Missing |
-| PUT | `/api/crm/projects-new/:id/subprojects/:subprojectId/support` | admin/manager | Missing |
-| PUT | `/api/crm/projects-new/:id/subprojects/:subprojectId` | admin/manager | Missing |
-| DELETE | `/api/crm/projects-new/:id/subprojects/:subprojectId` | admin/manager | Missing |
-| DELETE | `/api/crm/projects-new/:id/subprojects/:subprojectId/documents/:documentId` | admin/manager | Missing |
-| POST | `/api/crm/projects-new/:id/subprojects/:subprojectId/send-support-email` | admin/manager | Missing |
-| GET | `/api/crm/projects-new/:id/documents` | admin/manager | Missing |
-| GET | `/api/crm/projects-new/:id` | admin/manager/employee | Missing |
-| POST | `/api/crm/projects-new/:id/documents` | admin/manager | Missing |
-| DELETE | `/api/crm/projects-new/:id/documents/:documentId` | admin/manager | Missing |
-| GET | `/api/crm/projects-new/:id/meetings` | admin/manager/employee | Missing |
-| POST | `/api/crm/projects-new/:id/meetings` | admin/manager | Missing |
-| PUT | `/api/crm/projects-new/:id/meetings/:meetingId` | admin/manager | Missing |
-| DELETE | `/api/crm/projects-new/:id/meetings/:meetingId` | admin/manager | Missing |
-| POST | `/api/crm/projects-new` | admin/manager | Missing |
-| PUT | `/api/crm/projects-new/:id` | admin/manager | Missing |
-| POST | `/api/crm/projects-new/:id/recalculate-progress` | admin/manager | Missing |
-| PATCH | `/api/crm/projects-new/:id/status` | admin/manager | Missing |
-| POST | `/api/crm/projects-new/:id/send-support-email` | admin/manager | Missing |
-| DELETE | `/api/crm/projects-new/:id` | admin | Missing |
-| POST | `/api/crm/deals/:id/create-project` | admin/manager | Missing |
-| PUT | `/api/crm/invoices/:id/link-project` | admin/manager | Missing |
-| POST | `/api/crm/invoices/fix-project-links` | admin | Missing |
-| PUT | `/api/crm/deals/:id/update-value` | admin/manager | Missing |
+## Other legacy route files mounted by `clickbit/server/index.js`
 
-## Other legacy route modules (not implemented in this task)
+`server/index.js` mounts the following route modules under `/api/*` (high-level count: 45 files):
 
-High-level backlog from `clickbit/server/index.js` mount table (do not implement in this task):
+- `server/routes/auth-secure.js`
+- `server/routes/users.js`
+- `server/routes/payments.js`
+- `server/routes/adminPayments.js`
+- `server/routes/blog.js`
+- `server/routes/portfolio.js`
+- `server/routes/settings.js`
+- `server/routes/credentials.js`
+- `server/routes/clickdeploy.js`
+- `server/routes/pdfTemplates.js`
+- `server/routes/contact.js`
+- `server/routes/analytics.js`
+- `server/routes/admin.js`
+- `server/routes/services.js`
+- `server/routes/team.js`
+- `server/routes/reviews.js`
+- `server/routes/publicContent.js`
+- `server/routes/upload.js`
+- `server/routes/notifications.js`
+- `server/routes/pushNotificationEndpoints.js`
+- `server/routes/invoices.js`
+- `server/routes/tickets.js`
+- `server/routes/ticketsAdvanced.js`
+- `server/routes/crm.js`
+- `server/routes/projectLifecycle.js`
+- `server/routes/hr.js`
+- `server/routes/hr/kpi.js`
+- `server/routes/hrPayslips.js`
+- `server/routes/hrForms.js`
+- `server/routes/departments.js`
+- `server/routes/project-tasks.js`
+- `server/routes/expenses.js`
+- `server/routes/staffAdvances.js`
+- `server/routes/customer.js`
+- `server/routes/agent.js`
+- `server/routes/documents.js`
+- `server/routes/mail.js`
+- `server/routes/chat.js`
+- `server/routes/messages.js`
+- `server/routes/auditLogs.js`
+- `server/routes/profile.js`
+- `server/routes/verify.js`
+- `server/routes/bugReports.js`
+- `server/routes/ticketAutomation.js`
+- `server/routes/serviceTokens.js`
 
-`/api/auth`, `/api/users`, `/api/payments`, `/api/blog`, `/api/portfolio`, `/api/settings`, `/api/credentials`, `/api/clickdeploy`, `/api/pdf-templates`, `/api/contact`, `/api/analytics`, `/api/admin`, `/api/services`, `/api/marketing-posts`, `/api/team`, `/api/reviews`, `/api/public`, `/api/upload`, `/api/notifications`, `/api/invoices`, `/api/tickets`, `/api/project-lifecycle`, `/api/hr`, `/api/hr/kpi`, `/api/hr/payslips`, `/api/hr/forms`, `/api/departments`, `/api/projects`, `/api/expenses`, `/api/staff-advances`, `/api/customer`, `/api/agent`, `/api/documents`, `/api/mail`, `/api/chat`, `/api/messages`, `/api/admin/audit-logs`, `/api/profile`, `/api/verify`, `/api/bug-reports`, `/api/ticket-automation`, `/api/service-tokens`.
-
-## Notes
-
-- `/api/crm/deals/:id/won` side effects: legacy updates company/contact revenue stats, creates a customer portal account, and spawns a CrmLead.
-- The duplicate `convert-to-deal` handler in the legacy routes should be implemented once only.
+These are listed for migration planning only; no implementation changes were made.

@@ -31,35 +31,79 @@ Deployment order:
 3. Verify the legacy web and mobile clients continue to work through the router.
 4. Repeat for each module until the legacy API can be decommissioned.
 
+## Per-module porting recipe (proven by CRM)
+
+Use this exact sequence for each module. CRM has proved the flow and the contract-test guardrail.
+
+1. **Endpoint parity checklist**
+   - Extract every route from the legacy Express file (`server/routes/<domain>.js`).
+   - Record method, path, auth roles, response envelope keys, success/error status codes, and whether each route is `Implemented` / `Missing` / `Partial` (see `PARITY.md` for CRM).
+   - Resolve ambiguous envelopes by running the legacy route or inspecting its response handlers.
+
+2. **NestJS module**
+   - Create `apps/api/src/<domain>/<domain>.module.ts`.
+   - Add controllers under `@Controller('<domain>')` with the legacy route paths and `@Get/@Post/@Put/@Delete` methods.
+   - Apply `SupabaseAuthGuard`, `RolesGuard`, and `@Roles(...)` to match legacy `protect` + `authorize()`.
+   - Implement services against the same Supabase Postgres via `PrismaService`; keep column/JSON field names identical.
+   - Preserve pagination shapes exactly (`currentPage/totalPages/totalItems/itemsPerPage` or the contacts `total/limit/offset`).
+
+3. **shadcn pages**
+   - In `apps/web`, mirror the existing `/crm/companies` page structure (data table, filter chips, sort controls, create/edit dialogs).
+   - Use `@clickbit/shared` DTO/response types for type-safe TanStack Query hooks.
+   - Re-use the shadcn/ui components installed in `apps/web/components/ui` to keep visual parity with the legacy admin UI.
+
+4. **Contract test**
+   - Add `apps/api/test/<domain>.contract.spec.ts` or `apps/api/src/<domain>/<domain>.contract.spec.ts`.
+   - Mock `PrismaService` if a live database is unavailable.
+   - Assert that each ported endpoint returns the legacy response envelope and the correct HTTP status.
+   - Run `pnpm --filter @clickbit/api typecheck` and `pnpm --filter @clickbit/api test` before the router rule is flipped.
+
 ## Module porting order
 
-The following order is recommended. Auth and CRM are intentionally first because almost every other domain depends on them.
+The new porting order is:
 
-1. **auth**
+1. **auth / users**
    - `SupabaseAuthGuard` and `@Roles()` decorator (done).
    - Port `/api/auth/me`, `/api/auth/login`, logout/session routes.
    - Service tokens (`cb_*`) can be migrated later.
+   - `users` (profiles, roles, settings) is co-ported with auth.
 
-2. **crm**
-   - `GET /api/crm/companies` (done).
-   - `/api/crm/companies/:id`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/projects`, `/api/crm/tasks`, `/api/crm/activities`.
+2. **crm** *(in progress)*
+   - `GET /api/crm/companies` is done.
+   - `/api/crm/companies/:id`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/pipelines`, `/api/crm/leads`, `/api/crm/projects`, `/api/crm/subprojects`, `/api/crm/activities`, `/api/crm/notes`, `/api/crm/meetings`, `/api/crm/automations` remain.
    - Preserve computed fields (`total_revenue`, `total_deals`, `total_projects`, `total_tasks`) and `aggregatedStats`.
 
-3. **invoices / payments**
-   - `/api/invoices/*`, `/api/payments/*`.
+3. **finance** (invoices / payments / expenses)
+   - `/api/invoices/*`, `/api/payments/*`, `/api/expenses/*`.
    - These feed the CRM totals, so ensure the value aggregation logic stays consistent with `crm/companies`.
 
 4. **hr**
    - `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, courses, announcements).
 
-5. **tickets**
-   - `/api/tickets/*`.
+5. **support / tickets**
+   - `/api/tickets/*`, `/api/ticket-automation/*`, `/api/bug-reports/*`.
 
-6. **mail / messages**
-   - `/api/mail/*`, `/api/messages/*`.
+6. **communication** (mail / messages / chat)
+   - `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
 
-7. **admin / settings**
-   - `/api/admin/*`, `/api/settings/*`.
+7. **content / marketing**
+   - `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/public-content/*`.
+
+8. **settings / admin**
+   - `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*`.
+
+## Background-worker services
+
+The legacy clickbit server runs several background services and cron-like schedulers that must move into the `apps/api` worker process so the Nest API can fully replace the Express server. Port them in this order, re-implementing each as a Nest `@nestjs/schedule` cron interval, a dedicated worker service, or an `apps/api` background script:
+
+- `mailSyncWorker` — email inbox polling and thread creation.
+- `payrollScheduler` / `payrollReminderScheduler` — payslip generation and payday reminders.
+- `reminderScheduler` — activity/task due reminders.
+- `recurringTaskScheduler` — recurring task instance creation.
+- `shiftScheduler` / `attendanceScheduler` — roster generation and attendance reconciliation.
+- `blogScheduler` — scheduled content publishing.
+- `analyticsAlerts` — threshold-based analytics notifications.
+- `announcementAutomationService` — scheduled/targeted announcement distribution.
 
 ## Frontend migration order
 
