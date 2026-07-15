@@ -49,7 +49,7 @@ export class ContactsController {
   }
 
   @Post()
-  async create(
+  create(
     @Body() body: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -59,7 +59,7 @@ export class ContactsController {
   }
 
   @Put(':id')
-  async update(
+  update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,

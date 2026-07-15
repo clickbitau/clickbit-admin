@@ -1,33 +1,50 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 
-export function useRealtimeRefresh(
-  channelName: string,
-  tables: string[],
-  onChange: () => void,
-) {
-  useEffect(() => {
-    if (!supabase) return;
+interface UseRealtimeRefreshOptions {
+  enabled?: boolean;
+  debounceMs?: number;
+}
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes' as any,
-        { event: '*', schema: 'public' },
-        (payload: { table?: string }) => {
-          if (payload.table && tables.includes(payload.table)) {
-            onChange();
-          }
+export function useRealtimeRefresh(
+  tables: string[],
+  queryKey: string[],
+  options: UseRealtimeRefreshOptions = {},
+) {
+  const { enabled = true, debounceMs = 500 } = options;
+  const queryClient = useQueryClient();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !supabase || tables.length === 0 || queryKey.length === 0) return;
+
+    const channel = supabase.channel('crm-realtime');
+
+    tables.forEach((table) => {
+      channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        () => {
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey });
+          }, debounceMs);
         },
-      )
-      .subscribe();
+      );
+    });
+
+    channel.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.warn('Realtime subscription error for tables:', tables);
+      }
+    });
 
     return () => {
-      if (supabase) {
-        supabase.removeChannel(channel);
-      }
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      supabase?.removeChannel(channel);
     };
-  }, [channelName, tables, onChange]);
+  }, [enabled, tables, queryKey, debounceMs, queryClient]);
 }

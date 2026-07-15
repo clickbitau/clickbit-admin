@@ -103,7 +103,7 @@ describe('CRM legacy contract tests', () => {
           sortBy: 'updated_at',
           sortOrder: 'DESC',
           includeStats: 'false',
-        } as any,
+        },
         resMock,
       );
 
@@ -130,7 +130,7 @@ describe('CRM legacy contract tests', () => {
           sortBy: 'updated_at',
           sortOrder: 'DESC',
           includeStats: 'true',
-        } as any,
+        },
         resMock,
       );
 
@@ -150,7 +150,7 @@ describe('CRM legacy contract tests', () => {
           page: 1,
           limit: 50,
           mode: 'simple',
-        } as any,
+        },
         resMock,
       );
 
@@ -170,7 +170,7 @@ describe('CRM legacy contract tests', () => {
           page: 1,
           limit: 50,
           includeStats: 'false',
-        } as any,
+        },
         resMock,
       );
 

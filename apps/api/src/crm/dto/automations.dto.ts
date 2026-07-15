@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
 
 export const TRIGGER_TYPES = ['deal_stage_changed', 'lead_created', 'contact_lifecycle_changed', 'task_overdue', 'email_opened', 'manual'] as const;

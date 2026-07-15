@@ -1,39 +1,34 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ReactNode } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 
-interface StatItem {
+interface StatCard {
   label: string;
   value: string | number;
+  icon?: ReactNode;
 }
 
 interface StatCardsProps {
-  stats: StatItem[];
+  cards: StatCard[];
 }
 
-export function StatCards({ stats }: StatCardsProps) {
+export function StatCards({ cards }: StatCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat) => (
-        <Card key={stat.label}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {stat.label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{stat.value}</p>
+      {cards.map((card) => (
+        <Card key={card.label}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{card.label}</p>
+                <p className="mt-1 text-2xl font-semibold">{card.value}</p>
+              </div>
+              {card.icon && <div className="text-muted-foreground">{card.icon}</div>}
+            </div>
           </CardContent>
         </Card>
       ))}
     </div>
   );
-}
-
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    maximumFractionDigits: 0,
-  }).format(value);
 }

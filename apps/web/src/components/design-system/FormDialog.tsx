@@ -1,5 +1,7 @@
 'use client';
 
+import { ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -8,17 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 
 interface FormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   submitLabel?: string;
-  submitDisabled?: boolean;
+  loading?: boolean;
 }
 
 export function FormDialog({
@@ -29,7 +30,7 @@ export function FormDialog({
   children,
   onSubmit,
   submitLabel = 'Save',
-  submitDisabled,
+  loading,
 }: FormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,7 +42,10 @@ export function FormDialog({
           </DialogHeader>
           <div className="grid gap-4 py-4">{children}</div>
           <DialogFooter>
-            <Button type="submit" disabled={submitDisabled}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
               {submitLabel}
             </Button>
           </DialogFooter>

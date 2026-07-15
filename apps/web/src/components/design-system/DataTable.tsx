@@ -1,5 +1,6 @@
 'use client';
 
+import { ReactNode } from 'react';
 import {
   Table,
   TableBody,
@@ -8,107 +9,71 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-
-export interface Column<T> {
-  key: string;
-  header: string;
-  render?: (row: T) => React.ReactNode;
-}
+import { EmptyState } from './EmptyState';
 
 interface DataTableProps<T> {
-  columns: Column<T>[];
-  rows: T[];
+  headers: { key: string; label: ReactNode; className?: string }[];
+  data: T[];
+  keyExtractor: (row: T, index: number) => string | number;
+  renderRow: (row: T, index: number) => ReactNode[];
   loading?: boolean;
-  getRowKey: (row: T) => string | number;
-  page?: number;
-  totalPages?: number;
-  onPageChange?: (page: number) => void;
-  emptyMessage?: string;
+  emptyText?: string;
+  onRowClick?: (row: T, index: number) => void;
 }
 
 export function DataTable<T>({
-  columns,
-  rows,
+  headers,
+  data,
+  keyExtractor,
+  renderRow,
   loading,
-  getRowKey,
-  page,
-  totalPages,
-  onPageChange,
-  emptyMessage = 'No items found.',
+  emptyText = 'No records found.',
+  onRowClick,
 }: DataTableProps<T>) {
   if (loading) {
     return (
       <div className="space-y-2">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
       </div>
     );
   }
 
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-lg border p-8 text-center text-muted-foreground">
-        {emptyMessage}
-      </div>
-    );
+  if (data.length === 0) {
+    return <EmptyState text={emptyText} />;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {columns.map((col) => (
-                <TableHead key={col.key}>{col.header}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={getRowKey(row)}>
-                {columns.map((col) => (
-                  <TableCell key={col.key}>
-                    {col.render
-                      ? col.render(row)
-                      : String((row as Record<string, unknown>)[col.key] ?? '-')}
-                  </TableCell>
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {headers.map((h) => (
+              <TableHead key={h.key} className={h.className}>
+                {h.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.map((row, index) => {
+            const cells = renderRow(row, index);
+            return (
+              <TableRow
+                key={keyExtractor(row, index)}
+                className={onRowClick ? 'cursor-pointer' : undefined}
+                onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+              >
+                {cells.map((cell, i) => (
+                  <TableCell key={i}>{cell}</TableCell>
                 ))}
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      {page != null && totalPages != null && totalPages > 1 && onPageChange && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => onPageChange(page - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === totalPages}
-              onClick={() => onPageChange(page + 1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }

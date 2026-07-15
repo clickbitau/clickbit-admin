@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, IsIn, Min, Max, IsEmail } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, IsIn, Min, IsEmail } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
 
 export const ALLOWED_COMPANY_SORT = [

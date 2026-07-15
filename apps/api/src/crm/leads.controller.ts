@@ -49,7 +49,7 @@ export class LeadsController {
   }
 
   @Post()
-  async create(
+  create(
     @Body() body: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -59,7 +59,7 @@ export class LeadsController {
   }
 
   @Put(':id')
-  async update(
+  update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,

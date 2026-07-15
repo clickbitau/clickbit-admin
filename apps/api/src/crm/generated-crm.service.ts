@@ -96,17 +96,17 @@ export class GeneratedCrmService {
     return record;
   }
 
-  async create(model: string, data: Record<string, unknown>) {
+  create(model: string, data: Record<string, unknown>) {
     const delegate = this.getDelegate(model);
     return delegate.create({ data });
   }
 
-  async update(model: string, id: string | number, data: Record<string, unknown>) {
+  update(model: string, id: string | number, data: Record<string, unknown>) {
     const delegate = this.getDelegate(model);
     return delegate.update({ where: { id: Number(id) }, data });
   }
 
-  async remove(model: string, id: string | number) {
+  remove(model: string, id: string | number) {
     const delegate = this.getDelegate(model);
     if (SOFT_DELETE_MODELS.has(model)) {
       return delegate.update({ where: { id: Number(id) }, data: { deleted_at: new Date() } });
