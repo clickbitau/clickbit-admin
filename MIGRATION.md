@@ -31,35 +31,79 @@ Deployment order:
 3. Verify the legacy web and mobile clients continue to work through the router.
 4. Repeat for each module until the legacy API can be decommissioned.
 
+## Per-module porting recipe (proven by CRM)
+
+Use this exact sequence for each module. CRM has proved the flow and the contract-test guardrail.
+
+1. **Endpoint parity checklist**
+   - Extract every route from the legacy Express file (`server/routes/<domain>.js`).
+   - Record method, path, auth roles, response envelope keys, success/error status codes, and whether each route is `Implemented` / `Missing` / `Partial` (see `PARITY.md` for CRM).
+   - Resolve ambiguous envelopes by running the legacy route or inspecting its response handlers.
+
+2. **NestJS module**
+   - Create `apps/api/src/<domain>/<domain>.module.ts`.
+   - Add controllers under `@Controller('<domain>')` with the legacy route paths and `@Get/@Post/@Put/@Delete` methods.
+   - Apply `SupabaseAuthGuard`, `RolesGuard`, and `@Roles(...)` to match legacy `protect` + `authorize()`.
+   - Implement services against the same Supabase Postgres via `PrismaService`; keep column/JSON field names identical.
+   - Preserve pagination shapes exactly (`currentPage/totalPages/totalItems/itemsPerPage` or the contacts `total/limit/offset`).
+
+3. **shadcn pages**
+   - In `apps/web`, mirror the existing `/crm/companies` page structure (data table, filter chips, sort controls, create/edit dialogs).
+   - Use `@clickbit/shared` DTO/response types for type-safe TanStack Query hooks.
+   - Re-use the shadcn/ui components installed in `apps/web/components/ui` to keep visual parity with the legacy admin UI.
+
+4. **Contract test**
+   - Add `apps/api/test/<domain>.contract.spec.ts` or `apps/api/src/<domain>/<domain>.contract.spec.ts`.
+   - Mock `PrismaService` if a live database is unavailable.
+   - Assert that each ported endpoint returns the legacy response envelope and the correct HTTP status.
+   - Run `pnpm --filter @clickbit/api typecheck` and `pnpm --filter @clickbit/api test` before the router rule is flipped.
+
 ## Module porting order
 
-The following order is recommended. Auth and CRM are intentionally first because almost every other domain depends on them.
+The new porting order is:
 
-1. **auth**
+1. **auth / users**
    - `SupabaseAuthGuard` and `@Roles()` decorator (done).
    - Port `/api/auth/me`, `/api/auth/login`, logout/session routes.
    - Service tokens (`cb_*`) can be migrated later.
+   - `users` (profiles, roles, settings) is co-ported with auth.
 
-2. **crm**
-   - `GET /api/crm/companies` (done).
-   - `/api/crm/companies/:id`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/projects`, `/api/crm/tasks`, `/api/crm/activities`.
+2. **crm** *(in progress)*
+   - `GET /api/crm/companies` is done.
+   - `/api/crm/companies/:id`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/pipelines`, `/api/crm/leads`, `/api/crm/projects`, `/api/crm/subprojects`, `/api/crm/activities`, `/api/crm/notes`, `/api/crm/meetings`, `/api/crm/automations` remain.
    - Preserve computed fields (`total_revenue`, `total_deals`, `total_projects`, `total_tasks`) and `aggregatedStats`.
 
-3. **invoices / payments**
-   - `/api/invoices/*`, `/api/payments/*`.
+3. **finance** (invoices / payments / expenses)
+   - `/api/invoices/*`, `/api/payments/*`, `/api/expenses/*`.
    - These feed the CRM totals, so ensure the value aggregation logic stays consistent with `crm/companies`.
 
 4. **hr**
    - `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, courses, announcements).
 
-5. **tickets**
-   - `/api/tickets/*`.
+5. **support / tickets**
+   - `/api/tickets/*`, `/api/ticket-automation/*`, `/api/bug-reports/*`.
 
-6. **mail / messages**
-   - `/api/mail/*`, `/api/messages/*`.
+6. **communication** (mail / messages / chat)
+   - `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
 
-7. **admin / settings**
-   - `/api/admin/*`, `/api/settings/*`.
+7. **content / marketing**
+   - `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/public-content/*`.
+
+8. **settings / admin**
+   - `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*`.
+
+## Background-worker services
+
+The legacy clickbit server runs several background services and cron-like schedulers that must move into the `apps/api` worker process so the Nest API can fully replace the Express server. Port them in this order, re-implementing each as a Nest `@nestjs/schedule` cron interval, a dedicated worker service, or an `apps/api` background script:
+
+- `mailSyncWorker` — email inbox polling and thread creation.
+- `payrollScheduler` / `payrollReminderScheduler` — payslip generation and payday reminders.
+- `reminderScheduler` — activity/task due reminders.
+- `recurringTaskScheduler` — recurring task instance creation.
+- `shiftScheduler` / `attendanceScheduler` — roster generation and attendance reconciliation.
+- `blogScheduler` — scheduled content publishing.
+- `analyticsAlerts` — threshold-based analytics notifications.
+- `announcementAutomationService` — scheduled/targeted announcement distribution.
 
 ## Frontend migration order
 
@@ -95,6 +139,43 @@ All required variables are documented in `.env.example`. Key values are the same
 1. Add the response types and query DTOs to `packages/shared`.
 2. Use them in the Nest controller/service.
 3. Use them in the Next.js page/components for type-safe TanStack Query calls.
+
+## Per-module porting recipe (proven by CRM)
+
+1. **Endpoint parity checklist** — inventory every route in the legacy Express file (`server/routes/<module>.js`) and compare it to `apps/api/src/<module>/`. Mark each route as implemented/missing/partial and confirm response envelopes (data shape, pagination `{totalItems,totalPages}`, and any `aggregatedStats`).
+2. **NestJS module** — for each missing endpoint add a controller/service pair that:
+   - reuses `SupabaseAuthGuard` + `RolesGuard` + `@Roles('admin','manager')`;
+   - validates query/body with `class-validator` DTOs;
+   - returns the same JSON envelope and status codes as the legacy route;
+   - uses Prisma raw queries or ORM calls matching the legacy business logic.
+3. **Shared contracts** — add response types and DTOs to `packages/shared` so both `apps/api` and `apps/web` consume the same contract.
+4. **shadcn pages** — in `apps/web/src/app/admin/<module>/` build list, detail, create/edit modal, and stat-card pages using TanStack Query and the existing token-based `api.ts` client. Add generic reusable shadcn primitives under `apps/web/src/components/ui/` and a design-system layer under `apps/web/src/components/design-system/` (DataTable, FormDialog, StatCards) for later modules.
+5. **Contract test** — add a Jest contract test for the module's list and detail endpoints asserting the legacy response envelope (e.g. `apps/api/test/<module>.contract.spec.ts`). Mock Prisma where a live DB is unavailable, otherwise verify against live Supabase.
+6. **Router cutover** — once `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass, update the `click-deploy` router to send the migrated `/api/<module>/*` prefix to the Nest API and smoke-test the legacy clients.
+
+## Remaining module order
+
+The recommended migration order after auth/CRM is:
+
+1. **auth/users** — port `/api/auth/me`, login/logout/session routes, user management.
+2. **finance (invoices / payments / expenses)** — `/api/invoices/*`, `/api/payments/*`, `/api/expenses/*`, `/api/staff-advances/*`.
+3. **hr** — `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, courses, announcements).
+4. **support / tickets** — `/api/tickets/*`, `/api/ticket-automation/*`.
+5. **communication (mail / messages / chat)** — `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
+6. **content / marketing** — `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/team/*`, `/api/public/*`.
+7. **settings / admin** — `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*`, `/api/credentials/*`.
+
+## Background-worker services to migrate
+
+The following recurring/background jobs currently live in the legacy Express process and must move into the `apps/api` worker process (or a dedicated NestJS worker) so the admin API remains stateless:
+
+- `mailSyncWorker` (IMAP sync and inbound email processing)
+- Payroll/scheduling workers: `payrollScheduler`, `reminderScheduler`, `recurringTaskScheduler`, `shiftScheduler`, `attendanceScheduler`
+- `blogScheduler` (scheduled publishing)
+- `analyticsAlerts`
+- `announcementAutomationService`
+
+Run these as NestJS `@Cron` / `@Interval` jobs or as a separate `apps/worker` process that shares `packages/shared` and the Prisma client.
 
 ## Validation checklist per module
 
