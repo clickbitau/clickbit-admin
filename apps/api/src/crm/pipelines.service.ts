@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma, enum_crm_pipelines_pipeline_type } from '@prisma/client';
+import type { Prisma, enum_crm_pipelines_pipeline_type } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePipelineDto, UpdatePipelineDto, UpdatePipelineStagesDto } from './dto';
 import { buildLegacyList } from './crm-utils';

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDealDto,
@@ -202,7 +203,7 @@ export class DealsService {
     return this.findOne(id);
   }
 
-  async won(id: number, dto: WonDealDto, _userId: number) {
+  async won(id: number, dto: WonDealDto, userId: number) {
     const deal = await this.prisma.deals.findUnique({ where: { id } });
     if (!deal) throw new NotFoundException('Deal not found');
 
@@ -222,6 +223,16 @@ export class DealsService {
         actual_close_date: now,
         won_reason: dto.won_reason,
         probability: 100,
+      },
+    });
+
+    await this.prisma.crm_deal_stage_history.create({
+      data: {
+        deal_id: id,
+        from_stage_id: deal.stage_id,
+        to_stage_id: wonStage.id,
+        changed_by: userId,
+        note: 'Deal marked as won',
       },
     });
 
@@ -386,7 +397,7 @@ export class DealsService {
     return { message: 'Deal deleted successfully' };
   }
 
-  async bulkUpdate(dto: BulkUpdateDealsDto, _userId: number) {
+  async bulkUpdate(dto: BulkUpdateDealsDto) {
     const { deal_ids, updates } = dto;
     const updateData = { ...updates, updated_at: new Date() };
 

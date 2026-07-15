@@ -7,7 +7,7 @@ import {
   GetCompaniesQueryDto,
   ALLOWED_COMPANY_SORT,
 } from '@clickbit/shared';
-import { Prisma, enum_crm_companies_lifecycle_stage } from '@prisma/client';
+import type { Prisma, enum_crm_companies_lifecycle_stage } from '@prisma/client';
 import {
   CreateCompanyDto,
   UpdateCompanyDto,

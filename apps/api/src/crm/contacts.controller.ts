@@ -133,11 +133,10 @@ export class ContactsController {
   @Post(':id/portal-access')
   async createPortalAccess(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { sendWelcomeEmail?: boolean },
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.contactsService.createPortalAccess(id, body);
+    return this.contactsService.createPortalAccess(id);
   }
 
   @Post(':id/resend')

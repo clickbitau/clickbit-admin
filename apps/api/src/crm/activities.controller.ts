@@ -4,78 +4,90 @@ import {
   Post,
   Put,
   Delete,
-  Body,
-  Param,
   Query,
+  Param,
+  Body,
   UseGuards,
   Res,
-  NotFoundException,
+  ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { GeneratedCrmService } from './generated-crm.service';
+import { ActivitiesService } from './activities.service';
+import { GetActivitiesQueryDto, CreateActivityDto, UpdateActivityDto, CompleteActivityDto } from './dto';
+import { setNoCache } from './crm-utils';
+import { RequestWithUser } from '../types/request-with-user';
 
 @Controller('crm/activities')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
 @Roles('admin', 'manager')
 export class ActivitiesController {
-  constructor(private readonly crm: GeneratedCrmService) {}
+  constructor(private readonly activitiesService: ActivitiesService) {}
 
   @Get()
   async findAll(
-    @Query() query: { page?: string; limit?: string; search?: string },
+    @Query() query: GetActivitiesQueryDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    return this.crm.findAll('crm_activities', {
-      page: query.page ? Number(query.page) : 1,
-      limit: query.limit ? Number(query.limit) : 20,
-      search: query.search,
-      searchFields: ['subject', 'activity_type'],
+    setNoCache(res);
+    return this.activitiesService.findAll({
+      ...query,
+      page: Number(query.page || 1),
+      limit: Number(query.limit || 50),
     });
+  }
+
+  @Post()
+  async create(
+    @Body() dto: CreateActivityDto,
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    const activity = await this.activitiesService.create(req.user.id, dto);
+    res.status(201);
+    return activity;
   }
 
   @Get(':id')
   async findOne(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    const record = await this.crm.findOne('crm_activities', id);
-    if (!record) throw new NotFoundException('activity not found');
-    return record;
-  }
-
-  @Post()
-  create(
-    @Body() body: Record<string, unknown>,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    res.set('Cache-Control', 'no-store');
-    res.statusCode = 201;
-    return this.crm.create('crm_activities', body);
+    setNoCache(res);
+    return this.activitiesService.findOne(id);
   }
 
   @Put(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: Record<string, unknown>,
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateActivityDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    return this.crm.update('crm_activities', id, body);
+    setNoCache(res);
+    return this.activitiesService.update(id, dto);
+  }
+
+  @Put(':id/complete')
+  async complete(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CompleteActivityDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.activitiesService.complete(id, dto);
   }
 
   @Delete(':id')
   @Roles('admin')
-  async remove(
-    @Param('id') id: string,
+  async delete(
+    @Param('id', ParseIntPipe) id: number,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    await this.crm.remove('crm_activities', id);
-    return { message: 'activity deleted' };
+    setNoCache(res);
+    return this.activitiesService.delete(id);
   }
 }

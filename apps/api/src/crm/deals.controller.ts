@@ -154,11 +154,10 @@ export class DealsController {
   @Post('bulk-update')
   async bulkUpdate(
     @Body() dto: BulkUpdateDealsDto,
-    @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.bulkUpdate(dto, req.user.id);
+    return this.dealsService.bulkUpdate(dto);
   }
 
   @Post('bulk-delete')

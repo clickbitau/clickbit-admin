@@ -85,6 +85,32 @@ export class CreateProjectDto {
 
   @IsOptional()
   tags?: string[];
+
+  @IsOptional()
+  @IsString()
+  support_period_type?: string;
+
+  @IsOptional()
+  @IsString()
+  support_start_date?: string;
+
+  @IsOptional()
+  @IsString()
+  support_end_date?: string;
+
+  @IsOptional()
+  support_price?: number | string;
+
+  @IsOptional()
+  @IsString()
+  support_currency?: string = 'AUD';
+
+  @IsOptional()
+  @IsString()
+  support_notes?: string;
+
+  @IsOptional()
+  hourly_rate?: number | string;
 }
 
 export class UpdateProjectDto extends CreateProjectDto {}
@@ -134,6 +160,8 @@ export class CreateProjectTaskDto {
 }
 
 export class CreateSubprojectDto extends CreateProjectDto {}
+
+export class UpdateSubprojectDto extends CreateProjectDto {}
 
 export class CreateMeetingDto {
   @IsString()
