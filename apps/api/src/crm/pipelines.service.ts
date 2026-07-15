@@ -60,7 +60,7 @@ export class PipelinesService {
         is_default: dto.is_default ?? false,
         is_active: true,
         created_by: userId,
-      } as unknown as Prisma.crm_pipelinesUncheckedCreateInput,
+      },
     });
 
     return this.findOne(pipeline.id);
@@ -73,13 +73,13 @@ export class PipelinesService {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
-    if (dto.pipeline_type !== undefined) data.pipeline_type = dto.pipeline_type as unknown as enum_crm_pipelines_pipeline_type;
+    if (dto.pipeline_type !== undefined) data.pipeline_type = dto.pipeline_type;
     if (dto.currency !== undefined) data.currency = dto.currency;
     if (dto.is_default !== undefined) data.is_default = dto.is_default;
 
     await this.prisma.crm_pipelines.update({
       where: { id },
-      data: data as unknown as Prisma.crm_pipelinesUncheckedUpdateInput,
+      data: data,
     });
 
     return this.findOne(id);
@@ -116,7 +116,7 @@ export class PipelinesService {
               is_lost: s.is_lost ?? false,
               rotting_days: s.rotting_days,
               is_active: s.is_active ?? true,
-            } as unknown as Prisma.crm_pipeline_stagesUncheckedUpdateInput,
+            },
           }),
         );
       } else {
@@ -133,7 +133,7 @@ export class PipelinesService {
               is_lost: s.is_lost ?? false,
               rotting_days: s.rotting_days,
               is_active: s.is_active ?? true,
-            } as unknown as Prisma.crm_pipeline_stagesUncheckedCreateInput,
+            },
           }),
         );
       }

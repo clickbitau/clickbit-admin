@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma, enum_crm_deals_status, enum_crm_deals_priority, enum_crm_companies_lifecycle_stage } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDealDto,
@@ -123,12 +122,12 @@ export class DealsService {
         owner_id: dto.owner_id || userId,
         expected_close_date: safeDate(dto.expected_close_date),
         lead_source: dto.lead_source,
-        priority: (dto.priority || 'medium') as enum_crm_deals_priority,
-        status: 'open' as enum_crm_deals_status,
+        priority: (dto.priority || 'medium'),
+        status: 'open',
         probability: stage.probability ?? 0,
         custom_fields: asJsonInput(dto.custom_fields),
         tags: asJsonInput(dto.tags),
-      } as unknown as Prisma.dealsUncheckedCreateInput,
+      },
     });
 
     await this.prisma.crm_deal_stage_history.create({
@@ -161,7 +160,7 @@ export class DealsService {
     const data = this.buildUpdateData(dto, existing);
     await this.prisma.deals.update({
       where: { id },
-      data: data as unknown as Prisma.dealsUncheckedUpdateInput,
+      data: data,
     });
 
     return this.findOne(id);
@@ -185,7 +184,7 @@ export class DealsService {
 
     await this.prisma.deals.update({
       where: { id },
-      data: updateData as unknown as Prisma.dealsUncheckedUpdateInput,
+      data: updateData,
     });
 
     if (oldStageId !== dto.stage_id) {
@@ -203,7 +202,7 @@ export class DealsService {
     return this.findOne(id);
   }
 
-  async won(id: number, dto: WonDealDto, userId: number) {
+  async won(id: number, dto: WonDealDto, _userId: number) {
     const deal = await this.prisma.deals.findUnique({ where: { id } });
     if (!deal) throw new NotFoundException('Deal not found');
 
@@ -218,12 +217,12 @@ export class DealsService {
     await this.prisma.deals.update({
       where: { id },
       data: {
-        status: 'won' as enum_crm_deals_status,
+        status: 'won',
         stage_id: wonStage.id,
         actual_close_date: now,
         won_reason: dto.won_reason,
         probability: 100,
-      } as unknown as Prisma.dealsUncheckedUpdateInput,
+      },
     });
 
     if (deal.company_id) {
@@ -234,8 +233,8 @@ export class DealsService {
           data: {
             total_revenue: (Number(company.total_revenue) || 0) + toNumber(deal.value),
             total_deals: (company.total_deals || 0) + 1,
-            lifecycle_stage: 'customer' as unknown as enum_crm_companies_lifecycle_stage,
-          } as unknown as Prisma.companiesUncheckedUpdateInput,
+            lifecycle_stage: 'customer',
+          },
         });
       }
     }
@@ -283,11 +282,11 @@ export class DealsService {
             deal_number: deal.deal_number,
             converted_from_deal: true,
             converted_at: now.toISOString(),
-          } as unknown as Prisma.InputJsonValue,
-          tags: [] as unknown as Prisma.InputJsonValue,
-        } as unknown as Prisma.crm_leadsUncheckedCreateInput,
+          },
+          tags: [],
+        },
       });
-    } catch (e) {
+    } catch {
       // Continue even if lead creation fails
     }
 
@@ -315,7 +314,7 @@ export class DealsService {
     });
 
     const updateData: Record<string, unknown> = {
-      status: 'lost' as enum_crm_deals_status,
+      status: 'lost',
       lost_reason: dto.lost_reason,
       competitor: dto.competitor,
       probability: 0,
@@ -324,7 +323,7 @@ export class DealsService {
 
     await this.prisma.deals.update({
       where: { id },
-      data: updateData as unknown as Prisma.dealsUncheckedUpdateInput,
+      data: updateData,
     });
 
     await this.prisma.crm_deal_stage_history.create({
@@ -354,12 +353,12 @@ export class DealsService {
     await this.prisma.deals.update({
       where: { id },
       data: {
-        status: 'open' as enum_crm_deals_status,
+        status: 'open',
         stage_id: firstStage.id,
         actual_close_date: null,
         lost_reason: null,
         won_reason: null,
-      } as unknown as Prisma.dealsUncheckedUpdateInput,
+      },
     });
 
     await this.prisma.crm_deal_stage_history.create({
@@ -381,19 +380,19 @@ export class DealsService {
 
     await this.prisma.deals.update({
       where: { id },
-      data: { deleted_at: new Date() } as unknown as Prisma.dealsUncheckedUpdateInput,
+      data: { deleted_at: new Date() },
     });
 
     return { message: 'Deal deleted successfully' };
   }
 
-  async bulkUpdate(dto: BulkUpdateDealsDto, userId: number) {
+  async bulkUpdate(dto: BulkUpdateDealsDto, _userId: number) {
     const { deal_ids, updates } = dto;
     const updateData = { ...updates, updated_at: new Date() };
 
     await this.prisma.deals.updateMany({
       where: { id: { in: deal_ids } },
-      data: updateData as unknown as Prisma.dealsUpdateManyMutationInput,
+      data: updateData,
     });
 
     return { message: `${deal_ids.length} deals updated` };
@@ -426,12 +425,12 @@ export class DealsService {
         deal_id: id,
         manager_id: dto.manager_id || deal.owner_id,
         created_by: userId,
-      } as unknown as Prisma.crm_projectsUncheckedCreateInput,
+      },
     });
 
     await this.prisma.deals.update({
       where: { id },
-      data: { is_project: true, project_status: 'not_started' } as unknown as Prisma.dealsUncheckedUpdateInput,
+      data: { is_project: true, project_status: 'not_started' },
     });
 
     return { data: project };
@@ -444,7 +443,7 @@ export class DealsService {
     const value = typeof body.value === 'string' ? parseFloat(body.value) || 0 : Number(body.value ?? 0);
     await this.prisma.deals.update({
       where: { id },
-      data: { value } as unknown as Prisma.dealsUncheckedUpdateInput,
+      data: { value },
     });
 
     return this.findOne(id);
@@ -482,11 +481,11 @@ export class DealsService {
     }
 
     if (dto.priority !== undefined) {
-      data.priority = dto.priority as enum_crm_deals_priority;
+      data.priority = dto.priority;
     }
 
     if (dto.status !== undefined) {
-      data.status = dto.status as enum_crm_deals_status;
+      data.status = dto.status;
     }
 
     if (dto.custom_fields !== undefined) data.custom_fields = asJsonInput(dto.custom_fields);
