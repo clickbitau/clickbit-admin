@@ -113,6 +113,11 @@ export default function PipelinePage() {
 
   const stats = board?.stats;
 
+  const [selectedStage, setSelectedStage] = useState(String(stages[0]?.id ?? ''));
+  useEffect(() => {
+    setSelectedStage(String(stages[0]?.id ?? ''));
+  }, [stages]);
+
   function handleDragStart(item: BoardItem) {
     setDraggedItem(item);
   }
@@ -142,7 +147,7 @@ export default function PipelinePage() {
       phone: String(data.get('phone') ?? ''),
       estimated_value: Number(data.get('estimated_value') || 0),
       pipeline_id: Number(selectedPipelineId),
-      stage_id: Number(data.get('stage_id') || 0),
+      stage_id: Number(selectedStage || 0),
     });
   }
 
@@ -253,7 +258,7 @@ export default function PipelinePage() {
         </div>
         <div className="grid gap-2">
           <Label htmlFor="stage_id">Stage</Label>
-          <Select name="stage_id" defaultValue={stages[0]?.id ? String(stages[0].id) : ''}>
+          <Select name="stage_id" value={selectedStage} onValueChange={setSelectedStage}>
             <SelectTrigger>
               <SelectValue placeholder="Select stage" />
             </SelectTrigger>
@@ -282,7 +287,7 @@ function BoardCard({ item, onDragStart }: { item: BoardItem; onDragStart: (item:
       draggable
       onDragStart={() => onDragStart(item)}
       className="cursor-grab border-l-4 shadow-sm active:cursor-grabbing"
-      style={{ borderLeftColor: item.stage?.color ?? item.pipeline?.name ? '#e2e8f0' : '#e2e8f0' }}
+      style={{ borderLeftColor: item.stage?.color ?? '#e2e8f0' }}
     >
       <CardContent className="space-y-2 p-3">
         <div className="flex items-start justify-between gap-2">
