@@ -3,79 +3,80 @@ import {
   Get,
   Post,
   Put,
-  Delete,
-  Body,
-  Param,
   Query,
+  Param,
+  Body,
   UseGuards,
   Res,
-  NotFoundException,
+  ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { GeneratedCrmService } from './generated-crm.service';
+import { PipelinesService } from './pipelines.service';
+import { CreatePipelineDto, UpdatePipelineDto, UpdatePipelineStagesDto } from './dto';
+import { setNoCache } from './crm-utils';
+import { RequestWithUser } from '../types/request-with-user';
 
 @Controller('crm/pipelines')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
 @Roles('admin', 'manager')
 export class PipelinesController {
-  constructor(private readonly crm: GeneratedCrmService) {}
+  constructor(private readonly pipelinesService: PipelinesService) {}
 
   @Get()
   async findAll(
-    @Query() query: { page?: string; limit?: string; search?: string },
+    @Query() query: { search?: string; pipeline_type?: string; is_active?: string; page?: string; limit?: string; sortBy?: string; sortOrder?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    return this.crm.findAll('crm_pipelines', {
-      page: query.page ? Number(query.page) : 1,
-      limit: query.limit ? Number(query.limit) : 20,
-      search: query.search,
-      searchFields: ['name'],
+    setNoCache(res);
+    return this.pipelinesService.findAll({
+      ...query,
+      page: Number(query.page || 1),
+      limit: Number(query.limit || 50),
     });
+  }
+
+  @Post()
+  async create(
+    @Body() dto: CreatePipelineDto,
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    const pipeline = await this.pipelinesService.create(req.user.id, dto);
+    res.status(201);
+    return pipeline;
   }
 
   @Get(':id')
   async findOne(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    const record = await this.crm.findOne('crm_pipelines', id);
-    if (!record) throw new NotFoundException('pipeline not found');
-    return record;
-  }
-
-  @Post()
-  create(
-    @Body() body: Record<string, unknown>,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    res.set('Cache-Control', 'no-store');
-    res.statusCode = 201;
-    return this.crm.create('crm_pipelines', body);
+    setNoCache(res);
+    return this.pipelinesService.findOne(id);
   }
 
   @Put(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: Record<string, unknown>,
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePipelineDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    return this.crm.update('crm_pipelines', id, body);
+    setNoCache(res);
+    return this.pipelinesService.update(id, dto);
   }
 
-  @Delete(':id')
-  @Roles('admin')
-  async remove(
-    @Param('id') id: string,
+  @Put(':id/stages')
+  async updateStages(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePipelineStagesDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.set('Cache-Control', 'no-store');
-    await this.crm.remove('crm_pipelines', id);
-    return { message: 'pipeline deleted' };
+    setNoCache(res);
+    return this.pipelinesService.updateStages(id, dto);
   }
 }
