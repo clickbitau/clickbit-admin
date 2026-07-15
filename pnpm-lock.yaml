@@ -156,6 +156,9 @@ importers:
       '@radix-ui/react-tabs':
         specifier: ^1.1.17
         version: 1.1.17(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@supabase/supabase-js':
+        specifier: 2.109.0
+        version: 2.109.0
       '@tanstack/react-query':
         specifier: ^5.62.16
         version: 5.101.2(react@18.3.1)

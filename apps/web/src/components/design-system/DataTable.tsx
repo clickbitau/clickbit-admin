@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface Column<T> {
+export interface Column<T> {
   key: string;
   header: string;
   render?: (row: T) => React.ReactNode;
