@@ -75,7 +75,7 @@ Generated from `clickbit/server/routes/crm.js` vs `clickbit-admin/apps/api/src/c
 | GET | `/api/crm/contacts/:id/invoices` | `/api/crm/contacts/:id/invoices` | admin, manager | invoices, pagination | 200 | 404, 500 | Missing |
 | GET | `/api/crm/contacts/:id/payments` | `/api/crm/contacts/:id/payments` | admin, manager | pagination, payments | 200 | 404, 500 | Missing |
 | GET | `/api/crm/contacts/:id/portal-access` | `/api/crm/contacts/:id/portal-access` | admin, manager | hasAccess, linkType, user | 200 | 500 | Missing |
-| POST | `/api/crm/contacts/:id/portal-access` | `/api/crm/contacts/:id/portal-access` | admin, manager | alreadyExists, linkedExisting, message, success, user | ? | 400, 500 | Missing |
+| POST | `/api/crm/contacts/:id/portal-access` | `/api/crm/contacts/:id/portal-access` | admin, manager | alreadyExists, linkedExisting, message, success, user | 200 / 201 | 400, 500 | Missing |
 | POST | `/api/crm/contacts/:id/portal-access/resend` | `/api/crm/contacts/:id/portal-access/resend` | admin, manager | message, success | 200 | 400, 500 | Missing |
 | POST | `/api/crm/contacts/portal-access/batch` | `/api/crm/contacts/portal-access/batch` | admin | (variable / entity) | 200 | 400, 500 | Missing |
 | GET | `/api/crm/contacts/with-portal-status` | `/api/crm/contacts/with-portal-status` | admin, manager | contacts, pagination | 200 | 500 | Missing |
@@ -157,7 +157,7 @@ The new implementation also adds computed per-company fields (`total_deals`, `to
 
 ## Other legacy route files mounted by `clickbit/server/index.js`
 
-`server/index.js` mounts the following route modules under `/api/*` (high-level count: 37 files):
+`server/index.js` mounts the following route modules under `/api/*` (high-level count: 45 files):
 
 - `server/routes/auth-secure.js`
 - `server/routes/users.js`
