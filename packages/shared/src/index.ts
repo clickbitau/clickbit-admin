@@ -9,6 +9,8 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
+export * from './crm';
+
 export type UserRole = 'admin' | 'manager' | 'employee' | 'customer' | 'agent';
 
 export interface Profile {
