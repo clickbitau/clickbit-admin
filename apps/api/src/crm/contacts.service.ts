@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateContactDto,
@@ -192,10 +192,7 @@ export class ContactsService {
     };
   }
 
-  async createPortalAccess(
-    id: number,
-    _body: { sendWelcomeEmail?: boolean; frontendUrl?: string },
-  ) {
+  async createPortalAccess(id: number) {
     await this.ensureContactExists(id);
     const contact = await this.prisma.contacts.findUnique({ where: { id } });
     if (!contact?.email) {
@@ -247,7 +244,7 @@ export class ContactsService {
 
   async resendPortalEmail(id: number) {
     await this.ensureContactExists(id);
-    const result = await this.createPortalAccess(id, { sendWelcomeEmail: true });
+    const result = await this.createPortalAccess(id);
     return {
       success: result.success,
       alreadyExists: result.alreadyExists,
@@ -259,9 +256,7 @@ export class ContactsService {
     const results: unknown[] = [];
     for (const id of dto.contact_ids) {
       try {
-        const r = await this.createPortalAccess(id, {
-          sendWelcomeEmail: dto.sendWelcomeEmail,
-        });
+        const r = await this.createPortalAccess(id);
         results.push({ contact_id: id, success: r.success, alreadyExists: r.alreadyExists });
       } catch (e) {
         results.push({ contact_id: id, success: false, error: (e as Error).message });

@@ -32,6 +32,24 @@ const api = axios.create({
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
+function extractSingle<T>(response: { data: unknown }, key: string): T {
+  const d = response.data as any;
+  if (d && typeof d === 'object') {
+    if (key in d && d[key] !== undefined) return d[key] as T;
+    if ('data' in d) return d.data as T;
+  }
+  return d as T;
+}
+
+function extractList<T>(response: { data: unknown }, key: string): T[] {
+  const d = response.data as any;
+  if (d && typeof d === 'object') {
+    if (key in d && Array.isArray(d[key])) return d[key] as T[];
+  }
+  if (Array.isArray(d)) return d as T[];
+  return [];
+}
+
 
 // ─── Companies ─────────────────────────────────────────────────────────────
 
@@ -127,19 +145,19 @@ export async function fetchCompanyDocuments(
 
 export async function fetchTeam(token: string): Promise<User[]> {
   const response = await api.get<User[]>('/api/users/team', { headers: authHeaders(token) });
-  return response.data ?? [];
+  return extractList<User>(response, 'users');
 }
 
 // ─── Pipelines ───────────────────────────────────────────────────────────────
 
 export async function fetchPipelines(token: string): Promise<Pipeline[]> {
   const response = await api.get<Pipeline[]>('/api/crm/pipelines', { headers: authHeaders(token) });
-  return response.data ?? [];
+  return extractList<Pipeline>(response, 'pipelines');
 }
 
 export async function fetchPipeline(token: string, id: string | number): Promise<Pipeline> {
   const response = await api.get<Pipeline>(`/api/crm/pipelines/${id}`, { headers: authHeaders(token) });
-  return response.data;
+  return extractSingle<Pipeline>(response, 'pipeline');
 }
 
 export async function fetchPipelineBoard(
@@ -169,21 +187,21 @@ export async function fetchDeal(token: string, id: string | number): Promise<Dea
   const response = await api.get<{ deal: DealDetail }>(`/api/crm/deals/${id}`, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<DealDetail>(response, 'deal');
 }
 
 export async function createDeal(token: string, data: Partial<Deal>): Promise<Deal> {
   const response = await api.post<{ deal: Deal }>('/api/crm/deals', data, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<Deal>(response, 'deal');
 }
 
 export async function updateDeal(token: string, id: string | number, data: Partial<Deal>): Promise<Deal> {
   const response = await api.put<{ deal: Deal }>(`/api/crm/deals/${id}`, data, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<Deal>(response, 'deal');
 }
 
 export async function moveDeal(
@@ -194,14 +212,14 @@ export async function moveDeal(
   const response = await api.put<{ deal: Deal }>(`/api/crm/deals/${id}/move`, data, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<Deal>(response, 'deal');
 }
 
 export async function markDealWon(token: string, id: string | number, data?: { reason?: string }): Promise<Deal> {
   const response = await api.put<{ deal: Deal }>(`/api/crm/deals/${id}/won`, data ?? {}, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<Deal>(response, 'deal');
 }
 
 export async function markDealLost(
@@ -212,14 +230,14 @@ export async function markDealLost(
   const response = await api.put<{ deal: Deal }>(`/api/crm/deals/${id}/lost`, data ?? {}, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<Deal>(response, 'deal');
 }
 
 export async function reopenDeal(token: string, id: string | number): Promise<Deal> {
   const response = await api.put<{ deal: Deal }>(`/api/crm/deals/${id}/reopen`, {}, {
     headers: authHeaders(token),
   });
-  return response.data.deal;
+  return extractSingle<Deal>(response, 'deal');
 }
 
 export async function deleteDeal(token: string, id: string | number): Promise<void> {
@@ -240,21 +258,21 @@ export async function fetchLead(token: string, id: string | number): Promise<Crm
   const response = await api.get<{ lead: CrmLead }>(`/api/crm/leads/${id}`, {
     headers: authHeaders(token),
   });
-  return response.data.lead;
+  return extractSingle<CrmLead>(response, 'lead');
 }
 
 export async function createLead(token: string, data: Partial<CrmLead>): Promise<CrmLead> {
   const response = await api.post<{ lead: CrmLead }>('/api/crm/leads', data, {
     headers: authHeaders(token),
   });
-  return response.data.lead;
+  return extractSingle<CrmLead>(response, 'lead');
 }
 
 export async function updateLead(token: string, id: string | number, data: Partial<CrmLead>): Promise<CrmLead> {
   const response = await api.put<{ lead: CrmLead }>(`/api/crm/leads/${id}`, data, {
     headers: authHeaders(token),
   });
-  return response.data.lead;
+  return extractSingle<CrmLead>(response, 'lead');
 }
 
 export async function moveLead(
@@ -265,7 +283,7 @@ export async function moveLead(
   const response = await api.patch<{ lead: CrmLead }>(`/api/crm/leads/${id}/move`, data, {
     headers: authHeaders(token),
   });
-  return response.data.lead;
+  return extractSingle<CrmLead>(response, 'lead');
 }
 
 export async function winLead(
@@ -287,7 +305,7 @@ export async function loseLead(
   const response = await api.post<{ lead: CrmLead }>(`/api/crm/leads/${id}/lose`, data ?? {}, {
     headers: authHeaders(token),
   });
-  return response.data.lead;
+  return extractSingle<CrmLead>(response, 'lead');
 }
 
 export async function deleteLead(token: string, id: string | number): Promise<void> {
@@ -308,12 +326,12 @@ export async function autoAssignLeads(token: string, contactIds?: number[]): Pro
 
 export async function fetchHotLeads(token: string): Promise<CrmLead[]> {
   const response = await api.get<CrmLead[]>('/api/crm/leads/hot', { headers: authHeaders(token) });
-  return response.data ?? [];
+  return extractList<CrmLead>(response, 'leads');
 }
 
 export async function fetchUncontactedLeads(token: string, days = 7): Promise<CrmLead[]> {
   const response = await api.get<CrmLead[]>(`/api/crm/leads/uncontacted`, { params: { days }, headers: authHeaders(token) });
-  return response.data ?? [];
+  return extractList<CrmLead>(response, 'leads');
 }
 
 export async function updateLeadScore(token: string, id: string | number, score: number): Promise<{ lead_score: number }> {
@@ -337,35 +355,35 @@ export async function fetchContact(token: string, id: string | number): Promise<
   const response = await api.get<{ data: CrmContact }>(`/api/crm/contacts/${id}`, {
     headers: authHeaders(token),
   });
-  return response.data.data;
+  return extractSingle<CrmContact>(response, 'data');
 }
 
 export async function updateContact(token: string, id: string | number, data: Partial<CrmContact>): Promise<CrmContact> {
   const response = await api.put<{ data: CrmContact }>(`/api/crm/contacts/${id}`, data, {
     headers: authHeaders(token),
   });
-  return response.data.data;
+  return extractSingle<CrmContact>(response, 'data');
 }
 
 export async function fetchCustomerStats(token: string): Promise<ContactStats> {
   const response = await api.get<ContactStats>('/api/admin/contacts/customer-stats', {
     headers: authHeaders(token),
   });
-  return response.data;
+  return extractSingle<ContactStats>(response, 'data');
 }
 
 export async function fetchAgents(token: string): Promise<CrmContact[]> {
   const response = await api.get<{ success: boolean; data: CrmContact[] }>('/api/admin/contacts/agents', {
     headers: authHeaders(token),
   });
-  return response.data.data ?? [];
+  return extractList<CrmContact>(response, 'data');
 }
 
 export async function fetchAgentClients(token: string, id: string | number): Promise<Company[]> {
   const response = await api.get<{ success: boolean; data: Company[] }>(`/api/admin/contacts/${id}/clients`, {
     headers: authHeaders(token),
   });
-  return response.data.data ?? [];
+  return extractList<Company>(response, 'data');
 }
 
 export async function updateAgentCommission(
@@ -393,21 +411,21 @@ export async function fetchProject(token: string, id: string | number): Promise<
   const response = await api.get<{ project: CrmProject }>(`/api/crm/projects-new/${id}`, {
     headers: authHeaders(token),
   });
-  return response.data.project;
+  return extractSingle<CrmProject>(response, 'project');
 }
 
 export async function createProject(token: string, data: Partial<CrmProject>): Promise<CrmProject> {
   const response = await api.post<{ project: CrmProject }>('/api/crm/projects-new', data, {
     headers: authHeaders(token),
   });
-  return response.data.project;
+  return extractSingle<CrmProject>(response, 'project');
 }
 
 export async function updateProject(token: string, id: string | number, data: Partial<CrmProject>): Promise<CrmProject> {
   const response = await api.put<{ project: CrmProject }>(`/api/crm/projects-new/${id}`, data, {
     headers: authHeaders(token),
   });
-  return response.data.project;
+  return extractSingle<CrmProject>(response, 'project');
 }
 
 export async function updateProjectStatus(
@@ -418,7 +436,7 @@ export async function updateProjectStatus(
   const response = await api.patch<{ project: CrmProject }>(`/api/crm/projects-new/${id}/status`, data, {
     headers: authHeaders(token),
   });
-  return response.data.project;
+  return extractSingle<CrmProject>(response, 'project');
 }
 
 export async function deleteProject(token: string, id: string | number): Promise<void> {
@@ -445,7 +463,7 @@ export async function createProjectTask(
   const response = await api.post(`/api/crm/projects-new/${projectId}/tasks`, data, {
     headers: authHeaders(token),
   });
-  return response.data;
+  return extractSingle<ProjectTask>(response, 'data');
 }
 
 // ─── Tasks (standalone / all projects) ───────────────────────────────────────
@@ -466,7 +484,7 @@ export async function updateTaskStatus(
   const response = await api.patch<{ data: ProjectTask }>(`/api/projects/tasks/${taskId}/status`, data, {
     headers: authHeaders(token),
   });
-  return response.data.data;
+  return extractSingle<ProjectTask>(response, 'data');
 }
 
 export async function fetchAssignees(token: string): Promise<User[]> {
@@ -489,22 +507,22 @@ export async function fetchActivities(
 
 export async function fetchActivity(token: string, id: string | number): Promise<Activity> {
   const response = await api.get<Activity>(`/api/crm/activities/${id}`, { headers: authHeaders(token) });
-  return response.data;
+  return extractSingle<Activity>(response, 'activity');
 }
 
 export async function createActivity(token: string, data: Partial<Activity>): Promise<Activity> {
   const response = await api.post('/api/crm/activities', data, { headers: authHeaders(token) });
-  return response.data;
+  return extractSingle<Activity>(response, 'activity');
 }
 
 export async function updateActivity(token: string, id: string | number, data: Partial<Activity>): Promise<Activity> {
   const response = await api.put(`/api/crm/activities/${id}`, data, { headers: authHeaders(token) });
-  return response.data;
+  return extractSingle<Activity>(response, 'activity');
 }
 
 export async function completeActivity(token: string, id: string | number, outcome?: string): Promise<Activity> {
   const response = await api.put(`/api/crm/activities/${id}/complete`, { outcome }, { headers: authHeaders(token) });
-  return response.data;
+  return extractSingle<Activity>(response, 'activity');
 }
 
 export async function deleteActivity(token: string, id: string | number): Promise<void> {
