@@ -1,0 +1,109 @@
+# ClickBit Staged Migration Plan
+
+This document describes how we will migrate the legacy ClickBit platform to the new `clickbit-staged` monorepo using a strangler-fig approach.
+
+## Core rule: contract preservation
+
+The NestJS API in `apps/api` must expose the **same routes under the same base path (`/api/*`)** and return the **same JSON response envelopes and status codes** as the legacy Express routes in `clickbit/server/routes/`. The React Native mobile app (`mobile/lib/api.ts`) and the legacy CRA web client (`client/src/services/api.ts`) consume these contracts, so breaking them would break the existing apps during the transition.
+
+- Do **not** rename fields, change pagination shapes, or alter HTTP status codes for migrated endpoints.
+- If a legacy response is ambiguous, treat the existing clickbit test suite and the actual production responses as the source of truth.
+- New code in `apps/web` may add computed fields (e.g., `effective_email`) as long as the legacy fields it depends on remain unchanged.
+
+## Reverse-proxy / router cutover plan
+
+Both the legacy clickbit Express server and the new Nest API will be deployed behind the existing `click-deploy` / dockbit router. The router will use path-based rules:
+
+```
+/api/crm/companies    -> new Nest API (already migrated)
+/api/crm/*            -> new Nest API as each CRM route is ported
+/api/auth/me          -> new Nest API when auth routes are ported
+/api/invoices/*       -> legacy until ported, then new Nest API
+...
+/api/*                -> default to legacy until explicitly migrated
+/*                    -> legacy clickbit Express (serves existing web client and public pages)
+```
+
+Deployment order:
+
+1. Deploy the Nest API alongside the legacy server (different internal host/port).
+2. Add a router rule that sends a single migrated path (e.g., `/api/crm/companies`) to the Nest API.
+3. Verify the legacy web and mobile clients continue to work through the router.
+4. Repeat for each module until the legacy API can be decommissioned.
+
+## Module porting order
+
+The following order is recommended. Auth and CRM are intentionally first because almost every other domain depends on them.
+
+1. **auth**
+   - `SupabaseAuthGuard` and `@Roles()` decorator (done).
+   - Port `/api/auth/me`, `/api/auth/login`, logout/session routes.
+   - Service tokens (`cb_*`) can be migrated later.
+
+2. **crm**
+   - `GET /api/crm/companies` (done).
+   - `/api/crm/companies/:id`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/projects`, `/api/crm/tasks`, `/api/crm/activities`.
+   - Preserve computed fields (`total_revenue`, `total_deals`, `total_projects`, `total_tasks`) and `aggregatedStats`.
+
+3. **invoices / payments**
+   - `/api/invoices/*`, `/api/payments/*`.
+   - These feed the CRM totals, so ensure the value aggregation logic stays consistent with `crm/companies`.
+
+4. **hr**
+   - `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, courses, announcements).
+
+5. **tickets**
+   - `/api/tickets/*`.
+
+6. **mail / messages**
+   - `/api/mail/*`, `/api/messages/*`.
+
+7. **admin / settings**
+   - `/api/admin/*`, `/api/settings/*`.
+
+## Frontend migration order
+
+Inside `apps/web`:
+
+1. Auth gate / token entry.
+2. Admin CRM pages starting with the Companies list (done).
+3. Admin CRM detail/edit pages.
+4. Dashboard and remaining admin modules in the same order as the API.
+
+The public/marketing site and any Three.js pages stay in the legacy `clickbit/client` during the transition.
+
+## Database and schema
+
+- The new API reads and writes the **same** hosted Supabase Postgres via the same `DATABASE_URL`.
+- Use `prisma db pull` to refresh the introspected schema. Do not create Prisma migrations that alter the live schema as part of this migration.
+- The legacy Sequelize migrations in `clickbit/migrations/` remain the source of truth for schema changes until we are ready to switch to a Prisma migration strategy.
+
+## Environment variables
+
+All required variables are documented in `.env.example`. Key values are the same as `clickbit/env.example`:
+
+- `DATABASE_URL` / `DIRECT_URL` — Supabase Postgres
+- `REDIS_URL` — shared cache/rate-limit/cron-lock state
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- `JWT_SECRET` — legacy custom JWT secret
+- `DB_POOL_*` — connection pool tuning
+
+## Shared packages
+
+`packages/shared` contains the TypeScript contracts (types and DTOs) that both `apps/api` and `apps/web` import. When a module is migrated:
+
+1. Add the response types and query DTOs to `packages/shared`.
+2. Use them in the Nest controller/service.
+3. Use them in the Next.js page/components for type-safe TanStack Query calls.
+
+## Validation checklist per module
+
+Before flipping the router rule for a migrated endpoint:
+
+- [ ] Route path matches the legacy Express route exactly.
+- [ ] Auth guard and `@Roles()` produce the same 401/403 behavior.
+- [ ] Request query/body validation accepts the same inputs.
+- [ ] Response JSON shape matches the legacy envelope.
+- [ ] Status codes match (200, 201, 400, 401, 403, 404, 500).
+- [ ] End-to-end verified against live Supabase data.
+- [ ] Legacy web and mobile clients still work through the router.

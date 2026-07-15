@@ -1,0 +1,27 @@
+{
+  "name": "clickbit-staged",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Staged migration monorepo for ClickBit backend and admin frontend",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter api db:generate",
+    "db:pull": "pnpm --filter api db:pull",
+    "db:push": "pnpm --filter api db:push",
+    "db:studio": "pnpm --filter api db:studio"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.18.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

@@ -1,0 +1,37 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+out
+dist
+build
+*.tsbuildinfo
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
+# Turbo
+.turbo
+
+# IDE
+.vscode
+.idea
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+prisma/migrations/dev/
+
+# Tests
+coverage
