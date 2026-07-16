@@ -11,6 +11,7 @@ import { SupportModule } from './support/support.module';
 import { CommunicationModule } from './communication/communication.module';
 import { ContentModule } from './content/content.module';
 import { SettingsModule } from './settings/settings.module';
+import { WorkersModule } from './workers/workers.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { SettingsModule } from './settings/settings.module';
     CommunicationModule,
     ContentModule,
     SettingsModule,
+    WorkersModule,
   ],
 })
 export class AppModule {}
