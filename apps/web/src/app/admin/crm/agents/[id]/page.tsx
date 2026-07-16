@@ -1,5 +1,6 @@
 'use client';
 
+import { PageShell } from '@/components/design-system/PageShell';
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -22,7 +23,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchContact, fetchAgentClients, updateAgentCommission } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Company } from '@/types/crm';
-import { ArrowLeft, Building2, Mail, Phone } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, Headphones } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AgentDetailPage() {
@@ -57,20 +58,24 @@ export default function AgentDetailPage() {
     onError: (err: Error) => toast.error(err.message || 'Failed'),
   });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading agent...</div>;
-  if (!agent) return <div className="p-6 text-sm text-muted-foreground">Agent not found.</div>;
+  if (isLoading) return <PageShell title="Agent" icon={Headphones} description="Loading..."><div className="p-6 text-sm text-muted-foreground">Loading agent...</div></PageShell>;
+  if (!agent) return <PageShell title="Agent" icon={Headphones} description="Not found"><div className="p-6 text-sm text-muted-foreground">Agent not found.</div></PageShell>;
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center gap-4">
+    <PageShell
+      title={agent.name}
+      icon={Headphones}
+      description={agent.email || 'Agent detail'}
+      actions={
+        <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/crm/agents"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>
           <Button size="sm" onClick={() => setEditOpen(true)}>Edit Commission</Button>
         </div>
-
-        <AgentHeader agent={agent} />
+      }
+    >
+      <AgentHeader agent={agent} />
 
         <Card>
           <CardHeader>
@@ -128,8 +133,7 @@ export default function AgentDetailPage() {
             <Input id="commission_rate" name="commission_rate" type="number" defaultValue={agent.commission_rate ?? 0} />
           </div>
         </FormDialog>
-      </div>
-    </div>
+    </PageShell>
   );
 }
 

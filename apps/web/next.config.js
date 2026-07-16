@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@clickbit/shared'],
+  webpack: (config) => {
+    config.output.chunkLoadTimeout = 120000;
+    return config;
+  },
   async rewrites() {
     return [
       {

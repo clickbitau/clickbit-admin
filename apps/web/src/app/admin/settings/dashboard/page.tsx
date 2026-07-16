@@ -4,7 +4,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatCards } from '@/components/design-system/StatCards';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchDashboardStats } from '@/lib/api';
 
@@ -16,14 +16,14 @@ export default function AdminSettingsDashboardPage() {
 
   const stats = data || {};
   const cards = [
-    { label: 'Users', value: stats.totalUsers },
-    { label: 'Blog Posts', value: stats.totalBlogPosts },
-    { label: 'Portfolio Items', value: stats.totalPortfolioItems },
-    { label: 'Contacts', value: stats.totalContacts },
-    { label: 'Services', value: stats.totalServices },
-    { label: 'Orders', value: stats.totalOrders },
-    { label: 'Revenue', value: stats.totalRevenue },
-    { label: 'Monthly Revenue', value: stats.monthlyRevenue },
+    { label: 'Users', value: stats.totalUsers ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Blog Posts', value: stats.totalBlogPosts ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Portfolio Items', value: stats.totalPortfolioItems ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Contacts', value: stats.totalContacts ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Services', value: stats.totalServices ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Orders', value: stats.totalOrders ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Revenue', value: stats.totalRevenue ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Monthly Revenue', value: stats.monthlyRevenue ?? 0, icon: LayoutDashboardIcon },
   ];
 
   return (
@@ -31,14 +31,7 @@ export default function AdminSettingsDashboardPage() {
       title="Dashboard Stats"
       icon={LayoutDashboardIcon}
     >
-      <div className="grid gap-4 md:grid-cols-4">
-        {cards.map((c) => (
-          <Card key={c.label}>
-            <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle></CardHeader>
-            <CardContent><div className="text-2xl font-bold">{c.value ?? 0}</div></CardContent>
-          </Card>
-        ))}
-      </div>
+      {isLoading ? <Skeleton className="h-40 w-full" /> : <StatCards cards={cards} />}
     </PageShell>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageShell } from '@/components/design-system/PageShell';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -41,19 +42,21 @@ export default function CompanyDetailPage() {
     { enabled: !!id },
   );
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading company...</div>;
-  if (!company) return <div className="p-6 text-sm text-muted-foreground">Company not found.</div>;
+  if (isLoading) return <PageShell title="Company" icon={Building2} description="Loading..."><div className="p-6 text-sm text-muted-foreground">Loading company...</div></PageShell>;
+  if (!company) return <PageShell title="Company" icon={Building2} description="Not found"><div className="p-6 text-sm text-muted-foreground">Company not found.</div></PageShell>;
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/crm/companies"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
-          </Button>
-        </div>
-
-        <CompanyHeader company={company} />
+    <PageShell
+      title={company.name}
+      icon={Building2}
+      description={company.industry ? `${company.industry} · ${company.lifecycle_stage}` : company.lifecycle_stage}
+      actions={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/admin/crm/companies"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
+        </Button>
+      }
+    >
+      <CompanyHeader company={company} />
 
         <Tabs defaultValue="overview">
           <TabsList>
@@ -74,8 +77,7 @@ export default function CompanyDetailPage() {
           <TabsContent value="documents"><CompanyDocuments companyId={id} /></TabsContent>
           <TabsContent value="value"><CompanyValue companyId={id} /></TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </PageShell>
   );
 }
 

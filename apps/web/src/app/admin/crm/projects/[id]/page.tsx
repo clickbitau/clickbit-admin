@@ -1,5 +1,6 @@
 'use client';
 
+import { PageShell } from '@/components/design-system/PageShell';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -14,7 +15,7 @@ import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchProject } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { ArrowLeft, Building2, Calendar, DollarSign, Clock } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, DollarSign, Clock, FolderKanban } from 'lucide-react';
 
 export default function ProjectDetailPage() {
   const { token } = useAuth();
@@ -29,22 +30,24 @@ export default function ProjectDetailPage() {
 
   useRealtimeRefresh(['crm_projects', 'project_tasks'], ['project', id], { enabled: !!id });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading project...</div>;
-  if (!project) return <div className="p-6 text-sm text-muted-foreground">Project not found.</div>;
+  if (isLoading) return <PageShell title="Project" icon={FolderKanban} description="Loading..."><div className="p-6 text-sm text-muted-foreground">Loading project...</div></PageShell>;
+  if (!project) return <PageShell title="Project" icon={FolderKanban} description="Not found"><div className="p-6 text-sm text-muted-foreground">Project not found.</div></PageShell>;
 
   const tasks = project.tasks ?? [];
   const financials = project.financials ?? { totalValue: 0, totalPaid: 0, totalCosts: 0, netProfit: 0 };
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/crm/projects"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <PageShell
+      title={project.name}
+      icon={FolderKanban}
+      description={project.project_number}
+      actions={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/admin/crm/projects"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
             <p className="text-muted-foreground">{project.project_number}</p>
@@ -116,7 +119,6 @@ export default function ProjectDetailPage() {
             />
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </PageShell>
   );
 }

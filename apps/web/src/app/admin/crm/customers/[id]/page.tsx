@@ -1,5 +1,6 @@
 'use client';
 
+import { PageShell } from '@/components/design-system/PageShell';
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -15,7 +16,7 @@ import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchContact, updateContact } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { ArrowLeft, Building2, Mail, Phone, Star, Calendar } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, Star, Calendar, User } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CrmContact } from '@/types/crm';
 
@@ -40,20 +41,24 @@ export default function CustomerDetailPage() {
     onError: (err: Error) => toast.error(err.message || 'Failed'),
   });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading customer...</div>;
-  if (!customer) return <div className="p-6 text-sm text-muted-foreground">Customer not found.</div>;
+  if (isLoading) return <PageShell title="Customer" icon={User} description="Loading..."><div className="p-6 text-sm text-muted-foreground">Loading customer...</div></PageShell>;
+  if (!customer) return <PageShell title="Customer" icon={User} description="Not found"><div className="p-6 text-sm text-muted-foreground">Customer not found.</div></PageShell>;
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center gap-4">
+    <PageShell
+      title={customer.name || 'Customer'}
+      icon={User}
+      description={customer.email || customer.lifecycle_stage}
+      actions={
+        <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/crm/customers"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>
           <Button size="sm" onClick={() => setEditOpen(true)}>Edit</Button>
         </div>
-
-        <CustomerHeader customer={customer} />
+      }
+    >
+      <CustomerHeader customer={customer} />
 
         <Tabs defaultValue="overview">
           <TabsList>
@@ -97,8 +102,7 @@ export default function CustomerDetailPage() {
           <div className="grid gap-2"><Label htmlFor="phone">Phone</Label><Input id="phone" name="phone" defaultValue={customer.phone ?? ''} /></div>
           <div className="grid gap-2"><Label htmlFor="lifecycle_stage">Lifecycle Stage</Label><Input id="lifecycle_stage" name="lifecycle_stage" defaultValue={customer.lifecycle_stage ?? 'customer'} /></div>
         </FormDialog>
-      </div>
-    </div>
+    </PageShell>
   );
 }
 

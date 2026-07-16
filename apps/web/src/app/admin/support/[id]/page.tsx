@@ -1,7 +1,9 @@
 'use client';
 
+import { PageShell } from '@/components/design-system/PageShell';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -13,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTicket, updateTicket, replyToTicket, deleteTicket, fetchSupportStaff } from '@/lib/api';
 import type { Ticket, TicketMessage, SupportStaff } from '@/types/support';
+import { ArrowLeft, Ticket as TicketIcon } from 'lucide-react';
 
 const statuses = ['open', 'in_progress', 'waiting_customer', 'waiting_staff', 'resolved', 'closed'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
@@ -64,20 +67,31 @@ export default function AdminTicketDetailPage() {
     onSuccess: () => router.push('/admin/support'),
   });
 
-  if (error) return <div className="p-6 text-destructive">Failed to load ticket.</div>;
+  if (error) return <PageShell title="Ticket" icon={TicketIcon} description="Error"><div className="p-6 text-destructive">Failed to load ticket.</div></PageShell>;
+
+  const title = ticket ? `${ticket.ticket_number}: ${ticket.subject}` : 'Ticket';
+  const description = ticket ? `${ticket.contact_email || 'Guest'} · ${ticket.category}` : 'Support ticket detail';
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        {isLoading || !ticket ? (
-          <Skeleton className="h-32 w-full" />
-        ) : (
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-2xl">{ticket.ticket_number}: {ticket.subject}</CardTitle>
-                  <p className="text-sm text-muted-foreground">{ticket.contact_email || 'Guest'} &middot; {ticket.category} &middot; created {new Date(ticket.created_at).toLocaleString()}</p>
+    <PageShell
+      title={title}
+      icon={TicketIcon}
+      description={description}
+      actions={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/admin/support"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
+        </Button>
+      }
+    >
+      {isLoading || !ticket ? (
+        <Skeleton className="h-32 w-full" />
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-2xl">{ticket.ticket_number}: {ticket.subject}</CardTitle>
+                <p className="text-sm text-muted-foreground">{ticket.contact_email || 'Guest'} &middot; {ticket.category} &middot; created {new Date(ticket.created_at).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-2">
                   <Badge variant="outline">{ticket.status}</Badge>
@@ -150,8 +164,7 @@ export default function AdminTicketDetailPage() {
             </CardContent>
           </Card>
         )}
-      </div>
-    </div>
+    </PageShell>
   );
 }
 
