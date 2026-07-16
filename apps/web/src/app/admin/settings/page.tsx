@@ -1,4 +1,5 @@
 'use client';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -16,18 +17,18 @@ const modules = [
 
 export default function AdminSettingsPage() {
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Settings & Admin</h1>
-        <div className="grid gap-4 md:grid-cols-3">
-          {modules.map((m) => (
-            <Card key={m.label}>
-              <CardHeader><CardTitle className="flex items-center gap-2"><m.icon className="h-5 w-5" /> {m.label}</CardTitle></CardHeader>
-              <CardContent><Button asChild><Link href={m.href}>Manage</Link></Button></CardContent>
-            </Card>
-          ))}
-        </div>
+    <PageShell
+      title="Settings & Admin"
+      icon={Settings}
+    >
+      <div className="grid gap-4 md:grid-cols-3">
+        {modules.map((m) => (
+          <Card key={m.label}>
+            <CardHeader><CardTitle className="flex items-center gap-2"><m.icon className="h-5 w-5" /> {m.label}</CardTitle></CardHeader>
+            <CardContent><Button asChild><Link href={m.href}>Manage</Link></Button></CardContent>
+          </Card>
+        ))}
       </div>
-    </div>
+    </PageShell>
   );
 }

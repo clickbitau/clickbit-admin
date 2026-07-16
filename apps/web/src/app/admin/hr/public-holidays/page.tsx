@@ -1,4 +1,6 @@
 'use client';
+import { Globe as GlobeIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -29,42 +31,40 @@ export default function AdminHrPublicHolidaysPage() {
   const total = data?.count ?? 0;
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Public Holidays</h1>
-          <p className="text-muted-foreground">Manage public holidays and regional calendars.</p>
-        </div>
+    <PageShell
+      title="Public Holidays"
+      icon={GlobeIcon}
+      description="Manage public holidays and regional calendars."
+    >
 
-        <Input
-          placeholder="Search public holidays..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="max-w-sm"
-        />
+      <Input
+        placeholder="Search public holidays..."
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1);
+        }}
+        className="max-w-sm"
+      />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Public Holidays</CardTitle>
-          </CardHeader>
-          <CardContent>{error ? <div className="text-destructive">Failed to load public holidays.</div> : <PublicHolidayTable holidays={holidays} loading={isLoading} />}</CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Public Holidays</CardTitle>
+        </CardHeader>
+        <CardContent>{error ? <div className="text-destructive">Failed to load public holidays.</div> : <PublicHolidayTable holidays={holidays} loading={isLoading} />}</CardContent>
+      </Card>
 
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{total} holidays</p>
-          <div className="space-x-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)}>
-              Next
-            </Button>
-          </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{total} holidays</p>
+        <div className="space-x-2">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            Previous
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)}>
+            Next
+          </Button>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

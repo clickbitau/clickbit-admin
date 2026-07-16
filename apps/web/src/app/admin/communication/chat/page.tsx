@@ -1,4 +1,6 @@
 'use client';
+import { MessageSquare as MessageSquareIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -69,67 +71,67 @@ export default function AdminCommunicationChatPage() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">Chat</h1>
-        <div className="grid gap-4 md:grid-cols-[300px_1fr]">
-          <Card className="h-[calc(100vh-12rem)]">
-            <CardHeader>
-              <CardTitle>Conversations</CardTitle>
-              <select value={selectedWorkspace ?? ''} onChange={(e) => setSelectedWorkspace(Number(e.target.value))} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-                <option value="">Select workspace</option>
-                {workspaces?.data?.map((w: Workspace) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </CardHeader>
-            <CardContent className="space-y-4 overflow-auto">
-              {loadingWorkspaces ? <Skeleton className="h-8 w-full" /> : (
-                <>
-                  <div className="text-sm font-medium text-muted-foreground">Channels</div>
-                  {channels?.data?.map((c: Channel) => (
-                    <button key={c.id} onClick={() => setConversation({ kind: 'channel', id: c.id, name: c.name })} className="block w-full text-left text-sm hover:underline">
-                      # {c.name}
-                    </button>
-                  ))}
-                  <div className="text-sm font-medium text-muted-foreground pt-2">Direct messages</div>
-                  {dms?.data?.map((d: DirectMessage) => (
-                    <button key={d.id} onClick={() => setConversation({ kind: 'dm', id: d.id, name: d.name || `DM ${d.id}` })} className="block w-full text-left text-sm hover:underline">
-                      {d.name || `DM ${d.id}`}
-                    </button>
-                  ))}
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="h-[calc(100vh-12rem)] flex flex-col">
-            <CardHeader>
-              <CardTitle>{conversation ? conversation.name : 'Select a conversation'}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto space-y-3">
-              {loadingMessages ? <Skeleton className="h-8 w-full" /> : (
-                (messages?.messages || []).map((m: Message) => (
-                  <div key={m.id} className="space-y-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium">{m.author ? `${m.author.first_name} ${m.author.last_name}` : `User ${m.user_id}`}</span>
-                      <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString()}</span>
-                    </div>
-                    <div className="text-sm">{m.content}</div>
-                  </div>
-                ))
-              )}
-              <div ref={bottomRef} />
-            </CardContent>
-            {conversation && (
-              <CardContent className="border-t pt-4">
-                <div className="flex gap-2">
-                  <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message..." onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) send.mutate(); }} />
-                  <Button onClick={() => draft.trim() && send.mutate()} disabled={send.isPending}>Send</Button>
-                </div>
-              </CardContent>
+    <PageShell
+      title="Chat"
+      icon={MessageSquareIcon}
+    >
+      <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+        <Card className="h-[calc(100vh-12rem)]">
+          <CardHeader>
+            <CardTitle>Conversations</CardTitle>
+            <select value={selectedWorkspace ?? ''} onChange={(e) => setSelectedWorkspace(Number(e.target.value))} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+              <option value="">Select workspace</option>
+              {workspaces?.data?.map((w: Workspace) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-auto">
+            {loadingWorkspaces ? <Skeleton className="h-8 w-full" /> : (
+              <>
+                <div className="text-sm font-medium text-muted-foreground">Channels</div>
+                {channels?.data?.map((c: Channel) => (
+                  <button key={c.id} onClick={() => setConversation({ kind: 'channel', id: c.id, name: c.name })} className="block w-full text-left text-sm hover:underline">
+                    # {c.name}
+                  </button>
+                ))}
+                <div className="text-sm font-medium text-muted-foreground pt-2">Direct messages</div>
+                {dms?.data?.map((d: DirectMessage) => (
+                  <button key={d.id} onClick={() => setConversation({ kind: 'dm', id: d.id, name: d.name || `DM ${d.id}` })} className="block w-full text-left text-sm hover:underline">
+                    {d.name || `DM ${d.id}`}
+                  </button>
+                ))}
+              </>
             )}
-          </Card>
-        </div>
+          </CardContent>
+        </Card>
+
+        <Card className="h-[calc(100vh-12rem)] flex flex-col">
+          <CardHeader>
+            <CardTitle>{conversation ? conversation.name : 'Select a conversation'}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-auto space-y-3">
+            {loadingMessages ? <Skeleton className="h-8 w-full" /> : (
+              (messages?.messages || []).map((m: Message) => (
+                <div key={m.id} className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium">{m.author ? `${m.author.first_name} ${m.author.last_name}` : `User ${m.user_id}`}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="text-sm">{m.content}</div>
+                </div>
+              ))
+            )}
+            <div ref={bottomRef} />
+          </CardContent>
+          {conversation && (
+            <CardContent className="border-t pt-4">
+              <div className="flex gap-2">
+                <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message..." onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) send.mutate(); }} />
+                <Button onClick={() => draft.trim() && send.mutate()} disabled={send.isPending}>Send</Button>
+              </div>
+            </CardContent>
+          )}
+        </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }

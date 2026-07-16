@@ -1,4 +1,5 @@
 'use client';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,7 +25,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchTasks, fetchAssignees, updateTaskStatus } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { ProjectTask, User } from '@/types/crm';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, FolderKanban as FolderKanbanIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProjectTasksPage() {
@@ -77,78 +78,73 @@ export default function ProjectTasksPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Project Tasks</h1>
-            <p className="text-muted-foreground">Cross-project task management</p>
-          </div>
-          <Button onClick={() => setFormOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Task</Button>
+    <PageShell
+      title="Project Tasks"
+      icon={FolderKanbanIcon}
+      description="Cross-project task management"
+      actions={<Button onClick={() => setFormOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Task</Button>}
+    >
+      <StatCards cards={statCards} />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search tasks..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
-
-        <StatCards cards={statCards} />
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search tasks..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          </div>
-          <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All</SelectItem>
-              <SelectItem value="todo">To Do</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="review">Review</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="blocked">Blocked</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
-            <SelectTrigger><SelectValue placeholder="Assignee" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All</SelectItem>
-              {(assignees ?? []).map((u: User) => <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <DataTable
-          headers={[
-            { key: 'task', label: 'Task' },
-            { key: 'project', label: 'Project' },
-            { key: 'status', label: 'Status' },
-            { key: 'priority', label: 'Priority' },
-            { key: 'assignee', label: 'Assignee' },
-            { key: 'due', label: 'Due' },
-            { key: 'actions', label: '' },
-          ]}
-          data={tasks}
-          keyExtractor={(t) => t.id}
-          loading={isLoading}
-          renderRow={(t) => [
-            <div key="task"><p className="font-medium">{t.title}</p><p className="text-xs text-muted-foreground">{t.description}</p></div>,
-            <span key="project" className="text-sm text-muted-foreground">{t.crmProject?.name || t.project?.title || '-'}</span>,
-            <StatusBadge key="status" status={t.status} />,
-            <PriorityBadge key="priority" priority={t.priority} />,
-            <span key="assignee" className="text-sm">{t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '-'}</span>,
-            <span key="due">{formatDate(t.due_date)}</span>,
-            <div key="actions" className="flex items-center gap-1">
-              {['todo', 'in_progress', 'review', 'completed', 'blocked'].map((s) => (
-                <Button key={s} variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: t.id, status: s })} disabled={t.status === s}>
-                  {s[0].toUpperCase()}
-                </Button>
-              ))}
-            </div>,
-          ]}
-        />
-
-        <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
+        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All</SelectItem>
+            <SelectItem value="todo">To Do</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="review">Review</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="blocked">Blocked</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Assignee" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All</SelectItem>
+            {(assignees ?? []).map((u: User) => <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
+      <DataTable
+        headers={[
+          { key: 'task', label: 'Task' },
+          { key: 'project', label: 'Project' },
+          { key: 'status', label: 'Status' },
+          { key: 'priority', label: 'Priority' },
+          { key: 'assignee', label: 'Assignee' },
+          { key: 'due', label: 'Due' },
+          { key: 'actions', label: '' },
+        ]}
+        data={tasks}
+        keyExtractor={(t) => t.id}
+        loading={isLoading}
+        renderRow={(t) => [
+          <div key="task"><p className="font-medium">{t.title}</p><p className="text-xs text-muted-foreground">{t.description}</p></div>,
+          <span key="project" className="text-sm text-muted-foreground">{t.crmProject?.name || t.project?.title || '-'}</span>,
+          <StatusBadge key="status" status={t.status} />,
+          <PriorityBadge key="priority" priority={t.priority} />,
+          <span key="assignee" className="text-sm">{t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '-'}</span>,
+          <span key="due">{formatDate(t.due_date)}</span>,
+          <div key="actions" className="flex items-center gap-1">
+            {['todo', 'in_progress', 'review', 'completed', 'blocked'].map((s) => (
+              <Button key={s} variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: t.id, status: s })} disabled={t.status === s}>
+                {s[0].toUpperCase()}
+              </Button>
+            ))}
+          </div>,
+        ]}
+      />
+
+      <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
+
       <TaskFormDialog open={formOpen} onOpenChange={setFormOpen} assignees={assignees ?? []} onSubmit={(values) => { toast.info('Create task endpoint not wired to this view'); setFormOpen(false); }} />
-    </div>
+    </PageShell>
   );
 }
 

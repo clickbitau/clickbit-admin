@@ -1,4 +1,6 @@
 'use client';
+import { Mail as MailIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -70,79 +72,79 @@ export default function AdminCommunicationMailPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Mail</h1>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Email Accounts</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value, username: e.target.value })} className="max-w-xs" />
-                <Input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="max-w-xs" />
-                <select value={form.preset} onChange={(e) => setForm({ ...form, preset: e.target.value })} className="rounded-md border bg-background px-3 py-2 text-sm">
-                  <option value="">Preset</option>
-                  {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
-                <Button onClick={() => form.email && form.password && addAccount.mutate()} disabled={addAccount.isPending}>Add</Button>
-              </div>
-              {loadingAccounts ? <Skeleton className="h-16 w-full" /> : (
-                <div className="divide-y">
-                  {accounts?.data?.map((a: MailAccount) => (
-                    <div key={a.id} className="flex items-center justify-between py-2">
-                      <button onClick={() => { setSelectedAccount(a.id); setSelectedFolder('INBOX'); }} className={`text-sm hover:underline ${selectedAccount === a.id ? 'font-semibold' : ''}`}>{a.email}</button>
-                      <Button variant="destructive" size="sm" onClick={() => removeAccount.mutate(a.id)}>Delete</Button>
-                    </div>
-                  ))}
-                  {!accounts?.data?.length && <div className="text-muted-foreground">No accounts.</div>}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>Templates</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Input placeholder="Name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} className="max-w-xs" />
-                <Input placeholder="Subject" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} className="max-w-xs" />
-                <Button onClick={() => templateForm.name && addTemplate.mutate()} disabled={addTemplate.isPending}>Add</Button>
-              </div>
+    <PageShell
+      title="Mail"
+      icon={MailIcon}
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>Email Accounts</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value, username: e.target.value })} className="max-w-xs" />
+              <Input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="max-w-xs" />
+              <select value={form.preset} onChange={(e) => setForm({ ...form, preset: e.target.value })} className="rounded-md border bg-background px-3 py-2 text-sm">
+                <option value="">Preset</option>
+                {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+              <Button onClick={() => form.email && form.password && addAccount.mutate()} disabled={addAccount.isPending}>Add</Button>
+            </div>
+            {loadingAccounts ? <Skeleton className="h-16 w-full" /> : (
               <div className="divide-y">
-                {templates?.data?.map((t: EmailTemplate) => (
-                  <div key={t.id} className="flex items-center justify-between py-2">
-                    <div className="text-sm">{t.name} &middot; {t.subject}</div>
-                    <Button variant="destructive" size="sm" onClick={() => removeTemplate.mutate(t.id)}>Delete</Button>
+                {accounts?.data?.map((a: MailAccount) => (
+                  <div key={a.id} className="flex items-center justify-between py-2">
+                    <button onClick={() => { setSelectedAccount(a.id); setSelectedFolder('INBOX'); }} className={`text-sm hover:underline ${selectedAccount === a.id ? 'font-semibold' : ''}`}>{a.email}</button>
+                    <Button variant="destructive" size="sm" onClick={() => removeAccount.mutate(a.id)}>Delete</Button>
                   </div>
                 ))}
-                {!templates?.data?.length && <div className="text-muted-foreground">No templates.</div>}
+                {!accounts?.data?.length && <div className="text-muted-foreground">No accounts.</div>}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Messages</CardTitle>
-            <div className="flex gap-2">
-              <select value={selectedFolder} onChange={(e) => setSelectedFolder(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
-                {folders?.data?.map((f: MailFolder) => <option key={f.path} value={f.path}>{f.name}</option>)}
-              </select>
+          <CardHeader><CardTitle>Templates</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Input placeholder="Name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} className="max-w-xs" />
+              <Input placeholder="Subject" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} className="max-w-xs" />
+              <Button onClick={() => templateForm.name && addTemplate.mutate()} disabled={addTemplate.isPending}>Add</Button>
             </div>
-          </CardHeader>
-          <CardContent>
             <div className="divide-y">
-              {messages?.data?.map((m: CachedEmail) => (
-                <div key={m.id} className="py-2">
-                  <div className="text-sm font-medium">{m.subject || '(no subject)'}</div>
-                  <div className="text-xs text-muted-foreground">{m.from_name || m.from_address} &middot; {m.date ? new Date(m.date).toLocaleString() : ''}</div>
+              {templates?.data?.map((t: EmailTemplate) => (
+                <div key={t.id} className="flex items-center justify-between py-2">
+                  <div className="text-sm">{t.name} &middot; {t.subject}</div>
+                  <Button variant="destructive" size="sm" onClick={() => removeTemplate.mutate(t.id)}>Delete</Button>
                 </div>
               ))}
-              {!messages?.data?.length && <div className="text-muted-foreground">No messages.</div>}
+              {!templates?.data?.length && <div className="text-muted-foreground">No templates.</div>}
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Messages</CardTitle>
+          <div className="flex gap-2">
+            <select value={selectedFolder} onChange={(e) => setSelectedFolder(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
+              {folders?.data?.map((f: MailFolder) => <option key={f.path} value={f.path}>{f.name}</option>)}
+            </select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="divide-y">
+            {messages?.data?.map((m: CachedEmail) => (
+              <div key={m.id} className="py-2">
+                <div className="text-sm font-medium">{m.subject || '(no subject)'}</div>
+                <div className="text-xs text-muted-foreground">{m.from_name || m.from_address} &middot; {m.date ? new Date(m.date).toLocaleString() : ''}</div>
+              </div>
+            ))}
+            {!messages?.data?.length && <div className="text-muted-foreground">No messages.</div>}
+          </div>
+        </CardContent>
+      </Card>
+    </PageShell>
   );
 }

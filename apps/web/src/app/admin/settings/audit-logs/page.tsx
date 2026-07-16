@@ -1,4 +1,6 @@
 'use client';
+import { Shield as ShieldIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -14,21 +16,21 @@ export default function AdminSettingsAuditLogsPage() {
   const { data, isLoading } = useQuery({ queryKey: ['audit-logs', token, search], queryFn: () => { if (!token) throw new Error('No token'); return fetchAuditLogs(token, { search }); }, enabled: !!token });
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Audit Logs</h1>
-        <Input placeholder="Search logs..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        {isLoading ? <Skeleton className="h-40 w-full" /> : (
-          <div className="space-y-2">
-            {data?.data?.map((log: any) => (
-              <Card key={log.id}>
-                <CardHeader><CardTitle className="text-sm">{log.action} &middot; {log.entity_type}</CardTitle></CardHeader>
-                <CardContent><pre className="text-xs text-muted-foreground">{JSON.stringify(log, null, 2)}</pre></CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+    <PageShell
+      title="Audit Logs"
+      icon={ShieldIcon}
+    >
+      <Input placeholder="Search logs..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+      {isLoading ? <Skeleton className="h-40 w-full" /> : (
+        <div className="space-y-2">
+          {data?.data?.map((log: any) => (
+            <Card key={log.id}>
+              <CardHeader><CardTitle className="text-sm">{log.action} &middot; {log.entity_type}</CardTitle></CardHeader>
+              <CardContent><pre className="text-xs text-muted-foreground">{JSON.stringify(log, null, 2)}</pre></CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </PageShell>
   );
 }

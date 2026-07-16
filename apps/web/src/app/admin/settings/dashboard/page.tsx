@@ -1,4 +1,6 @@
 'use client';
+import { LayoutDashboard as LayoutDashboardIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -25,18 +27,18 @@ export default function AdminSettingsDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard Stats</h1>
-        <div className="grid gap-4 md:grid-cols-4">
-          {cards.map((c) => (
-            <Card key={c.label}>
-              <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{c.value ?? 0}</div></CardContent>
-            </Card>
-          ))}
-        </div>
+    <PageShell
+      title="Dashboard Stats"
+      icon={LayoutDashboardIcon}
+    >
+      <div className="grid gap-4 md:grid-cols-4">
+        {cards.map((c) => (
+          <Card key={c.label}>
+            <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{c.value ?? 0}</div></CardContent>
+          </Card>
+        ))}
       </div>
-    </div>
+    </PageShell>
   );
 }
