@@ -1300,8 +1300,12 @@ export async function fetchCustomerInvoice(token: string, id: string | number) {
   return (await api.get(`/api/customer/invoices/${id}`, { headers: authHeaders(token) })).data;
 }
 
-export async function fetchCustomerInvoicePdfUrl(token: string, id: string | number) {
-  return (await api.get(`/api/customer/invoices/${id}/pdf`, { headers: authHeaders(token) })).data;
+export async function fetchCustomerInvoicePdfUrl(token: string, id: string | number): Promise<Blob> {
+  const response = await api.get<Blob>(`/api/customer/invoices/${id}/pdf`, {
+    headers: authHeaders(token),
+    responseType: 'blob',
+  });
+  return response.data;
 }
 
 export async function customerPayInvoice(token: string, id: string | number, body: Record<string, unknown> = {}) {
