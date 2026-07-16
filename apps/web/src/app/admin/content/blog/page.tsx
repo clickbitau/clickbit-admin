@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { BookOpen as BookOpenIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -50,7 +51,7 @@ export default function AdminContentBlogPage() {
           {data?.posts?.map((p: BlogPost) => (
             <div key={p.id} className="flex items-center justify-between py-2">
               <div>
-                <div className="font-medium">{p.title}</div>
+                <Link href={`/admin/content/blog/${p.id}`} className="font-medium hover:underline">{p.title}</Link>
                 <div className="text-sm text-muted-foreground">{p.status}</div>
               </div>
               <Button variant="destructive" size="sm" onClick={() => remove.mutate(p.id)}>Delete</Button>

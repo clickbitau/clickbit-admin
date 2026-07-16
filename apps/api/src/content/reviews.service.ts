@@ -37,6 +37,12 @@ export class ReviewsService {
     return { message: 'Review submitted successfully! It will be reviewed before being published.', review: { id: review.id, name: review.name, rating: review.rating, status: review.status } };
   }
 
+  async findOneAdmin(id: number) {
+    const review = await this.prisma.reviews.findUnique({ where: { id } });
+    if (!review) throw new NotFoundException({ message: 'Review not found' });
+    return { success: true, data: review };
+  }
+
   async findAllAdmin(query: Record<string, unknown>) {
     const page = numberValue(query.page, 1);
     const limit = numberValue(query.limit, 20);

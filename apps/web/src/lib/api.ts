@@ -926,6 +926,10 @@ export async function fetchAdminServices(token: string, params?: Record<string, 
   return (await api.get('/api/services/admin/all', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchAdminService(token: string, id: string | number): Promise<Service> {
+  return (await api.get<{ item: Service }>(`/api/services/admin/${id}`, { headers: authHeaders(token) })).data.item;
+}
+
 export async function createService(token: string, data: Partial<Service>): Promise<{ message: string; item: Service }> {
   return (await api.post('/api/services/admin', data, { headers: authHeaders(token) })).data;
 }
@@ -950,6 +954,10 @@ export async function fetchAdminPortfolio(token: string, params?: Record<string,
   return (await api.get('/api/portfolio/admin/all', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchAdminPortfolioItem(token: string, id: string | number): Promise<PortfolioItem> {
+  return (await api.get<{ item: PortfolioItem }>(`/api/portfolio/admin/${id}`, { headers: authHeaders(token) })).data.item;
+}
+
 export async function createPortfolioItem(token: string, data: Partial<PortfolioItem>): Promise<{ message: string; item: PortfolioItem }> {
   return (await api.post('/api/portfolio/admin', data, { headers: authHeaders(token) })).data;
 }
@@ -968,6 +976,10 @@ export async function fetchTeamMembers(): Promise<TeamMember[]> {
 
 export async function fetchAdminTeamMembers(token: string): Promise<TeamMember[]> {
   return (await api.get('/api/team/admin/all', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchTeamMember(token: string, id: string | number): Promise<TeamMember> {
+  return (await api.get<TeamMember>(`/api/team/${id}`, { headers: authHeaders(token) })).data;
 }
 
 export async function createTeamMember(token: string, data: Partial<TeamMember>): Promise<TeamMember> {
@@ -992,6 +1004,10 @@ export async function submitReview(data: Partial<Review>): Promise<{ message: st
 
 export async function fetchAdminReviews(token: string, params?: Record<string, string | number | boolean>): Promise<{ reviews: Review[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number }; stats: unknown }> {
   return (await api.get('/api/admin/reviews', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAdminReview(token: string, id: string | number): Promise<Review> {
+  return (await api.get<{ success: boolean; data: Review }>(`/api/admin/reviews/${id}`, { headers: authHeaders(token) })).data.data;
 }
 
 export async function updateReviewStatus(token: string, id: number, status: string): Promise<{ message: string; review: Review }> {
@@ -1024,6 +1040,10 @@ export async function submitComment(slug: string, data: { author_name: string; a
 
 export async function fetchAdminBlogPosts(token: string, params?: Record<string, string | number | boolean>): Promise<{ posts: BlogPost[]; pagination: { total: number; limit: number; offset: number; hasMore: boolean } }> {
   return (await api.get('/api/blog/admin/all', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAdminBlogPost(token: string, id: string | number): Promise<BlogPost> {
+  return (await api.get<{ post: BlogPost }>(`/api/blog/admin/${id}`, { headers: authHeaders(token) })).data.post;
 }
 
 export async function createBlogPost(token: string, data: Partial<BlogPost>): Promise<{ message: string; post: BlogPost }> {

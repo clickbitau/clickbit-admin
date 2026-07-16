@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Star as StarIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -44,7 +45,7 @@ export default function AdminContentReviewsPage() {
           {data?.reviews?.map((r: Review) => (
             <div key={r.id} className="flex items-start justify-between py-2">
               <div>
-                <div className="font-medium">{r.name} &middot; {r.rating}/5</div>
+                <Link href={`/admin/content/reviews/${r.id}`} className="font-medium hover:underline">{r.name} &middot; {r.rating}/5</Link>
                 <div className="text-sm text-muted-foreground">{r.status}</div>
                 <div className="text-sm">{r.review_text}</div>
               </div>

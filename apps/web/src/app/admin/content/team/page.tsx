@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Users as UsersIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -47,7 +48,7 @@ export default function AdminContentTeamPage() {
           {data?.map((m: TeamMember) => (
             <div key={m.id} className="flex items-center justify-between py-2">
               <div>
-                <div className="font-medium">{m.name}</div>
+                <Link href={`/admin/content/team/${m.id}`} className="font-medium hover:underline">{m.name}</Link>
                 <div className="text-sm text-muted-foreground">{m.role}</div>
               </div>
               <Button variant="destructive" size="sm" onClick={() => remove.mutate(m.id)}>Delete</Button>

@@ -34,6 +34,13 @@ export class ReviewsAdminController {
     return this.reviewsService.findAllAdmin(query as unknown as Record<string, unknown>);
   }
 
+  @Get(':id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.reviewsService.findOneAdmin(id);
+  }
+
   @Get('stats')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('admin', 'manager')
