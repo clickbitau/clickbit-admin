@@ -60,7 +60,7 @@ import type {
   TeamMember,
 } from '@/types/content';
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: '/',
   timeout: 30000,
   headers: {
@@ -68,7 +68,7 @@ const api = axios.create({
   },
 });
 
-function authHeaders(token: string) {
+export function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 function extractSingle<T>(response: { data: unknown }, key: string): T {
