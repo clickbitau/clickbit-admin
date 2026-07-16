@@ -666,6 +666,14 @@ export async function fetchExpense(token: string, id: string | number): Promise<
   return (await api.get<{ success: boolean; data: Expense }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function updateExpense(token: string, id: string | number, data: Partial<Expense>): Promise<{ success: boolean; data: Expense }> {
+  return (await api.put<{ success: boolean; data: Expense }>(`/api/expenses/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteExpense(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete<{ success: boolean; message: string }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
+}
+
 // ─── HR ────────────────────────────────────────────────────────────────────
 
 export async function fetchHrDashboard(token: string): Promise<{ success: boolean; data: HrDashboardData }> {
@@ -677,6 +685,25 @@ export async function fetchEmployees(
   params?: Record<string, string | number | boolean>,
 ): Promise<{ success: boolean; data: Employee[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
   return (await api.get('/api/hr/employees', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployee(token: string, id: string | number): Promise<Employee> {
+  const response = await api.get<{ success: boolean; data: Employee }>(`/api/hr/employees/${id}`, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
+export async function createEmployee(token: string, data: Partial<Employee>): Promise<Employee> {
+  const response = await api.post<{ success: boolean; data: Employee }>('/api/hr/employees', data, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
+export async function updateEmployee(token: string, id: string | number, data: Partial<Employee>): Promise<Employee> {
+  const response = await api.put<{ success: boolean; data: Employee }>(`/api/hr/employees/${id}`, data, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
+export async function deleteEmployee(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/hr/employees/${id}`, { headers: authHeaders(token) })).data;
 }
 
 export async function fetchTimeOff(
@@ -1168,6 +1195,10 @@ export async function updateBillingSettings(token: string, data: Record<string, 
 
 export async function fetchUsers(token: string, params?: Record<string, string | number | boolean>) {
   return (await api.get('/api/users', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchUser(token: string, id: string | number): Promise<{ user: any; roles?: string[]; permissions?: string[] }> {
+  return (await api.get(`/api/users/${id}`, { headers: authHeaders(token) })).data;
 }
 
 export async function createUser(token: string, data: Record<string, unknown>) {

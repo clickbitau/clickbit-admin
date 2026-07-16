@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -58,7 +59,9 @@ export function EmployeeTable({ employees, loading }: EmployeeTableProps) {
             const name = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : `Employee #${employee.id}`;
             return (
               <TableRow key={employee.id}>
-                <TableCell className="font-medium">{name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link href={`/admin/hr/employees/${employee.id}`} className="hover:underline">{name}</Link>
+                </TableCell>
                 <TableCell>{employee.employee_number || `#${employee.id}`}</TableCell>
                 <TableCell>{employee.department || '-'}</TableCell>
                 <TableCell>{employee.position || '-'}</TableCell>
