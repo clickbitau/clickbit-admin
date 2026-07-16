@@ -25,6 +25,8 @@ import { TicketAutomationModule } from './ticket-automation/ticket-automation.mo
 import { StaffAdvancesModule } from './staff-advances/staff-advances.module';
 import { ContactModule } from './contact/contact.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { ProjectLifecycleModule } from './project-lifecycle/project-lifecycle.module';
+import { PortalsModule } from './portals/portals.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     StaffAdvancesModule,
     ContactModule,
     AnalyticsModule,
+    ProjectLifecycleModule,
+    PortalsModule,
   ],
 })
 export class AppModule {}

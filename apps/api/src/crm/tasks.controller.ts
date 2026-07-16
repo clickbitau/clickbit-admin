@@ -1,166 +1,261 @@
-import { Controller, Get, Patch, Param, Query, Body, ParseIntPipe, UseGuards, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Req,
+  Res,
+  HttpCode,
+  UseGuards,
+  UseInterceptors,
+  UploadedFiles,
+  ParseIntPipe,
+  Optional,
+  Inject,
+} from '@nestjs/common';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { setNoCache } from './crm-utils';
+import { RequestWithUser } from '../types/request-with-user';
+import { ProjectTasksService } from './project-tasks.service';
+import { StorageService } from '../storage/storage.service';
 
 @Controller()
 @UseGuards(SupabaseAuthGuard, RolesGuard)
-@Roles('admin', 'manager')
 export class TasksController {
-  constructor(private prisma: PrismaService) {}
+  private readonly service: ProjectTasksService;
+
+  constructor(
+    prisma: PrismaService,
+    @Optional() @Inject(StorageService) storage?: StorageService,
+  ) {
+    this.service = new ProjectTasksService(prisma, storage);
+  }
 
   @Get('tasks')
-  async findAll(
-    @Query() query: { page?: string; limit?: string; search?: string; status?: string; assigned_to?: string; crm_project_id?: string },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    setNoCache(res);
-    const page = Number(query.page || 1);
-    const limit = Number(query.limit || 25);
-    const where: { [key: string]: unknown } = { deleted_at: null };
-
-    if (query.status) where.status = query.status;
-    if (query.assigned_to) where.assigned_to = Number(query.assigned_to);
-    if (query.crm_project_id) where.crm_project_id = Number(query.crm_project_id);
-    if (query.search) {
-      (where as { OR: unknown[] }).OR = [
-        { title: { contains: query.search, mode: 'insensitive' } },
-        { description: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
-
-    const [tasks, total] = await Promise.all([
-      this.prisma.project_tasks.findMany({
-        where,
-        include: {
-          crm_projects: { select: { id: true, project_number: true, name: true } },
-          profiles_project_tasks_assigned_toToprofiles: {
-            select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
-          },
-          profiles_project_tasks_created_byToprofiles: {
-            select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
-          },
-          contacts: { select: { id: true, name: true, email: true, avatar_url: true } },
-        },
-        orderBy: { created_at: 'desc' },
-        take: limit,
-        skip: (page - 1) * limit,
-      }),
-      this.prisma.project_tasks.count({ where }),
-    ]);
-
-    const stats = await this.taskStats(where);
-
-    return {
-      data: tasks.map((t) => this.mapTask(t)),
-      stats,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / limit) || 1,
-        totalItems: total,
-        itemsPerPage: limit,
-      },
-    };
+  async findAll(@Query() query: any, @Res({ passthrough: true }) _res: Response) {
+    const result = await this.service.findAll(query);
+    return { success: true, ...result };
   }
 
-  @Patch('projects/tasks/:id/status')
+  @Get('tasks/my-tasks')
+  async myTasks(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.getMyTasks(req.user, query);
+  }
+
+  @Get('tasks/overdue')
+  @Roles('admin', 'manager')
+  async overdueTasks(@Req() req: RequestWithUser) {
+    return this.service.getOverdueTasks(req.user);
+  }
+
+  @Get('tasks/customer-tasks')
+  async customerTasks(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.getCustomerTasks(req.user, query);
+  }
+
+  @Get('tasks/assignees')
+  @Roles('admin', 'manager', 'employee')
+  async assignees(@Res({ passthrough: true }) _res: Response) {
+    return this.service.getAssignees();
+  }
+
+  @Post('tasks')
+  @Roles('admin', 'manager', 'employee')
+  @HttpCode(201)
+  async createStandaloneTask(@Body() body: any, @Req() req: RequestWithUser) {
+    return this.service.createStandaloneTask(body, req.user);
+  }
+
+  @Post('projects/:projectId/tasks')
+  @Roles('admin', 'manager')
+  @HttpCode(201)
+  async createProjectTask(
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.createProjectTask(projectId, body, req.user);
+  }
+
+  @Get('projects/:projectId/tasks')
+  @Roles('admin', 'manager', 'employee')
+  async getProjectTasks(
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @Query() query: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.getProjectTasks(projectId, query, req.user);
+  }
+
+  @Get('projects/:projectId/task-activity')
+  @Roles('admin', 'manager', 'employee')
+  async getProjectActivity(
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @Query() query: any,
+  ) {
+    return this.service.getProjectActivity(projectId, query);
+  }
+
+  @Get('tasks/:id')
+  async getTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.getTask(id, req.user);
+  }
+
+  @Put('tasks/:id')
+  @Roles('admin', 'manager', 'employee')
+  async updateTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateTask(id, body, req.user);
+  }
+
+  @Delete('tasks/:id')
+  @Roles('admin', 'manager')
+  async deleteTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.deleteTask(id, req.user);
+  }
+
+  @Patch('tasks/:id/assign')
+  @Roles('admin', 'manager')
+  async assignTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.assignTask(id, body, req.user);
+  }
+
+  @Patch('tasks/:id/status')
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { status: string; actual_hours?: number | string },
-    @Res({ passthrough: true }) res: Response,
+    @Body() body: any,
+    @Res({ passthrough: true }) _res: Response,
   ) {
-    setNoCache(res);
-    const data: { [key: string]: unknown } = { status: body.status };
-    if (body.actual_hours !== undefined) data.actual_hours = Number(body.actual_hours) || 0;
-    if (body.status === 'completed') data.completed_at = new Date();
-
-    const task = await this.prisma.project_tasks.update({
+    const task = await this.service.prisma.project_tasks.update({
       where: { id },
-      data,
-      include: {
-        crm_projects: { select: { id: true, project_number: true, name: true } },
-        profiles_project_tasks_assigned_toToprofiles: {
-          select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
-        },
-        profiles_project_tasks_created_byToprofiles: {
-          select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
-        },
-        contacts: { select: { id: true, name: true, email: true, avatar_url: true } },
+      data: {
+        status: body.status,
+        completed_at: body.status === 'completed' ? new Date() : null,
+        actual_hours: body.status === 'completed' ? body.actual_hours ?? 0 : undefined,
       },
+      include: this.service.taskInclude,
     });
-
-    return { data: this.mapTask(task) };
+    return { success: true, data: this.service.mapTask(task) };
   }
 
-  @Get('projects/tasks/assignees')
-  async assignees(@Res({ passthrough: true }) res: Response) {
-    setNoCache(res);
-    const users = await this.prisma.profiles.findMany({
-      where: { role: { in: ['admin', 'manager', 'employee'] } },
-      select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true, status: true },
-      orderBy: { first_name: 'asc' },
-    });
-
-    return {
-      success: true,
-      data: users.map((u) => ({
-        ...u,
-        name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
-        avatar: u.avatar,
-      })),
-    };
+  @Post('tasks/:id/log-time')
+  async logTime(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.logTime(id, body, req.user);
   }
 
-  private async taskStats(where: { [key: string]: unknown }) {
-    const counts = await this.prisma.project_tasks.groupBy({
-      by: ['status'],
-      where,
-      _count: { status: true },
-    });
-    const total = await this.prisma.project_tasks.count({ where });
-    const hours = await this.prisma.project_tasks.aggregate({
-      where,
-      _sum: { estimated_hours: true, actual_hours: true },
-    });
-
-    const byStatus = Object.fromEntries(counts.map((c) => [c.status, Number(c._count.status)]));
-    return {
-      total,
-      todo: byStatus['todo'] || 0,
-      in_progress: byStatus['in_progress'] || 0,
-      review: byStatus['review'] || 0,
-      completed: byStatus['completed'] || 0,
-      blocked: byStatus['blocked'] || 0,
-      totalEstimatedHours: Number(hours._sum.estimated_hours || 0),
-      totalActualHours: Number(hours._sum.actual_hours || 0),
-    };
+  @Get('tasks/:id/work-log')
+  async workLog(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.getWorkLog(id, req.user);
   }
 
-  private mapTask(t: any) {
-    return {
-      ...t,
-      estimated_hours: t.estimated_hours ? Number(t.estimated_hours) : undefined,
-      actual_hours: t.actual_hours ? Number(t.actual_hours) : undefined,
-      crmProject: t.crm_projects ? { id: t.crm_projects.id, project_number: t.crm_projects.project_number, name: t.crm_projects.name } : null,
-      project: t.crm_projects ? { id: t.crm_projects.id, title: t.crm_projects.name } : null,
-      assignee: t.profiles_project_tasks_assigned_toToprofiles
-        ? this.mapUser(t.profiles_project_tasks_assigned_toToprofiles)
-        : null,
-      creator: t.profiles_project_tasks_created_byToprofiles
-        ? this.mapUser(t.profiles_project_tasks_created_byToprofiles)
-        : null,
-      customer: t.contacts ? { ...t.contacts, avatar: t.contacts.avatar_url } : null,
-    };
+  @Get('tasks/:id/comments')
+  async getComments(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.getComments(id, req.user);
   }
 
-  private mapUser(u: any) {
-    return {
-      ...u,
-      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
-      avatar: u.avatar,
-    };
+  @Post('tasks/:id/comments')
+  async addComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.addComment(id, body, req.user);
+  }
+
+  @Delete('tasks/:id/comments/:commentId')
+  async deleteComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.deleteComment(id, commentId, req.user);
+  }
+
+  @Post('tasks/:id/attachments')
+  @UseInterceptors(AnyFilesInterceptor())
+  async addAttachments(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.addAttachments(id, files, body, req.user);
+  }
+
+  @Post('tasks/:id/duplicate')
+  @Roles('admin', 'manager')
+  async duplicateTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.duplicateTask(id, req.user);
+  }
+
+  @Patch('tasks/:id/additional-assignees')
+  @Roles('admin', 'manager')
+  async additionalAssignees(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.additionalAssignees(id, body, req.user);
+  }
+
+  @Get('recurring-tasks')
+  @Roles('admin', 'manager')
+  async getRecurringTasks(@Query() query: any) {
+    return this.service.getRecurringTasks(query);
+  }
+
+  @Get('recurring-tasks/:id')
+  @Roles('admin', 'manager')
+  async getRecurringTask(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getRecurringTask(id);
+  }
+
+  @Post('recurring-tasks')
+  @Roles('admin', 'manager')
+  @HttpCode(201)
+  async createRecurringTask(@Body() body: any, @Req() req: RequestWithUser) {
+    return this.service.createRecurringTask(body, req.user);
+  }
+
+  @Put('recurring-tasks/:id')
+  @Roles('admin', 'manager')
+  async updateRecurringTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateRecurringTask(id, body, req.user);
+  }
+
+  @Delete('recurring-tasks/:id')
+  @Roles('admin', 'manager')
+  async deleteRecurringTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.deleteRecurringTask(id, req.user);
+  }
+
+  @Patch('recurring-tasks/:id/toggle')
+  @Roles('admin', 'manager')
+  async toggleRecurringTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.toggleRecurringTask(id, req.user);
   }
 }
