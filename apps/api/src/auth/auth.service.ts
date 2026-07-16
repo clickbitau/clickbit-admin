@@ -184,6 +184,82 @@ export class AuthService {
   trustDevice(_body: any) { return { success: true, message: 'Trusted device saved' }; }
   checkTrust(_body: any) { return { trusted: false }; }
   removeTrustedDevice(_id: string) { return { success: true, message: 'Device removed' }; }
-  oauthCallback(_body: any) { throw new BadRequestException('OAuth callback not implemented in this pass'); }
-  authCallback(_query: any) { throw new BadRequestException('Auth callback not implemented in this pass'); }
+
+  async oauthCallback(body: any) {
+    const publicClient = this.ensurePublic();
+    if (body.code) {
+      const { data, error } = await (publicClient.auth as any).exchangeCodeForSession(body.code);
+      if (error || !data?.session) throw new BadRequestException(error?.message || 'OAuth code exchange failed');
+      const user = await this.getOrCreateProfile(data.user);
+      return {
+        success: true,
+        data: {
+          user,
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at,
+        },
+      };
+    }
+    if (body.id_token && body.provider) {
+      const { data, error } = await (publicClient.auth as any).signInWithIdToken({
+        provider: body.provider,
+        token: body.id_token,
+        nonce: body.nonce,
+      });
+      if (error || !data?.session) throw new BadRequestException(error?.message || 'OAuth token sign-in failed');
+      const user = await this.getOrCreateProfile(data.user);
+      return {
+        success: true,
+        data: {
+          user,
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at,
+        },
+      };
+    }
+    throw new BadRequestException('code or id_token + provider is required');
+  }
+
+  async authCallback(query: any) {
+    if (query.error) {
+      throw new BadRequestException(`${query.error}: ${query.error_description || ''}`);
+    }
+    return this.oauthCallback({ code: query.code, provider: query.provider });
+  }
+
+  private async getOrCreateProfile(supabaseUser: any) {
+    if (!supabaseUser?.id) throw new BadRequestException('No user returned from OAuth provider');
+    let profile = await this.prisma.profiles.findFirst({ where: { auth_uid: supabaseUser.id } });
+    if (profile) return profile;
+
+    const email = supabaseUser.email?.trim().toLowerCase();
+    const metadata = supabaseUser.user_metadata || {};
+    const fullName = metadata.full_name || metadata.name || '';
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    const firstName = metadata.first_name || parts[0] || 'User';
+    const lastName = metadata.last_name || parts.slice(1).join(' ') || '';
+
+    if (email) {
+      profile = await this.prisma.profiles.findFirst({ where: { email } });
+      if (profile) {
+        profile = await this.prisma.profiles.update({ where: { id: profile.id }, data: { auth_uid: supabaseUser.id } });
+        return profile;
+      }
+    }
+
+    profile = await this.prisma.profiles.create({
+      data: {
+        email: email || `oauth.${supabaseUser.id}@placeholder.local`,
+        auth_uid: supabaseUser.id,
+        first_name: firstName,
+        last_name: lastName,
+        role: 'customer',
+        status: 'active',
+        email_verified: !!supabaseUser.email_confirmed_at,
+      } as any,
+    });
+    return profile;
+  }
 }
