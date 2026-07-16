@@ -1,4 +1,6 @@
 'use client';
+import { TrendingUp as TrendingUpIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -54,35 +56,35 @@ export default function AdminContentMarketingPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Marketing Posts</h1>
-        <Card>
-          <CardHeader><CardTitle>New Post</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <Input placeholder="Body" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="rounded-md border bg-background px-3 py-2 text-sm">
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-            </select>
-            <Button onClick={() => form.title && add.mutate()} disabled={add.isPending}>Add</Button>
-          </CardContent>
-        </Card>
-        {isLoading ? <Skeleton className="h-40 w-full" /> : (
-          <div className="divide-y">
-            {data?.posts?.map((p: BlogPost) => (
-              <div key={p.id} className="flex items-center justify-between py-2">
-                <div>
-                  <div className="font-medium">{p.title}</div>
-                  <div className="text-sm text-muted-foreground">{p.status}</div>
-                </div>
-                <Button variant="destructive" size="sm" onClick={() => remove.mutate(p.id)}>Delete</Button>
+    <PageShell
+      title="Marketing Posts"
+      icon={TrendingUpIcon}
+    >
+      <Card>
+        <CardHeader><CardTitle>New Post</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <Input placeholder="Body" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+          <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="rounded-md border bg-background px-3 py-2 text-sm">
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+          </select>
+          <Button onClick={() => form.title && add.mutate()} disabled={add.isPending}>Add</Button>
+        </CardContent>
+      </Card>
+      {isLoading ? <Skeleton className="h-40 w-full" /> : (
+        <div className="divide-y">
+          {data?.posts?.map((p: BlogPost) => (
+            <div key={p.id} className="flex items-center justify-between py-2">
+              <div>
+                <div className="font-medium">{p.title}</div>
+                <div className="text-sm text-muted-foreground">{p.status}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+              <Button variant="destructive" size="sm" onClick={() => remove.mutate(p.id)}>Delete</Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </PageShell>
   );
 }

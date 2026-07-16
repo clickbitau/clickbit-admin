@@ -1,4 +1,6 @@
 'use client';
+import { CreditCard as CreditCardIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -7,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PaymentTable } from '@/components/finance/PaymentTable';
+import { StatCards } from '@/components/design-system/StatCards';
 import { fetchPayments } from '@/lib/api';
 
 export default function AdminFinancePaymentsPage() {
@@ -28,51 +31,58 @@ export default function AdminFinancePaymentsPage() {
   const payments = data?.payments ?? [];
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 12 };
 
+  const totalAmount = payments.reduce((sum: number, p: any) => sum + (p.amount ?? 0), 0);
+  const statCards = [
+    { label: 'Total Payments', value: pagination.totalItems ?? payments.length, icon: CreditCardIcon },
+    { label: 'Amount', value: `$${totalAmount.toLocaleString()}`, icon: CreditCardIcon },
+    { label: 'Completed', value: payments.filter((p: any) => p.status === 'completed').length, icon: CreditCardIcon, accent: 'success' as const },
+    { label: 'Pending', value: payments.filter((p: any) => p.status === 'pending').length, icon: CreditCardIcon, accent: 'warning' as const },
+  ];
+
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-          <p className="text-muted-foreground">Recorded and gateway payments</p>
-        </div>
+    <PageShell
+      title="Payments"
+      icon={CreditCardIcon}
+      description="Recorded and gateway payments"
+    >
+      <StatCards cards={statCards} />
 
-        <Input
-          placeholder="Search payments..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="max-w-sm"
-        />
+      <Input
+        placeholder="Search payments..."
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1);
+        }}
+        className="max-w-sm"
+      />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Payments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {error ? (
-              <div className="text-destructive">Failed to load payments.</div>
-            ) : (
-              <PaymentTable payments={payments} loading={isLoading} />
-            )}
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Payments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {error ? (
+            <div className="text-destructive">Failed to load payments.</div>
+          ) : (
+            <PaymentTable payments={payments} loading={isLoading} />
+          )}
+        </CardContent>
+      </Card>
 
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)
-          </p>
-          <div className="space-x-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </Button>
-            <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}>
-              Next
-            </Button>
-          </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)
+        </p>
+        <div className="space-x-2">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            Previous
+          </Button>
+          <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}>
+            Next
+          </Button>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

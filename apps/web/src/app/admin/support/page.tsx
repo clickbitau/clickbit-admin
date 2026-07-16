@@ -1,4 +1,6 @@
 'use client';
+import { Ticket as TicketIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -48,51 +50,49 @@ export default function AdminSupportPage() {
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 20 };
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Support Tickets</h1>
-          <p className="text-muted-foreground">Track, assign and respond to customer tickets.</p>
-        </div>
+    <PageShell
+      title="Support Tickets"
+      icon={TicketIcon}
+      description="Track, assign and respond to customer tickets."
+    >
 
-        <div className="grid gap-4 md:grid-cols-4">
-          <StatCard title="Open" value={stats?.overview?.open ?? 0} loading={!stats} />
-          <StatCard title="Unassigned" value={stats?.overview?.unassigned ?? 0} loading={!stats} />
-          <StatCard title="Overdue" value={stats?.overview?.overdue ?? 0} loading={!stats} />
-          <StatCard title="Total" value={stats?.overview?.total ?? 0} loading={!stats} />
-        </div>
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard title="Open" value={stats?.overview?.open ?? 0} loading={!stats} />
+        <StatCard title="Unassigned" value={stats?.overview?.unassigned ?? 0} loading={!stats} />
+        <StatCard title="Overdue" value={stats?.overview?.overdue ?? 0} loading={!stats} />
+        <StatCard title="Total" value={stats?.overview?.total ?? 0} loading={!stats} />
+      </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Input placeholder="Search tickets..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="max-w-sm" />
-          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-md border bg-background px-3 py-2 text-sm">
-            {statusOptions.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-          </select>
-          <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="rounded-md border bg-background px-3 py-2 text-sm">
-            {priorityOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <Button variant="outline" asChild>
-            <Link href="/admin/support/automation">Automation</Link>
-          </Button>
-        </div>
+      <div className="flex flex-wrap gap-3">
+        <Input placeholder="Search tickets..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="max-w-sm" />
+        <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-md border bg-background px-3 py-2 text-sm">
+          {statusOptions.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+        </select>
+        <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="rounded-md border bg-background px-3 py-2 text-sm">
+          {priorityOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <Button variant="outline" asChild>
+          <Link href="/admin/support/automation">Automation</Link>
+        </Button>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Tickets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {error ? <div className="text-destructive">Failed to load tickets.</div> : <TicketList tickets={tickets} loading={isLoading} />}
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Tickets</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {error ? <div className="text-destructive">Failed to load tickets.</div> : <TicketList tickets={tickets} loading={isLoading} />}
+        </CardContent>
+      </Card>
 
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)</p>
-          <div className="space-x-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-            <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-          </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)</p>
+        <div className="space-x-2">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+          <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

@@ -1,4 +1,6 @@
 'use client';
+import { FolderKanban as FolderKanbanIcon } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -27,32 +29,32 @@ export default function AdminContentPortfolioPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
-        <Card>
-          <CardHeader><CardTitle>New Portfolio Item</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="max-w-xs" />
-            <Input placeholder="Client" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} className="max-w-xs" />
-            <Input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="max-w-xs" />
-            <Button onClick={() => form.title && add.mutate()} disabled={add.isPending}>Add</Button>
-          </CardContent>
-        </Card>
-        {isLoading ? <Skeleton className="h-40 w-full" /> : (
-          <div className="divide-y">
-            {data?.items?.map((p: PortfolioItem) => (
-              <div key={p.id} className="flex items-center justify-between py-2">
-                <div>
-                  <div className="font-medium">{p.title}</div>
-                  <div className="text-sm text-muted-foreground">{p.client_name || 'No client'} &middot; {p.status}</div>
-                </div>
-                <Button variant="destructive" size="sm" onClick={() => remove.mutate(p.id)}>Delete</Button>
+    <PageShell
+      title="Portfolio"
+      icon={FolderKanbanIcon}
+    >
+      <Card>
+        <CardHeader><CardTitle>New Portfolio Item</CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="max-w-xs" />
+          <Input placeholder="Client" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} className="max-w-xs" />
+          <Input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="max-w-xs" />
+          <Button onClick={() => form.title && add.mutate()} disabled={add.isPending}>Add</Button>
+        </CardContent>
+      </Card>
+      {isLoading ? <Skeleton className="h-40 w-full" /> : (
+        <div className="divide-y">
+          {data?.items?.map((p: PortfolioItem) => (
+            <div key={p.id} className="flex items-center justify-between py-2">
+              <div>
+                <div className="font-medium">{p.title}</div>
+                <div className="text-sm text-muted-foreground">{p.client_name || 'No client'} &middot; {p.status}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+              <Button variant="destructive" size="sm" onClick={() => remove.mutate(p.id)}>Delete</Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </PageShell>
   );
 }

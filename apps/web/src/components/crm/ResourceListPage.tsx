@@ -7,7 +7,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, Contact, FileText, Cog, LayoutDashboard } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -35,6 +35,12 @@ interface ResourceListPageProps<T> {
   searchPlaceholder?: string;
   actions?: React.ReactNode;
 }
+
+const iconMap: Record<string, typeof LayoutDashboard> = {
+  Contacts: Contact,
+  Notes: FileText,
+  Automations: Cog,
+};
 
 export function ResourceListPage<T>({
   title,
@@ -77,8 +83,10 @@ export function ResourceListPage<T>({
       return String(value);
     });
 
+  const Icon = iconMap[title] || LayoutDashboard;
+
   return (
-    <PageShell title={title} actions={actions}>
+    <PageShell title={title} icon={Icon} actions={actions}>
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Search className="h-4 w-4 text-muted-foreground" />
