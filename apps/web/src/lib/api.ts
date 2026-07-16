@@ -20,6 +20,19 @@ import type {
 } from '@/types/crm';
 import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
 import type { Announcement, Employee, HrDashboardData, PublicHoliday, Reminder, TimeOffRequest } from '@/types/hr';
+import type {
+  AdminTicketListResponse,
+  CannedResponse,
+  CustomerRepository,
+  CustomerTicketListResponse,
+  StaffTicketListResponse,
+  SupportStaff,
+  Ticket,
+  TicketMessage,
+  TicketReplyResponse,
+  TicketStats,
+  TicketQuota,
+} from '@/types/support';
 
 const api = axios.create({
   baseURL: '/',
@@ -648,6 +661,131 @@ export async function fetchPublicHolidays(
   params?: Record<string, string | number | boolean>,
 ): Promise<{ success: boolean; data: PublicHoliday[]; count: number }> {
   return (await api.get('/api/hr/public-holidays', { params, headers: authHeaders(token) })).data;
+}
+
+// ─── Support ─────────────────────────────────────────────────────────────
+
+export async function fetchTickets(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<AdminTicketListResponse> {
+  return (await api.get<AdminTicketListResponse>('/api/tickets/admin', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchTicket(token: string, id: string | number): Promise<Ticket> {
+  const response = await api.get<Ticket>(`/api/tickets/admin/${id}`, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function createTicket(token: string, data: Partial<Ticket>): Promise<{ message: string; ticket: Ticket }> {
+  return (await api.post('/api/tickets', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateTicket(
+  token: string,
+  id: string | number,
+  data: Partial<Ticket>,
+): Promise<{ message: string; ticket: Ticket }> {
+  return (await api.put(`/api/tickets/admin/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteTicket(token: string, id: string | number): Promise<{ message: string }> {
+  return (await api.delete(`/api/tickets/admin/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function replyToTicket(token: string, id: string | number, data: Partial<TicketMessage>): Promise<TicketReplyResponse> {
+  return (await api.post(`/api/tickets/admin/${id}/reply`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function bulkUpdateTickets(
+  token: string,
+  data: { ticket_ids: number[]; action: string; value?: string | number | null },
+): Promise<{ message: string; updated_count: number }> {
+  return (await api.post('/api/tickets/admin/bulk-update', data, { headers: authHeaders(token) })).data;
+}
+
+export async function mergeTickets(
+  token: string,
+  data: { primary_ticket_id: number; secondary_ticket_ids: number[] },
+): Promise<{ message: string; primary_ticket: Ticket }> {
+  return (await api.post('/api/tickets/admin/merge', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchTicketStats(token: string, period?: number): Promise<TicketStats> {
+  const response = await api.get<TicketStats>('/api/tickets/admin/stats', {
+    params: period ? { period } : undefined,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchSupportStaff(token: string): Promise<SupportStaff[]> {
+  return (await api.get<SupportStaff[]>('/api/tickets/admin/staff', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCannedResponses(token: string): Promise<CannedResponse[]> {
+  return (await api.get<CannedResponse[]>('/api/tickets/admin/canned-responses', { headers: authHeaders(token) })).data;
+}
+
+export async function saveCannedResponses(token: string, responses: CannedResponse[]): Promise<{ message: string }> {
+  return (await api.put('/api/tickets/admin/canned-responses', { responses }, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerRepositories(token: string): Promise<{ success: boolean; data: CustomerRepository[] }> {
+  return (await api.get('/api/ticket-automation/customer-repositories', { headers: authHeaders(token) })).data;
+}
+
+export async function createCustomerRepository(
+  token: string,
+  data: Partial<CustomerRepository>,
+): Promise<{ success: boolean; data: CustomerRepository }> {
+  return (await api.post('/api/ticket-automation/customer-repositories', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateCustomerRepository(
+  token: string,
+  id: number,
+  data: Partial<CustomerRepository>,
+): Promise<{ success: boolean; data: CustomerRepository }> {
+  return (await api.put(`/api/ticket-automation/customer-repositories/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteCustomerRepository(token: string, id: number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/ticket-automation/customer-repositories/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchTicketQuotas(token: string): Promise<{ success: boolean; data: TicketQuota[]; defaults: Record<string, unknown> }> {
+  return (await api.get('/api/ticket-automation/quotas', { headers: authHeaders(token) })).data;
+}
+
+export async function updateTicketQuota(
+  token: string,
+  profileId: number,
+  data: Partial<TicketQuota>,
+): Promise<{ success: boolean; data: TicketQuota }> {
+  return (await api.put(`/api/ticket-automation/quotas/${profileId}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomersForAutomation(token: string): Promise<{ success: boolean; data: { id: number; first_name: string; last_name: string; email: string; company_id?: number | null }[] }> {
+  return (await api.get('/api/ticket-automation/customers', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAutomationManualReview(token: string): Promise<{ success: boolean; data: Ticket[] }> {
+  return (await api.get('/api/ticket-automation/manual-review', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMyTickets(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<CustomerTicketListResponse> {
+  return (await api.get<CustomerTicketListResponse>('/api/tickets/my-tickets', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchMyAssignedTickets(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<StaffTicketListResponse> {
+  return (await api.get<StaffTicketListResponse>('/api/tickets/my-assigned', { params, headers: authHeaders(token) })).data;
 }
 
 export default api;

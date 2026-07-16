@@ -7,6 +7,7 @@ import { RedisModule } from './redis/redis.module';
 import { CrmModule } from './crm/crm.module';
 import { FinanceModule } from './finance/finance.module';
 import { HrModule } from './hr/hr.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { HrModule } from './hr/hr.module';
     CrmModule,
     FinanceModule,
     HrModule,
+    SupportModule,
   ],
 })
 export class AppModule {}
