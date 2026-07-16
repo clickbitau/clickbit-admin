@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
@@ -37,7 +38,7 @@ import {
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Deal, Pipeline, PipelineStage, CrmContact } from '@/types/crm';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Target, TrendingUp, DollarSign, Users2, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function DealsPage() {
@@ -102,10 +103,10 @@ export default function DealsPage() {
   const stats = useMemo(() => {
     const totalValue = deals.reduce((sum, d) => sum + (Number(d.value ?? 0)), 0);
     return [
-      { label: 'Total Deals', value: pagination.totalItems },
-      { label: 'Total Value', value: formatCurrency(totalValue) },
-      { label: 'Open', value: deals.filter((d) => d.status === 'open').length },
-      { label: 'Won', value: deals.filter((d) => d.status === 'won').length },
+      { label: 'Total Deals', value: pagination.totalItems, icon: Briefcase, accent: 'primary' as const },
+      { label: 'Total Value', value: formatCurrency(totalValue), icon: DollarSign, accent: 'success' as const },
+      { label: 'Open', value: deals.filter((d) => d.status === 'open').length, icon: Target, accent: 'warning' as const },
+      { label: 'Won', value: deals.filter((d) => d.status === 'won').length, icon: TrendingUp, accent: 'secondary' as const },
     ];
   }, [deals, pagination.totalItems]);
 
@@ -246,18 +247,11 @@ export default function DealsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Deals</h1>
-            <p className="text-muted-foreground">Manage opportunities and sales pipeline</p>
-          </div>
-          <Button onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> New Deal</Button>
-        </div>
-
-        <StatCards cards={stats} />
+    <PageShell title="Deals" icon={Briefcase} description="Manage opportunities and sales pipeline" actions={<Button onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> New Deal</Button>}>
+      <StatCards cards={stats} />
+      <div className="nm-raised p-4">
         {filters}
+      </div>
 
         <DataTable
           headers={headers}
@@ -301,13 +295,12 @@ export default function DealsPage() {
           ]}
         />
 
-        <Pagination
-          currentPage={pagination.currentPage}
-          totalPages={pagination.totalPages}
-          totalItems={pagination.totalItems}
-          onPageChange={setPage}
-        />
-      </div>
+      <Pagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        onPageChange={setPage}
+      />
 
       <DealFormDialog
         open={formOpen}
@@ -328,7 +321,7 @@ export default function DealsPage() {
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         loading={deleteMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

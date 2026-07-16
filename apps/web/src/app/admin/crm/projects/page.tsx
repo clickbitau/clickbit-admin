@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
@@ -27,7 +28,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchProjects, fetchContacts, createProject, updateProject, deleteProject } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { CrmContact, CrmProject, ProjectStats } from '@/types/crm';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, FolderKanban, CheckSquare, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProjectsPage() {
@@ -68,10 +69,10 @@ export default function ProjectsPage() {
   const stats = data?.stats ?? { total: 0, notStarted: 0, inProgress: 0, completed: 0, onHold: 0, cancelled: 0 } as ProjectStats;
 
   const statCards = [
-    { label: 'Total Projects', value: stats.total },
-    { label: 'In Progress', value: stats.inProgress },
-    { label: 'Completed', value: stats.completed },
-    { label: 'On Hold', value: stats.onHold },
+    { label: 'Total Projects', value: stats.total, icon: FolderKanban, accent: 'primary' as const },
+    { label: 'In Progress', value: stats.inProgress, icon: Clock, accent: 'warning' as const },
+    { label: 'Completed', value: stats.completed, icon: CheckSquare, accent: 'success' as const },
+    { label: 'On Hold', value: stats.onHold, icon: AlertCircle, accent: 'secondary' as const },
   ];
 
   const createMutation = useMutation({
@@ -98,19 +99,10 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
-            <p className="text-muted-foreground">Track project delivery and budgets</p>
-          </div>
-          <Button onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="mr-1 h-4 w-4" /> New Project</Button>
-        </div>
+    <PageShell title="Projects" icon={FolderKanban} description="Track project delivery and budgets" actions={<Button onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="mr-1 h-4 w-4" /> New Project</Button>}>
+      <StatCards cards={statCards} />
 
-        <StatCards cards={statCards} />
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="nm-raised p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search projects..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -128,8 +120,8 @@ export default function ProjectsPage() {
           </Select>
         </div>
 
-        <DataTable
-          headers={[
+      <DataTable
+        headers={[
             { key: 'project', label: 'Project' },
             { key: 'status', label: 'Status' },
             { key: 'progress', label: 'Progress' },
@@ -155,15 +147,14 @@ export default function ProjectsPage() {
               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleting(p)}>Delete</Button>
             </div>,
           ]}
-        />
+      />
 
-        <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
-      </div>
+      <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
 
       <ProjectFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} customers={contactsData?.contacts ?? []} onSubmit={handleSubmit} loading={createMutation.isPending || updateMutation.isPending} />
 
       <ConfirmDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)} title="Delete Project" description={`Delete "${deleting?.name}"?`} onConfirm={() => deleting && deleteMutation.mutate(deleting.id)} loading={deleteMutation.isPending} />
-    </div>
+    </PageShell>
   );
 }
 

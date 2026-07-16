@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/design-system/EmptyState';
 import { Company } from '@clickbit/shared';
 
 interface CompanyTableProps {
@@ -20,28 +21,23 @@ interface CompanyTableProps {
 export function CompanyTable({ companies, loading }: CompanyTableProps) {
   if (loading) {
     return (
-      <div className="space-y-2">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
+      <div className="nm-raised p-4 space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
       </div>
     );
   }
 
   if (companies.length === 0) {
-    return (
-      <div className="rounded-lg border p-8 text-center text-muted-foreground">
-        No companies found.
-      </div>
-    );
+    return <EmptyState text="No companies found." />;
   }
 
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className="border-b border-border/50 hover:bg-transparent">
             <TableHead>Company</TableHead>
             <TableHead>Industry</TableHead>
             <TableHead>Stage</TableHead>
@@ -52,7 +48,7 @@ export function CompanyTable({ companies, loading }: CompanyTableProps) {
         </TableHeader>
         <TableBody>
           {companies.map((company) => (
-            <TableRow key={company.id}>
+            <TableRow key={company.id} className="border-b border-border/30 hover:bg-primary/5">
               <TableCell className="font-medium">
                 <div className="flex flex-col">
                   <span>{company.name}</span>

@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { FormDialog } from '@/components/design-system/FormDialog';
 import { useDebounce } from '@/lib/useDebounce';
@@ -24,10 +25,13 @@ import type { Pipeline, PipelineStage, CrmLead, Deal } from '@/types/crm';
 import {
   Building2,
   Calendar,
+  Kanban,
   Mail,
   Phone,
   Plus,
   Search,
+  Target,
+  TrendingUp,
   User,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -152,85 +156,82 @@ export default function PipelinePage() {
   }
 
   const statCards = [
-    { label: 'Total Leads', value: stats?.totalLeads ?? 0 },
-    { label: 'Total Deals', value: stats?.totalDeals ?? 0 },
-    { label: 'Total Value', value: formatCurrency(stats?.totalValue ?? 0) },
-    { label: 'Weighted Value', value: formatCurrency(stats?.weightedValue ?? 0) },
+    { label: 'Total Leads', value: stats?.totalLeads ?? 0, icon: Target, accent: 'primary' as const },
+    { label: 'Total Deals', value: stats?.totalDeals ?? 0, icon: Building2, accent: 'secondary' as const },
+    { label: 'Total Value', value: formatCurrency(stats?.totalValue ?? 0), icon: TrendingUp, accent: 'success' as const },
+    { label: 'Weighted Value', value: formatCurrency(stats?.weightedValue ?? 0), icon: TrendingUp, accent: 'warning' as const },
   ];
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Pipeline</h1>
-            <p className="text-muted-foreground">Drag and drop leads and deals across stages</p>
+    <PageShell
+      title="Sales Pipeline"
+      icon={Kanban}
+      description="Drag and drop leads and deals across stages"
+      actions={
+        <div className="flex items-center gap-2">
+          {pipelines && pipelines.length > 0 && (
+            <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
+              <SelectTrigger className="w-[220px] nm-raised-sm bg-transparent">
+                <SelectValue placeholder="Select pipeline" />
+              </SelectTrigger>
+              <SelectContent>
+                {pipelines.map((p: Pipeline) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add Lead
+          </Button>
+        </div>
+      }
+    >
+      <StatCards cards={statCards} />
+
+      <div className="relative nm-raised-sm">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search board..."
+          className="pl-9 bg-transparent shadow-none"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {isLoading && <p className="text-sm text-muted-foreground">Loading board...</p>}
+
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        {stages.map((stage) => (
+          <div
+            key={stage.id}
+            className="flex min-w-[280px] max-w-[320px] flex-1 flex-col"
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, stage)}
+          >
+            <Card className="flex h-full flex-col nm-flat">
+              <CardHeader className="py-3 nm-inset-sm">
+                <CardTitle className="flex items-center justify-between text-sm font-medium">
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: stage.color ?? '#94a3b8' }}
+                    />
+                    {stage.name}
+                  </span>
+                  <span className="text-muted-foreground">{stage.items.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-3 overflow-y-auto p-3">
+                {stage.items.map((item) => (
+                  <BoardCard key={`${item.type}-${item.id}`} item={item} onDragStart={handleDragStart} />
+                ))}
+              </CardContent>
+            </Card>
           </div>
-          <div className="flex items-center gap-2">
-            {pipelines && pipelines.length > 0 && (
-              <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Select pipeline" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pipelines.map((p: Pipeline) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" /> Add Lead
-            </Button>
-          </div>
-        </div>
-
-        <StatCards cards={statCards} />
-
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search board..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        {isLoading && <p className="text-sm text-muted-foreground">Loading board...</p>}
-
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {stages.map((stage) => (
-            <div
-              key={stage.id}
-              className="flex min-w-[280px] max-w-[320px] flex-1 flex-col"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, stage)}
-            >
-              <Card className="flex h-full flex-col bg-muted/30">
-                <CardHeader className="py-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: stage.color ?? '#94a3b8' }}
-                      />
-                      {stage.name}
-                    </span>
-                    <span className="text-muted-foreground">{stage.items.length}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 space-y-3 overflow-y-auto">
-                  {stage.items.map((item) => (
-                    <BoardCard key={`${item.type}-${item.id}`} item={item} onDragStart={handleDragStart} />
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
 
       <FormDialog
@@ -259,7 +260,7 @@ export default function PipelinePage() {
         <div className="grid gap-2">
           <Label htmlFor="stage_id">Stage</Label>
           <Select name="stage_id" value={selectedStage} onValueChange={setSelectedStage}>
-            <SelectTrigger>
+            <SelectTrigger className="nm-raised-sm bg-transparent">
               <SelectValue placeholder="Select stage" />
             </SelectTrigger>
             <SelectContent>
@@ -272,7 +273,7 @@ export default function PipelinePage() {
           </Select>
         </div>
       </FormDialog>
-    </div>
+    </PageShell>
   );
 }
 
@@ -286,7 +287,7 @@ function BoardCard({ item, onDragStart }: { item: BoardItem; onDragStart: (item:
     <Card
       draggable
       onDragStart={() => onDragStart(item)}
-      className="cursor-grab border-l-4 shadow-sm active:cursor-grabbing"
+      className="cursor-grab nm-raised-sm active:cursor-grabbing border-l-4"
       style={{ borderLeftColor: item.stage?.color ?? '#e2e8f0' }}
     >
       <CardContent className="space-y-2 p-3">

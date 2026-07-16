@@ -1,6 +1,8 @@
 'use client';
 
+import { Building2, Briefcase, TrendingUp, Users } from 'lucide-react';
 import { AggregatedStats } from '@clickbit/shared';
+import { StatCards } from '@/components/design-system/StatCards';
 
 interface CompanyStatsProps {
   totalCompanies: number;
@@ -8,26 +10,14 @@ interface CompanyStatsProps {
 }
 
 export function CompanyStats({ totalCompanies, aggregatedStats }: CompanyStatsProps) {
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard label="Total Companies" value={totalCompanies} />
-      <StatCard
-        label="Pipeline Value"
-        value={formatCurrency(aggregatedStats?.totalValue ?? 0)}
-      />
-      <StatCard label="Open / Won Deals" value={aggregatedStats?.totalDeals ?? 0} />
-      <StatCard label="Customers" value={aggregatedStats?.customerCount ?? 0} />
-    </div>
-  );
-}
+  const cards = [
+    { label: 'Total Companies', value: totalCompanies, icon: Building2, accent: 'primary' as const },
+    { label: 'Pipeline Value', value: formatCurrency(aggregatedStats?.totalValue ?? 0), icon: TrendingUp, accent: 'success' as const },
+    { label: 'Open / Won Deals', value: aggregatedStats?.totalDeals ?? 0, icon: Briefcase, accent: 'secondary' as const },
+    { label: 'Customers', value: aggregatedStats?.customerCount ?? 0, icon: Users, accent: 'warning' as const },
+  ];
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-lg border bg-card p-4 text-card-foreground shadow-sm">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
+  return <StatCards cards={cards} />;
 }
 
 function formatCurrency(value: number): string {

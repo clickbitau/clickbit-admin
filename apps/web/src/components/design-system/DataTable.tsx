@@ -33,7 +33,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   if (loading) {
     return (
-      <div className="space-y-2">
+      <div className="nm-raised p-4 space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-10 w-full" />
         ))}
@@ -46,10 +46,10 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className="border-b border-border/50 hover:bg-transparent">
             {headers.map((h) => (
               <TableHead key={h.key} className={h.className}>
                 {h.label}
@@ -63,7 +63,7 @@ export function DataTable<T>({
             return (
               <TableRow
                 key={keyExtractor(row, index)}
-                className={onRowClick ? 'cursor-pointer' : undefined}
+                className={`border-b border-border/30 transition-colors ${onRowClick ? 'cursor-pointer hover:bg-primary/5' : 'hover:bg-primary/5'}`}
                 onClick={onRowClick ? () => onRowClick(row, index) : undefined}
               >
                 {cells.map((cell, i) => (
