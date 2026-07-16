@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { api, authHeaders } from '@/lib/api';
-import { Building2 } from 'lucide-react';
 
 interface AgentCompany {
   id: number;
@@ -27,7 +26,6 @@ export default function AgentCompaniesPage() {
   return (
     <ResourceListPage<AgentCompany>
       title="Companies"
-      icon={Building2}
       resourceKey="data"
       fetcher={fetchAgentCompanies}
       getRowId={(row) => row.id}

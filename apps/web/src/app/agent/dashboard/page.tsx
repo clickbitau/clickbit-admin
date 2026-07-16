@@ -8,7 +8,7 @@ import { StatCards } from '@/components/design-system/StatCards';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api, authHeaders } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import { LayoutDashboard, Receipt, FolderKanban, Building2, Ticket, ArrowRight } from 'lucide-react';
+import { LayoutDashboard, Receipt, FolderKanban, Building2, Ticket, ArrowRight, Users, CreditCard } from 'lucide-react';
 
 const modules = [
   { href: '/agent/invoices', label: 'Invoices', icon: Receipt },
@@ -32,22 +32,32 @@ export default function AgentDashboardPage() {
 
   const dashboard = data?.data ?? {};
 
+  if (isLoading) {
+    return (
+      <PageShell title="Dashboard" icon={LayoutDashboard} description="Overview of your clients and work">
+        <></>
+      </PageShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageShell title="Dashboard" icon={LayoutDashboard} description="Overview of your clients and work">
+        <div className="rounded-lg border border-destructive p-4 text-destructive">Failed to load dashboard.</div>
+      </PageShell>
+    );
+  }
+
   return (
-    <PageShell
-      title="Dashboard"
-      icon={LayoutDashboard}
-      description="Overview of your clients and work"
-      isLoading={isLoading}
-      error={error}
-    >
+    <PageShell title="Dashboard" icon={LayoutDashboard} description="Overview of your clients and work">
       <StatCards
-        stats={[
-          { label: 'Clients', value: dashboard.clients ?? 0, icon: 'Users' },
-          { label: 'Companies', value: dashboard.companies ?? 0, icon: 'Building2' },
-          { label: 'Active Projects', value: dashboard.active_projects ?? 0, icon: 'FolderKanban' },
-          { label: 'Open Tickets', value: dashboard.open_tickets ?? 0, icon: 'Ticket' },
-          { label: 'Total Invoiced', value: formatCurrency(dashboard.total_invoiced ?? 0), icon: 'Receipt' },
-          { label: 'Outstanding', value: formatCurrency(dashboard.outstanding ?? 0), icon: 'CreditCard' },
+        cards={[
+          { label: 'Clients', value: dashboard.clients ?? 0, icon: Users },
+          { label: 'Companies', value: dashboard.companies ?? 0, icon: Building2 },
+          { label: 'Active Projects', value: dashboard.active_projects ?? 0, icon: FolderKanban },
+          { label: 'Open Tickets', value: dashboard.open_tickets ?? 0, icon: Ticket },
+          { label: 'Total Invoiced', value: formatCurrency(dashboard.total_invoiced ?? 0), icon: Receipt },
+          { label: 'Outstanding', value: formatCurrency(dashboard.outstanding ?? 0), icon: CreditCard },
         ]}
       />
 

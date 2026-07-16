@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { api, authHeaders } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { Receipt } from 'lucide-react';
 
 interface AgentInvoice {
   id: number;
@@ -26,7 +25,6 @@ export default function AgentInvoicesPage() {
   return (
     <ResourceListPage<AgentInvoice>
       title="Invoices"
-      icon={Receipt}
       resourceKey="data"
       fetcher={fetchAgentInvoices}
       getRowId={(row) => row.id}

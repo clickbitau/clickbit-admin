@@ -6,7 +6,6 @@ import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { Button } from '@/components/ui/button';
 import { api, authHeaders } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { Ticket } from 'lucide-react';
 
 interface AgentTicket {
   id: number;
@@ -28,7 +27,6 @@ export default function AgentTicketsPage() {
   return (
     <ResourceListPage<AgentTicket>
       title="Tickets"
-      icon={Ticket}
       resourceKey="data"
       fetcher={fetchAgentTickets}
       getRowId={(row) => row.id}

@@ -38,6 +38,12 @@ export class AgentController {
     return this.service.agentInvoices(req.user, query);
   }
 
+  @Get('invoices/:id')
+  @Roles('agent', 'admin')
+  async invoiceDetail(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.agentInvoiceDetail(req.user, id);
+  }
+
   @Get('projects')
   @Roles('agent', 'admin')
   async projects(@Req() req: RequestWithUser, @Query() query: any) {
@@ -54,6 +60,18 @@ export class AgentController {
   @Roles('agent', 'admin')
   async companies(@Req() req: RequestWithUser) {
     return this.service.agentCompanies(req.user);
+  }
+
+  @Get('companies/:id')
+  @Roles('agent', 'admin')
+  async companyDetail(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.agentCompanyDetail(req.user, id);
+  }
+
+  @Get('clients')
+  @Roles('agent', 'admin')
+  async clients(@Req() req: RequestWithUser) {
+    return this.service.agentClients(req.user);
   }
 
   @Put('companies/:companyId/contact/:contactId')

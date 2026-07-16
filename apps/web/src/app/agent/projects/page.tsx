@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { api, authHeaders } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { FolderKanban } from 'lucide-react';
 
 interface AgentProject {
   id: number;
@@ -25,7 +24,6 @@ export default function AgentProjectsPage() {
   return (
     <ResourceListPage<AgentProject>
       title="Projects"
-      icon={FolderKanban}
       resourceKey="data"
       fetcher={fetchAgentProjects}
       getRowId={(row) => row.id}
