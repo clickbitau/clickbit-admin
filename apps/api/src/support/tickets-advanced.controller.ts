@@ -124,8 +124,8 @@ export class TicketsAdvancedController {
 
   @Post('admin/assignment-rules')
   @Roles('admin', 'manager')
-  createAssignmentRule(@Body() body: any) {
-    return this.service.createAssignmentRule(body);
+  createAssignmentRule(@Body() body: any, @Req() req: RequestWithUser) {
+    return this.service.createAssignmentRule(body, req.user.id);
   }
 
   @Put('admin/assignment-rules/:id')
