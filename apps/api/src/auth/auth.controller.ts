@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { RequestWithUser } from '../types/request-with-user';
@@ -60,4 +60,31 @@ export class AuthController {
   @Delete('trusted-devices/:id')
   @UseGuards(SupabaseAuthGuard)
   removeTrustedDevice(@Param('id') id: string) { return this.authService.removeTrustedDevice(id); }
+
+  @Get('verify-email')
+  async verifyEmailGet(@Query() query: any, @Res() res: any) {
+    const frontendUrl = (process.env.FRONTEND_URL || 'https://clickbit.com.au').replace(/\/$/, '');
+    try {
+      const result = await this.authService.verifyEmail(query || {});
+      return res.redirect(result.redirectUrl || `${frontendUrl}/login?verified=true`);
+    } catch (error: any) {
+      const message = encodeURIComponent(error?.message || 'verification-failed');
+      return res.redirect(`${frontendUrl}/login?error=${message}`);
+    }
+  }
+
+  @Get('linked-accounts')
+  @UseGuards(SupabaseAuthGuard)
+  linkedAccounts(@Req() req: RequestWithUser) { return this.authService.linkedAccounts(req.user); }
+
+  @Post('link-provider')
+  @UseGuards(SupabaseAuthGuard)
+  linkProvider(@Req() req: RequestWithUser, @Body() body: any) { return this.authService.linkProvider(req.user, body || {}); }
+
+  @Delete('unlink-provider/:provider')
+  @UseGuards(SupabaseAuthGuard)
+  unlinkProvider(@Req() req: RequestWithUser, @Param('provider') provider: string) { return this.authService.unlinkProvider(req.user, provider); }
+
+  @Post('social-login')
+  socialLogin(@Body() body: any) { return this.authService.socialLogin(body || {}); }
 }
