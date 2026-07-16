@@ -404,6 +404,10 @@ export async function updateContact(token: string, id: string | number, data: Pa
   return extractSingle<CrmContact>(response, 'data');
 }
 
+export async function deleteContact(token: string, id: string | number): Promise<void> {
+  await api.delete(`/api/crm/contacts/${id}`, { headers: authHeaders(token) });
+}
+
 export async function fetchCustomerStats(token: string): Promise<ContactStats> {
   const response = await api.get<ContactStats>('/api/admin/contacts/customer-stats', {
     headers: authHeaders(token),
@@ -513,6 +517,20 @@ export async function fetchTasks(
 ): Promise<{ data: ProjectTask[]; stats: TaskStats; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
   const response = await api.get('/api/tasks', { params, headers: authHeaders(token) });
   return response.data;
+}
+
+export async function fetchTask(token: string, id: string | number): Promise<ProjectTask> {
+  const response = await api.get<{ success: boolean; data: ProjectTask }>(`/api/tasks/${id}`, { headers: authHeaders(token) });
+  return extractSingle<ProjectTask>(response, 'data');
+}
+
+export async function updateTask(token: string, id: string | number, data: Partial<ProjectTask>): Promise<ProjectTask> {
+  const response = await api.put<{ success: boolean; data: ProjectTask }>(`/api/tasks/${id}`, data, { headers: authHeaders(token) });
+  return extractSingle<ProjectTask>(response, 'data');
+}
+
+export async function deleteTask(token: string, id: string | number): Promise<void> {
+  await api.delete(`/api/tasks/${id}`, { headers: authHeaders(token) });
 }
 
 export async function updateTaskStatus(

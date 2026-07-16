@@ -34,6 +34,7 @@ interface ResourceListPageProps<T> {
   getRowId: (row: T) => string | number;
   searchPlaceholder?: string;
   actions?: React.ReactNode;
+  onRowClick?: (row: T) => void;
 }
 
 const iconMap: Record<string, typeof LayoutDashboard> = {
@@ -50,6 +51,7 @@ export function ResourceListPage<T>({
   getRowId,
   searchPlaceholder = 'Search...',
   actions,
+  onRowClick,
 }: ResourceListPageProps<T>) {
   const { token } = useAuth();
   const [page, setPage] = useState(1);
@@ -112,6 +114,7 @@ export function ResourceListPage<T>({
           renderRow={renderRow}
           loading={isLoading}
           emptyText={`No ${title.toLowerCase()} found.`}
+          onRowClick={onRowClick}
         />
         {pagination && (
           <Pagination
