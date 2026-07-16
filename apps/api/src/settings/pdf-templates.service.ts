@@ -96,6 +96,47 @@ export class PdfTemplatesService {
     const templates = await this.getTemplates();
     const template = templates.find((t: any) => t.id === id);
     if (!template) throw new NotFoundException('Template not found');
-    return { success: true, message: 'PDF preview not implemented in this pass', template };
+
+    const sample: Record<string, any> = {
+      invoice_number: 'INV-0001',
+      quote_number: 'QT-0001',
+      date: new Date().toISOString().split('T')[0],
+      due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      client_name: 'Sample Client',
+      client_email: 'client@example.com',
+      company_name: 'ClickBit Pty Ltd',
+      items: [
+        { description: 'Sample service', quantity: 1, unit_price: 100, amount: 100 },
+        { description: 'Additional work', quantity: 2, unit_price: 50, amount: 100 },
+      ],
+      subtotal: 200,
+      tax: 20,
+      total: 220,
+      notes: 'Sample notes',
+      payment_terms: '7 days',
+    };
+
+    let html = (template.header || '') + (template.html || '') + (template.footer || '');
+    const css = template.css || '';
+
+    for (const [key, value] of Object.entries(sample)) {
+      const placeholder = `{{${key}}}`;
+      if (html.includes(placeholder)) {
+        if (Array.isArray(value)) {
+          const rows = value
+            .map((item) => {
+              const cells = typeof item === 'object' ? Object.values(item) : [item];
+              return `<tr>${cells.map((v) => `<td>${v}</td>`).join('')}</tr>`;
+            })
+            .join('');
+          html = html.split(placeholder).join(`<table>${rows}</table>`);
+        } else {
+          html = html.split(placeholder).join(String(value ?? ''));
+        }
+      }
+    }
+
+    html = `<style>${css}</style>${html}`;
+    return { success: true, preview_html: html, template };
   }
 }

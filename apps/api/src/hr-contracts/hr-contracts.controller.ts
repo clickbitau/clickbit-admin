@@ -7,9 +7,13 @@ import {
   Param,
   Query,
   Req,
+  Res,
+  Header,
+  HttpStatus,
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -74,7 +78,14 @@ export class HrContractsController {
   }
 
   @Get(':id/pdf')
-  downloadPdf(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
-    return this.hrContractsService.downloadPdf(req.user, id);
+  @Header('Content-Type', 'application/pdf')
+  async downloadPdf(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.hrContractsService.downloadPdf(req.user, id);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(HttpStatus.OK).send(buffer);
   }
 }
