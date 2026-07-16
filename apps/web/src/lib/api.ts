@@ -10,8 +10,6 @@ import type {
   Deal,
   DealDetail,
   Document,
-  Invoice,
-  Payment,
   Pipeline,
   PipelineStage,
   ProjectTask,
@@ -20,6 +18,7 @@ import type {
   User,
   ValueBreakdownResponse,
 } from '@/types/crm';
+import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
 
 const api = axios.create({
   baseURL: '/',
@@ -527,6 +526,86 @@ export async function completeActivity(token: string, id: string | number, outco
 
 export async function deleteActivity(token: string, id: string | number): Promise<void> {
   await api.delete(`/api/crm/activities/${id}`, { headers: authHeaders(token) });
+}
+
+// ─── Finance ───────────────────────────────────────────────────────────────
+
+export async function fetchInvoices(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<InvoiceListResponse> {
+  const response = await api.get<InvoiceListResponse>('/api/invoices', { params, headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function fetchInvoice(token: string, id: string | number): Promise<Invoice> {
+  const response = await api.get<{ success: boolean; data: Invoice }>(`/api/invoices/${id}`, {
+    headers: authHeaders(token),
+  });
+  return extractSingle<Invoice>(response, 'data');
+}
+
+export async function createInvoice(token: string, data: Partial<Invoice>): Promise<Invoice> {
+  const response = await api.post<Invoice>('/api/invoices', data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function updateInvoice(token: string, id: string | number, data: Partial<Invoice>): Promise<Invoice> {
+  const response = await api.put<Invoice>(`/api/invoices/${id}`, data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function deleteInvoice(token: string, id: string | number): Promise<void> {
+  await api.delete(`/api/invoices/${id}`, { headers: authHeaders(token) });
+}
+
+export async function sendInvoice(token: string, id: string | number): Promise<{ message: string; paymentUrl?: string; package?: Invoice }> {
+  const response = await api.post<{ message: string; paymentUrl?: string; package?: Invoice }>(`/api/invoices/${id}/send`, {}, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function recordInvoicePayment(
+  token: string,
+  id: string | number,
+  data: { amount: number; method?: string; reference?: string; notes?: string },
+): Promise<{ success: boolean; data: Invoice; payment: Payment; creditBalance?: number }> {
+  const response = await api.post<{ success: boolean; data: Invoice; payment: Payment; creditBalance?: number }>(`/api/invoices/${id}/record-payment`, data, {
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchPayments(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<PaymentListResponse> {
+  const response = await api.get<PaymentListResponse>('/api/payments', { params, headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function createPayment(token: string, data: Partial<Payment>): Promise<{ message: string; payment: Payment }> {
+  const response = await api.post<{ message: string; payment: Payment }>('/api/payments', data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function deletePayment(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  const response = await api.delete<{ success: boolean; message: string }>(`/api/payments/${id}`, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function fetchExpenses(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: Expense[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  const response = await api.get<{ success: boolean; data: Expense[]; pagination: { total: number; page: number; pages: number; limit: number } }>('/api/expenses', {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchExpense(token: string, id: string | number): Promise<{ success: boolean; data: Expense }> {
+  return (await api.get<{ success: boolean; data: Expense }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
 }
 
 export default api;
