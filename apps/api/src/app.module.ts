@@ -12,6 +12,8 @@ import { CommunicationModule } from './communication/communication.module';
 import { ContentModule } from './content/content.module';
 import { SettingsModule } from './settings/settings.module';
 import { WorkersModule } from './workers/workers.module';
+import { StorageModule } from './storage/storage.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { WorkersModule } from './workers/workers.module';
     ContentModule,
     SettingsModule,
     WorkersModule,
+    StorageModule,
+    UploadModule,
   ],
 })
 export class AppModule {}
