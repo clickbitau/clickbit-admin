@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface UserLike {
@@ -228,7 +229,48 @@ export class HrContractsService {
       }
     }
 
-    return { success: false, message: 'PDF generation not implemented in this port' };
+    const employee = contract.employees_hr_contracts_employee_idToemployees?.profiles;
+    const manager = contract.employees_hr_contracts_manager_idToemployees?.profiles;
+    const filename = `contract-${contract.contract_number || id}.pdf`;
+    const buffer = await this.generateContractPdf(contract, employee, manager);
+    return { buffer, filename };
+  }
+
+  private generateContractPdf(contract: any, employee: any, manager: any): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 48 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      doc.fontSize(20).text('Employment Contract', { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(12).text(`Contract Number: ${contract.contract_number || contract.id}`);
+      doc.text(`Employee: ${employee?.first_name || ''} ${employee?.last_name || ''}`);
+      if (contract.position) doc.text(`Position: ${contract.position}`);
+      if (contract.department) doc.text(`Department: ${contract.department}`);
+      if (contract.employment_type) doc.text(`Employment Type: ${contract.employment_type}`);
+      if (contract.start_date) {
+        doc.text(`Start Date: ${new Date(contract.start_date).toISOString().split('T')[0]}`);
+      }
+      if (contract.end_date) {
+        doc.text(`End Date: ${new Date(contract.end_date).toISOString().split('T')[0]}`);
+      }
+      if (contract.pay_frequency) doc.text(`Pay Frequency: ${contract.pay_frequency}`);
+      if (contract.salary) doc.text(`Salary: $${Number(contract.salary).toLocaleString('en-AU')}`);
+      if (contract.hourly_rate) doc.text(`Hourly Rate: $${Number(contract.hourly_rate)}`);
+      if (manager) doc.text(`Manager: ${manager.first_name || ''} ${manager.last_name || ''}`);
+      doc.moveDown();
+      doc.fontSize(14).text('Terms');
+      doc.fontSize(11).text(contract.terms_summary || 'No terms provided.');
+      doc.moveDown();
+      if (contract.notes) {
+        doc.fontSize(14).text('Notes');
+        doc.fontSize(11).text(contract.notes);
+      }
+      doc.end();
+    });
   }
 
   private async checkCOI(user: UserLike, targetEmployeeId: number): Promise<{ message: string } | null> {

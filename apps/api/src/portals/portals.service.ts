@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicInvoicesService } from '../finance/public-invoices.service';
 
@@ -178,8 +178,52 @@ export class PortalsService {
     return { success: true, message: 'Contact assigned to company' };
   }
 
-  agentCreateCompanyUser(_user: UserLike, _companyId: number, _body: any) {
-    throw new BadRequestException('User provisioning not implemented in this pass');
+  async agentCreateCompanyUser(user: UserLike, companyId: number, body: any) {
+    const { agentContact, companyIds } = await this.resolveAgent(user);
+    if (!companyIds.includes(companyId)) throw new ForbiddenException('Company not assigned to this agent');
+
+    const company = await this.prisma.companies.findUnique({ where: { id: companyId, deleted_at: null } });
+    if (!company) throw new NotFoundException('Company not found');
+
+    const email = body.email?.trim().toLowerCase();
+    const name = body.name?.trim();
+    if (!email) throw new BadRequestException('email is required');
+    if (!name) throw new BadRequestException('name is required');
+
+    const existing = await this.prisma.profiles.findUnique({ where: { email } });
+    if (existing) throw new BadRequestException('A user with this email already exists');
+
+    const parts = name.split(/\s+/);
+    const firstName = parts[0] || '';
+    const lastName = parts.slice(1).join(' ') || '';
+    const password = randomBytes(16).toString('hex');
+
+    const profile = await this.prisma.profiles.create({
+      data: {
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        phone: body.phone || null,
+        password,
+        role: body.role || 'customer',
+        status: 'active',
+      } as any,
+    });
+
+    const contact = await this.prisma.contacts.create({
+      data: {
+        name,
+        email,
+        phone: body.phone || null,
+        company_id: companyId,
+        agent_id: agentContact.id,
+        lifecycle_stage: body.lifecycle_stage || 'customer',
+        user_id: profile.id,
+        source: 'agent_portal',
+      } as any,
+    });
+
+    return { success: true, data: { profile, contact }, message: 'Company user created' };
   }
 
   async agentTickets(user: UserLike, query: any) {
