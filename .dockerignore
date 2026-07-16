@@ -1,0 +1,11 @@
+.git
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+.next
+dist
+.env
+.env.*
+.turbo
+*.log
+.DS_Store
