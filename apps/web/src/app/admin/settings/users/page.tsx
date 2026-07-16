@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { User as UserIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -60,7 +61,7 @@ export default function AdminSettingsUsersPage() {
           {data?.data?.map((u: User) => (
             <div key={u.id} className="flex items-center justify-between py-2">
               <div>
-                <div className="font-medium">{u.first_name} {u.last_name}</div>
+                <Link href={`/admin/settings/users/${u.id}`} className="font-medium hover:underline">{u.first_name} {u.last_name}</Link>
                 <div className="text-sm text-muted-foreground">{u.email} &middot; {u.role} &middot; {u.status}</div>
               </div>
               <Button variant="destructive" size="sm" onClick={() => remove.mutate(u.id)}>Delete</Button>
