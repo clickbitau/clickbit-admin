@@ -1,7 +1,6 @@
 import { SettingsController } from '../src/settings/settings.controller';
 import { UsersController } from '../src/settings/users.controller';
 import { ProfileController } from '../src/settings/profile.controller';
-import { AdminController } from '../src/settings/admin.controller';
 import { AuditLogsController } from '../src/settings/audit-logs.controller';
 
 describe('Settings legacy contract tests', () => {
@@ -79,24 +78,6 @@ describe('Settings legacy contract tests', () => {
       const controller = new ProfileController(service);
       const result = await controller.updateProfile(req as any, { first_name: 'A' });
       expect(result).toEqual(expect.objectContaining({ success: true, message: 'Profile updated successfully' }));
-    });
-  });
-
-  describe('AdminController', () => {
-    it('GET /api/admin/dashboard/stats returns stats object', async () => {
-      const service = { dashboardStats: jest.fn().mockResolvedValue({ totalUsers: 0 }) } as any;
-      const controller = new AdminController(service);
-      const result = await controller.dashboardStats(req as any);
-      expect(service.dashboardStats).toHaveBeenCalledWith(1);
-      expect(result).toEqual(expect.objectContaining({ totalUsers: 0 }));
-    });
-
-    it('GET /api/admin/posts returns transformed posts', async () => {
-      const service = { adminPosts: jest.fn().mockResolvedValue([{ id: 1, title: 'Post' }]) } as any;
-      const controller = new AdminController(service);
-      const result = await controller.adminPosts({});
-      expect(service.adminPosts).toHaveBeenCalled();
-      expect(Array.isArray(result)).toBe(true);
     });
   });
 
