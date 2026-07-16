@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Briefcase as BriefcaseIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -58,7 +59,7 @@ export default function AdminContentServicesPage() {
           {data?.items?.map((s: Service) => (
             <div key={s.id} className="flex items-center justify-between py-2">
               <div>
-                <div className="font-medium">{s.name}</div>
+                <Link href={`/admin/content/services/${s.id}`} className="font-medium hover:underline">{s.name}</Link>
                 <div className="text-sm text-muted-foreground">{s.category} &middot; {s.status}</div>
               </div>
               <Button variant="destructive" size="sm" onClick={() => remove.mutate(s.id)}>Delete</Button>
