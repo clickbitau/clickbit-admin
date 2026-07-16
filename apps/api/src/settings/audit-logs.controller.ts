@@ -43,9 +43,9 @@ export class AuditLogsController {
 
   @Post(':id/restore')
   @Roles('admin')
-  restore(@Param('id') _id: string) { return { success: true, message: 'Restore not implemented in this migration phase' }; }
+  restore(@Param('id') id: string) { return this.auditLogsService.restore(id); }
 
   @Post(':id/undo')
   @Roles('admin')
-  undo(@Param('id') _id: string) { return { success: false, message: 'Undo not implemented in this migration phase' }; }
+  undo(@Param('id') id: string) { return this.auditLogsService.undo(id); }
 }

@@ -100,6 +100,100 @@ export class AuditLogsService {
     return [headers.join(','), ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
   }
 
+  async restore(id: string) {
+    const log = await this.findLogById(id);
+    if (!log) return { success: false, message: 'Audit log not found' };
+    if (!['delete', 'archive'].includes(log.action)) return { success: false, message: 'Only delete/archive logs can be restored' };
+
+    const modelName = this.mapResourceType(log.resource_type);
+    const model = (this.prisma as any)[modelName];
+    if (!model) return { success: false, message: `Cannot restore unknown resource type: ${log.resource_type}` };
+
+    const payload = this.cleanPreviousState(log.previous_state);
+    if (!payload || !Object.keys(payload).length) {
+      return { success: false, message: 'No previous state available for restore' };
+    }
+
+    try {
+      const restored = await model.create({ data: payload });
+      return { success: true, message: 'Record restored', data: restored };
+    } catch (err: any) {
+      return { success: false, message: `Restore failed: ${err.message || 'Unknown error'}`, error: err.message };
+    }
+  }
+
+  async undo(id: string) {
+    const log = await this.findLogById(id);
+    if (!log) return { success: false, message: 'Audit log not found' };
+    if (log.action !== 'update') return { success: false, message: 'Only update logs can be undone' };
+
+    const modelName = this.mapResourceType(log.resource_type);
+    const model = (this.prisma as any)[modelName];
+    if (!model) return { success: false, message: `Cannot undo unknown resource type: ${log.resource_type}` };
+
+    const entityId = this.coerceId(log.resource_id);
+    if (entityId === null) return { success: false, message: 'Invalid resource id' };
+
+    const payload = this.cleanPreviousState(log.previous_state);
+    if (!payload || !Object.keys(payload).length) {
+      return { success: false, message: 'No previous state available for undo' };
+    }
+
+    try {
+      const existing = await model.findUnique({ where: { id: entityId } });
+      if (!existing) return { success: false, message: 'Record no longer exists; cannot undo' };
+      const undone = await model.update({ where: { id: entityId }, data: payload });
+      return { success: true, message: 'Changes undone', data: undone };
+    } catch (err: any) {
+      return { success: false, message: `Undo failed: ${err.message || 'Unknown error'}`, error: err.message };
+    }
+  }
+
+  private async findLogById(id: string) {
+    try {
+      const log = await this.prisma.audit_logs.findFirst({ where: { id: BigInt(id) } });
+      return log;
+    } catch {
+      return null;
+    }
+  }
+
+  private mapResourceType(resourceType: string): string {
+    const mapping: Record<string, string> = {
+      user: 'profiles',
+      profile: 'profiles',
+      contact: 'contacts',
+      company: 'companies',
+      deal: 'deals',
+      project: 'projects',
+      task: 'tasks',
+      ticket: 'tickets',
+      invoice: 'invoices',
+      expense: 'expenses',
+      payment: 'payments',
+      employee: 'employees',
+      contract: 'hr_contracts',
+      hr_contract: 'hr_contracts',
+      assignment_rule: 'ticket_assignment_rules',
+      webhook: 'ticket_webhooks',
+      sla_policy: 'ticket_sla_policies',
+    };
+    return mapping[resourceType] || resourceType;
+  }
+
+  private cleanPreviousState(previousState: any): Record<string, any> | null {
+    if (!previousState || typeof previousState !== 'object') return null;
+    const copy = { ...previousState };
+    const keysToRemove = ['id', 'created_at', 'updated_at', 'deleted_at', 'event_time', 'actor_id', 'actor_type', 'resource_type', 'resource_id'];
+    for (const key of keysToRemove) delete copy[key];
+    return copy;
+  }
+
+  private coerceId(value: string): number | string | null {
+    if (/^\d+$/.test(value)) return Number(value);
+    return value || null;
+  }
+
   private mapLog(log: any) {
     return { id: String(log.id), event_time: log.event_time, created_at: log.created_at, action: log.action, entity_type: log.resource_type, entity_id: log.resource_id, actor_id: log.actor_id, actor_type: log.actor_type, changes: log.changes, previous_state: log.previous_state, ip_address: log.ip_address, metadata: log.metadata };
   }
