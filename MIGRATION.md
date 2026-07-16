@@ -163,7 +163,7 @@ The recommended migration order after auth/CRM is:
 4. **support / tickets** — `/api/tickets/*`, `/api/ticket-automation/*`.
 5. **communication (mail / messages / chat)** — `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
 6. **content / marketing** — `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/team/*`, `/api/public/*`.
-7. **settings / admin** — `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*`, `/api/credentials/*`.
+7. ✅ **settings / admin** — `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*` (see PR #12). `/api/credentials/*` deferred to gap-filling pass.
 
 ## Background-worker services to migrate
 
