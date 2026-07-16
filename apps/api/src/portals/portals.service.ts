@@ -170,6 +170,35 @@ export class PortalsService {
     return { success: true, data: rows };
   }
 
+  async agentCompanyDetail(user: UserLike, id: number) {
+    const { companyIds } = await this.resolveAgent(user);
+    if (!companyIds.includes(id)) throw new ForbiddenException('Company not accessible');
+    const company = await this.prisma.companies.findFirst({ where: { id, deleted_at: null } });
+    if (!company) throw new NotFoundException('Company not found');
+    return { success: true, data: company };
+  }
+
+  async agentClients(user: UserLike) {
+    const { agentContact, clients } = await this.resolveAgent(user);
+    const rows = await this.prisma.contacts.findMany({
+      where: { agent_id: agentContact.id, deleted_at: null },
+      orderBy: { name: 'asc' },
+    });
+    if (!rows.length && clients.length) {
+      return { success: true, data: clients };
+    }
+    return { success: true, data: rows };
+  }
+
+  async agentInvoiceDetail(user: UserLike, id: number) {
+    const { contactIds, companyIds } = await this.resolveAgent(user);
+    const invoice = await this.prisma.invoices.findFirst({
+      where: { id, ...this.invoiceScope(contactIds, companyIds) },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    return { success: true, data: invoice };
+  }
+
   async agentAssignContactToCompany(user: UserLike, companyId: number, contactId: number) {
     const { contactIds } = await this.resolveAgent(user);
     const contact = await this.prisma.contacts.findFirst({ where: { id: contactId, agent_id: { in: contactIds }, deleted_at: null } });
