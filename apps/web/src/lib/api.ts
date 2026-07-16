@@ -615,6 +615,36 @@ export async function recordInvoicePayment(
   return response.data;
 }
 
+export async function downloadInvoicePdf(token: string, id: string | number): Promise<Blob> {
+  const response = await api.get<Blob>(`/api/invoices/${id}/pdf`, {
+    headers: authHeaders(token),
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
+export async function fetchPublicInvoice(code: string, token?: string): Promise<any> {
+  const response = await api.get(`/api/invoices/pay/${code}`, { params: token ? { token } : undefined });
+  return response.data;
+}
+
+export async function createInvoiceCheckout(
+  code: string,
+  paymentType: 'full' | 'half',
+  token?: string,
+): Promise<{ url: string; payment_details: any }> {
+  const response = await api.post(`/api/invoices/pay/${code}/checkout`, { payment_type: paymentType }, { params: token ? { token } : undefined });
+  return response.data;
+}
+
+export async function downloadPublicInvoicePdf(code: string, token?: string): Promise<Blob> {
+  const response = await api.get<Blob>(`/api/invoices/pay/${code}/pdf`, {
+    params: token ? { token } : undefined,
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
 export async function fetchPayments(
   token: string,
   params?: Record<string, string | number | boolean>,
