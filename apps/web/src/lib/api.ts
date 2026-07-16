@@ -1042,4 +1042,86 @@ export async function fetchPublicContent(key: string): Promise<unknown> {
   return (await api.get(`/api/public/${key}`)).data;
 }
 
+// ─── Settings / Admin ──────────────────────────────────────────────────────
+
+export async function fetchPublicBillingSettings(): Promise<{ stripePublishableKey: string; enableStripe: boolean; currencyCode: string; taxRate: number; taxType: string; googleMapsApiKey: string }> {
+  return (await api.get('/api/settings/public/billing-settings')).data;
+}
+
+export async function fetchAdminSettings(token: string, params?: Record<string, string | number | boolean>) {
+  return (await api.get('/api/settings/admin/all', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAdminSetting(token: string, key: string) {
+  return (await api.get(`/api/settings/admin/${key}`, { headers: authHeaders(token) })).data;
+}
+
+export async function upsertAdminSetting(token: string, key: string, data: Record<string, unknown>) {
+  return (await api.put(`/api/settings/admin/${key}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteAdminSetting(token: string, key: string) {
+  return (await api.delete(`/api/settings/admin/${key}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMarketingIntegrations(token: string) {
+  return (await api.get('/api/settings/marketing-integrations', { headers: authHeaders(token) })).data;
+}
+
+export async function updateMarketingIntegrations(token: string, data: Record<string, unknown>) {
+  return (await api.put('/api/settings/marketing-integrations', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchBillingSettings(token: string) {
+  return (await api.get('/api/settings/billing-settings', { headers: authHeaders(token) })).data;
+}
+
+export async function updateBillingSettings(token: string, data: Record<string, unknown>) {
+  return (await api.put('/api/settings/billing-settings', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchUsers(token: string, params?: Record<string, string | number | boolean>) {
+  return (await api.get('/api/users', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createUser(token: string, data: Record<string, unknown>) {
+  return (await api.post('/api/users', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateUser(token: string, id: number, data: Record<string, unknown>) {
+  return (await api.put(`/api/users/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteUser(token: string, id: number) {
+  return (await api.delete(`/api/users/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchUserTeam(token: string): Promise<{ id: number; first_name: string; last_name: string; email: string; role: string; avatar?: string | null }[]> {
+  return (await api.get('/api/users/team', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchManagers(token: string) {
+  return (await api.get('/api/users/managers', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchProfile(token: string) {
+  return (await api.get('/api/profile', { headers: authHeaders(token) })).data;
+}
+
+export async function updateProfile(token: string, data: Record<string, unknown>) {
+  return (await api.put('/api/profile', data, { headers: authHeaders(token) })).data;
+}
+
+export async function changePassword(token: string, data: { current_password: string; new_password: string; confirm_password: string }) {
+  return (await api.put('/api/profile/password', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchDashboardStats(token: string) {
+  return (await api.get('/api/admin/dashboard/stats', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAuditLogs(token: string, params?: Record<string, string | number | boolean>) {
+  return (await api.get('/api/admin/audit-logs', { params, headers: authHeaders(token) })).data;
+}
+
 export default api;
