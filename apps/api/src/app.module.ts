@@ -10,6 +10,7 @@ import { HrModule } from './hr/hr.module';
 import { SupportModule } from './support/support.module';
 import { CommunicationModule } from './communication/communication.module';
 import { ContentModule } from './content/content.module';
+import { AdminModule } from './admin/admin.module';
 import { SettingsModule } from './settings/settings.module';
 import { WorkersModule } from './workers/workers.module';
 import { StorageModule } from './storage/storage.module';
@@ -41,6 +42,7 @@ import { PortalsModule } from './portals/portals.module';
     SupportModule,
     CommunicationModule,
     ContentModule,
+    AdminModule,
     SettingsModule,
     WorkersModule,
     StorageModule,
