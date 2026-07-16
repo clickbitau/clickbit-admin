@@ -33,6 +33,21 @@ import type {
   TicketStats,
   TicketQuota,
 } from '@/types/support';
+import type {
+  CachedEmail,
+  Channel,
+  CommunicationLegacyDataResponse,
+  CommunicationLegacyListResponse,
+  CommunicationLegacyMessageResponse,
+  DirectMessage,
+  EmailTemplate,
+  MailAccount,
+  MailFolder,
+  Message,
+  MessageEnvelope,
+  MessageListResponse,
+  Workspace,
+} from '@/types/communication';
 
 const api = axios.create({
   baseURL: '/',
@@ -786,6 +801,104 @@ export async function fetchMyAssignedTickets(
   params?: Record<string, string | number | boolean>,
 ): Promise<StaffTicketListResponse> {
   return (await api.get<StaffTicketListResponse>('/api/tickets/my-assigned', { params, headers: authHeaders(token) })).data;
+}
+
+// ─── Communication ─────────────────────────────────────────────────────────
+
+export async function fetchChatParticipants(token: string): Promise<{ success: boolean; data: { id: number; first_name: string; last_name: string; email: string; avatar?: string | null; role?: string }[] }> {
+  return (await api.get('/api/chat/participants', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchWorkspaces(token: string): Promise<{ success: boolean; data: Workspace[] }> {
+  return (await api.get('/api/chat/workspaces', { headers: authHeaders(token) })).data;
+}
+
+export async function createWorkspace(token: string, data: Partial<Workspace>): Promise<{ success: boolean; workspace: Workspace }> {
+  return (await api.post('/api/chat/workspaces', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchDirectMessages(token: string, params?: Record<string, string | number | boolean>): Promise<CommunicationLegacyListResponse<DirectMessage>> {
+  return (await api.get('/api/chat/direct-messages', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createDirectMessage(token: string, data: { participant_ids: number[]; type?: 'dm' | 'group'; name?: string }): Promise<CommunicationLegacyDataResponse<DirectMessage>> {
+  return (await api.post('/api/chat/direct-messages', data, { headers: authHeaders(token) })).data;
+}
+
+export async function markDmRead(token: string, id: number, data?: { last_read_message_id?: number }): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.post(`/api/chat/direct-messages/${id}/read`, data || {}, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchChannels(token: string, workspaceId: number): Promise<CommunicationLegacyDataResponse<Channel[]>> {
+  return (await api.get('/api/chat/channels', { params: { workspace_id: workspaceId }, headers: authHeaders(token) })).data;
+}
+
+export async function createChannel(token: string, data: Partial<Channel>): Promise<CommunicationLegacyDataResponse<Channel>> {
+  return (await api.post('/api/chat/channels', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMessagesForChannel(token: string, channelId: number, params?: Record<string, string | number | boolean>): Promise<MessageListResponse> {
+  return (await api.get(`/api/messages/channel/${channelId}`, { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchMessagesForDm(token: string, dmId: number, params?: Record<string, string | number | boolean>): Promise<MessageListResponse> {
+  return (await api.get(`/api/messages/direct-message/${dmId}`, { params, headers: authHeaders(token) })).data;
+}
+
+export async function sendMessage(token: string, data: Partial<Message>): Promise<MessageEnvelope<Message>> {
+  return (await api.post('/api/messages', data, { headers: authHeaders(token) })).data;
+}
+
+export async function editMessage(token: string, id: number, content: string): Promise<MessageEnvelope<Message>> {
+  return (await api.put(`/api/messages/${id}`, { content }, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteMessage(token: string, id: number): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.delete(`/api/messages/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function addReaction(token: string, messageId: number, emoji: string): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.post(`/api/messages/${messageId}/reactions`, { emoji }, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMailAccounts(token: string): Promise<CommunicationLegacyDataResponse<MailAccount[]>> {
+  return (await api.get('/api/mail/accounts', { headers: authHeaders(token) })).data;
+}
+
+export async function createMailAccount(token: string, data: Partial<MailAccount>): Promise<CommunicationLegacyDataResponse<MailAccount>> {
+  return (await api.post('/api/mail/accounts', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateMailAccount(token: string, id: string, data: Partial<MailAccount>): Promise<CommunicationLegacyDataResponse<MailAccount>> {
+  return (await api.put(`/api/mail/accounts/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteMailAccount(token: string, id: string): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.delete(`/api/mail/accounts/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMailFolders(token: string, accountId: string): Promise<CommunicationLegacyDataResponse<MailFolder[]>> {
+  return (await api.get(`/api/mail/accounts/${accountId}/folders`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMailMessages(token: string, accountId: string, folderPath: string, params?: Record<string, string | number | boolean>): Promise<CommunicationLegacyListResponse<CachedEmail>> {
+  return (await api.get(`/api/mail/accounts/${accountId}/folders/${folderPath}/messages`, { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchMailTemplates(token: string): Promise<CommunicationLegacyDataResponse<EmailTemplate[]>> {
+  return (await api.get('/api/mail/templates', { headers: authHeaders(token) })).data;
+}
+
+export async function createMailTemplate(token: string, data: Partial<EmailTemplate>): Promise<CommunicationLegacyDataResponse<EmailTemplate>> {
+  return (await api.post('/api/mail/templates', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateMailTemplate(token: string, id: string, data: Partial<EmailTemplate>): Promise<CommunicationLegacyDataResponse<EmailTemplate>> {
+  return (await api.put(`/api/mail/templates/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteMailTemplate(token: string, id: string): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.delete(`/api/mail/templates/${id}`, { headers: authHeaders(token) })).data;
 }
 
 export default api;

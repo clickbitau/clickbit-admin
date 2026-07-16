@@ -13,6 +13,7 @@ export * from './crm';
 export * from './finance';
 export * from './hr';
 export * from './support';
+export * from './communication';
 
 export type UserRole = 'admin' | 'manager' | 'employee' | 'customer' | 'agent';
 
