@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from './ThemeToggle';
@@ -44,6 +44,7 @@ import {
   X,
   LogOut,
   ChevronRight,
+  Loader2,
   ChevronLeft,
   ChevronDown,
   HeartHandshake,
@@ -162,7 +163,8 @@ function isActive(pathname: string, href: string) {
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, clearToken } = useAuth();
+  const router = useRouter();
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<string[]>(() => {
@@ -184,6 +186,20 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const toggleSection = (id: string) => {
     setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/login');
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center admin-surface">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
 
@@ -297,7 +313,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           </button>
         ) : (
           <button
-            onClick={clearToken}
+            onClick={logout}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-destructive hover:nm-raised-sm transition-all"
           >
             <LogOut className="h-4 w-4" />
@@ -355,7 +371,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               )}
               <span className="text-sm font-medium hidden xl:inline">{user?.first_name || 'Admin'}</span>
             </Link>
-            <Button variant="ghost" size="sm" onClick={clearToken} className="text-destructive hidden xl:flex">
+            <Button variant="ghost" size="sm" onClick={logout} className="text-destructive hidden xl:flex">
               <LogOut className="h-4 w-4 mr-2" />
               Logout
             </Button>

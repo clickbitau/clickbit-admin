@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from '@/components/admin/ThemeToggle';
 import {
@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   User,
+  Loader2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -43,8 +44,23 @@ function isActive(pathname: string, href: string) {
 
 export function CustomerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, clearToken } = useAuth();
+  const router = useRouter();
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/login');
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center admin-surface">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
 
@@ -86,7 +102,7 @@ export function CustomerLayout({ children }: { children: React.ReactNode }) {
 
       <div className="pt-3 border-t border-border/50 px-2">
         <button
-          onClick={clearToken}
+          onClick={logout}
           className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-destructive hover:nm-raised-sm transition-all ${
             collapsed ? 'justify-center' : ''
           }`}

@@ -1,0 +1,220 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+function getDashboardPath(role?: string) {
+  const r = (role || 'customer').toLowerCase();
+  if (['admin', 'manager', 'employee'].includes(r)) return '/admin';
+  if (r === 'agent') return '/agent/dashboard';
+  return '/customer/dashboard';
+}
+
+export default function LoginPage() {
+  const { user, loading, error, login, clearError, oauthSignIn, sendMagicLink } = useAuth();
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user && !loading) {
+      router.replace(getDashboardPath(user.role));
+    }
+  }, [user, loading, router]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    clearError();
+    try {
+      await login(email, password);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    if (!email) return;
+    setIsMagicLinkLoading(true);
+    try {
+      await sendMagicLink(email);
+      setMagicLinkSent(true);
+    } finally {
+      setIsMagicLinkLoading(false);
+    }
+  };
+
+  const handleOAuth = async (provider: string) => {
+    setOauthLoading(provider);
+    try {
+      await oauthSignIn(provider);
+    } catch (err: any) {
+      alert(err.message || `${provider} sign in failed`);
+      setOauthLoading(null);
+    }
+  };
+
+  if (loading || user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center admin-surface">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center admin-surface px-4 py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md space-y-6"
+      >
+        <div className="text-center">
+          <div className="mx-auto mb-6 nm-raised-sm w-14 h-14 flex items-center justify-center rounded-2xl">
+            <span className="text-primary font-bold text-2xl">C</span>
+          </div>
+          <h1 className="text-3xl font-bold">Welcome back</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Sign in to your account to continue</p>
+        </div>
+
+        <div className="nm-raised p-8 rounded-3xl space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="email">Email address</Label>
+              <div className="relative mt-1.5">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-10"
+                  placeholder="you@example.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <div className="relative mt-1.5">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10 pr-10"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+                Forgot your password?
+              </Link>
+            </div>
+
+            {error && (
+              <div className="rounded-xl bg-destructive/10 text-destructive text-sm p-3">
+                {error}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <ArrowRight className="h-4 w-4 mr-2" />
+              )}
+              Sign in
+            </Button>
+          </form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { id: 'google', label: 'Google' },
+              { id: 'apple', label: 'Apple' },
+              { id: 'facebook', label: 'Facebook' },
+              { id: 'github', label: 'GitHub' },
+            ].map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                disabled={!!oauthLoading}
+                onClick={() => handleOAuth(provider.id)}
+                className="h-11 nm-raised-sm rounded-xl flex items-center justify-center text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                aria-label={`Sign in with ${provider.label}`}
+                title={provider.label}
+              >
+                {oauthLoading === provider.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <span className="uppercase text-xs">{provider.label[0]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            {magicLinkSent ? (
+              <div className="rounded-xl bg-green-500/10 text-green-600 text-sm p-3 text-center">
+                Check your email for the login link!
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={isMagicLinkLoading || !email}
+                onClick={handleMagicLink}
+              >
+                {isMagicLinkLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
+                Email me a login link
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{' '}
+          <Link href="/register" className="text-primary hover:underline">
+            Sign up here
+          </Link>
+        </p>
+      </motion.div>
+    </div>
+  );
+}
