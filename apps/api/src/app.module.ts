@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { CrmModule } from './crm/crm.module';
 import { FinanceModule } from './finance/finance.module';
+import { HrModule } from './hr/hr.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { FinanceModule } from './finance/finance.module';
     AuthModule,
     CrmModule,
     FinanceModule,
+    HrModule,
   ],
 })
 export class AppModule {}
