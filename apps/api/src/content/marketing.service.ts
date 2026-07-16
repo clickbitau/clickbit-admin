@@ -1,0 +1,98 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { Profile } from '@clickbit/shared';
+import { asJson, buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
+
+const MARKETING_TAG = 'marketing';
+const profileSelect = { id: true, first_name: true, last_name: true };
+
+@Injectable()
+export class MarketingService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async listPublic(query: Record<string, unknown>) {
+    const now = new Date();
+    const limit = Math.min(numberValue(query.limit, 20), 50);
+    const offset = numberValue(query.offset, 0);
+    const type = stringValue(query.type);
+    const where: any = { status: 'published', deleted_at: null, tags: { contains: MARKETING_TAG, mode: 'insensitive' }, OR: [{ published_at: { lte: now } }, { published_at: null }] };
+    if (type) where.categories = { contains: type, mode: 'insensitive' };
+    const posts = await this.prisma.blog_posts.findMany({ where, orderBy: [{ featured: 'desc' }, { published_at: 'desc' }], skip: offset, take: limit });
+    return posts.map((p: any) => this.mapPost(p));
+  }
+
+  async findAllAdmin(query: Record<string, unknown>) {
+    const limit = Math.min(numberValue(query.limit, 50), 100);
+    const offset = numberValue(query.offset, 0);
+    const status = stringValue(query.status);
+    const where: any = { deleted_at: null, tags: { contains: MARKETING_TAG, mode: 'insensitive' } };
+    if (status) where.status = status;
+    const [count, rows] = await this.prisma.$transaction([
+      this.prisma.blog_posts.count({ where }),
+      this.prisma.blog_posts.findMany({ where, include: { profiles: { select: profileSelect } }, orderBy: { created_at: 'desc' }, skip: offset, take: limit }),
+    ]);
+    return { posts: rows.map((p: any) => this.mapPost(p)), total: count };
+  }
+
+  async create(user: Profile, dto: Record<string, unknown>) {
+    const title = stringValue(dto.title);
+    const slug = stringValue(dto.slug) || slugify(title);
+    const tags = parseJson(dto.tags, []);
+    if (!tags.includes(MARKETING_TAG)) tags.push(MARKETING_TAG);
+    const post = await this.prisma.blog_posts.create({
+      data: {
+        title,
+        slug,
+        content: stringValue(dto.body || dto.content),
+        excerpt: stringValue(dto.body || dto.content).substring(0, 200),
+        featured_image: stringValue(dto.image_url) || null,
+        status: stringValue(dto.status, 'draft') as any,
+        published_at: stringValue(dto.status) === 'published' ? new Date() : null,
+        categories: asJson(dto.type ? [stringValue(dto.type)] : [], []),
+        tags: asJson(tags, []),
+        author_id: user.id,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as any,
+    });
+    return this.mapPost(post as any);
+  }
+
+  async update(id: number, dto: Record<string, unknown>) {
+    const post = await this.prisma.blog_posts.findUnique({ where: { id } });
+    if (!post || post.deleted_at) throw new NotFoundException({ message: 'Marketing post not found' });
+    const data: any = {};
+    if (dto.title !== undefined) data.title = stringValue(dto.title);
+    if (dto.slug !== undefined) data.slug = stringValue(dto.slug);
+    if (dto.body !== undefined || dto.content !== undefined) {
+      const text = stringValue(dto.body !== undefined ? dto.body : dto.content);
+      data.content = text;
+      data.excerpt = text.substring(0, 200);
+    }
+    if (dto.image_url !== undefined) data.featured_image = stringValue(dto.image_url) || null;
+    if (dto.status !== undefined) {
+      data.status = stringValue(dto.status);
+      if (data.status === 'published' && post.status !== 'published' && !data.published_at) data.published_at = new Date();
+    }
+    if (dto.type !== undefined) data.categories = asJson([stringValue(dto.type)], []);
+    if (dto.tags !== undefined) data.tags = asJson(dto.tags, []);
+    data.updated_at = new Date();
+    const updated = await this.prisma.blog_posts.update({ where: { id }, data });
+    return this.mapPost(updated as any);
+  }
+
+  async remove(id: number) {
+    const post = await this.prisma.blog_posts.findUnique({ where: { id } });
+    if (!post || post.deleted_at) throw new NotFoundException({ message: 'Marketing post not found' });
+    await this.prisma.blog_posts.update({ where: { id }, data: { deleted_at: new Date() } });
+    return buildMessageEnvelope('Marketing post deleted');
+  }
+
+  private mapPost(post: any) {
+    const result: any = { ...post, author: post.profiles };
+    result.tags = parseJson(post.tags, []);
+    result.categories = parseJson(post.categories, []);
+    delete result.profiles;
+    return result;
+  }
+}
