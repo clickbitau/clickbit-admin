@@ -8,6 +8,7 @@ import { CrmModule } from './crm/crm.module';
 import { FinanceModule } from './finance/finance.module';
 import { HrModule } from './hr/hr.module';
 import { SupportModule } from './support/support.module';
+import { CommunicationModule } from './communication/communication.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SupportModule } from './support/support.module';
     FinanceModule,
     HrModule,
     SupportModule,
+    CommunicationModule,
   ],
 })
 export class AppModule {}
