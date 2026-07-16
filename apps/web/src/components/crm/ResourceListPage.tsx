@@ -7,7 +7,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { Input } from '@/components/ui/input';
-import { Search, Contact, FileText, Cog, LayoutDashboard } from 'lucide-react';
+import { Search, Contact, FileText, Cog, LayoutDashboard, type LucideIcon } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -35,6 +35,7 @@ interface ResourceListPageProps<T> {
   searchPlaceholder?: string;
   actions?: React.ReactNode;
   onRowClick?: (row: T) => void;
+  icon?: LucideIcon;
 }
 
 const iconMap: Record<string, typeof LayoutDashboard> = {
@@ -52,6 +53,7 @@ export function ResourceListPage<T>({
   searchPlaceholder = 'Search...',
   actions,
   onRowClick,
+  icon,
 }: ResourceListPageProps<T>) {
   const { token } = useAuth();
   const [page, setPage] = useState(1);
@@ -85,7 +87,7 @@ export function ResourceListPage<T>({
       return String(value);
     });
 
-  const Icon = iconMap[title] || LayoutDashboard;
+  const Icon = icon || iconMap[title] || LayoutDashboard;
 
   return (
     <PageShell title={title} icon={Icon} actions={actions}>

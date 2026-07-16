@@ -10,6 +10,7 @@ import type {
   Deal,
   DealDetail,
   Document,
+  Order,
   Pipeline,
   PipelineStage,
   ProjectTask,
@@ -1269,6 +1270,120 @@ export async function fetchDashboardStats(token: string) {
 
 export async function fetchAuditLogs(token: string, params?: Record<string, string | number | boolean>) {
   return (await api.get('/api/admin/audit-logs', { params, headers: authHeaders(token) })).data;
+}
+
+// ─── Customer portal ───────────────────────────────────────────────────────
+
+export async function fetchCustomerDashboard(token: string) {
+  return (await api.get('/api/customer/dashboard', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerOrders(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/orders', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerOrder(token: string, id: string | number) {
+  return (await api.get(`/api/customer/orders/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerInvoices(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/invoices', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerInvoice(token: string, id: string | number) {
+  return (await api.get(`/api/customer/invoices/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerInvoicePdfUrl(token: string, id: string | number) {
+  return (await api.get(`/api/customer/invoices/${id}/pdf`, { headers: authHeaders(token) })).data;
+}
+
+export async function customerPayInvoice(token: string, id: string | number, body: Record<string, unknown> = {}) {
+  return (await api.post(`/api/customer/invoices/${id}/pay`, body, { headers: authHeaders(token) })).data;
+}
+
+export async function customerVerifyInvoicePayment(token: string, id: string | number, body: Record<string, unknown> = {}) {
+  return (await api.post(`/api/customer/invoices/${id}/verify`, body, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerProjects(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/projects', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerProject(token: string, id: string | number) {
+  return (await api.get(`/api/customer/projects/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerPayments(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/payments', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerDocuments(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/documents', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerDocument(token: string, id: string | number) {
+  return (await api.get(`/api/customer/documents/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerDocumentDownload(token: string, id: string | number) {
+  return (await api.get(`/api/customer/documents/${id}/download`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerTasks(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/tasks', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerTask(token: string, id: string | number) {
+  return (await api.get(`/api/customer/tasks/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function createCustomerTaskComment(token: string, id: string | number, content: string) {
+  return (await api.post(`/api/customer/tasks/${id}/comments`, { content }, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerSubmissions(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string }
+) {
+  return (await api.get('/api/customer/submissions', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerTickets(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string; status?: string }
+) {
+  return (await api.get('/api/tickets/my-tickets', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchCustomerTicket(token: string, id: string | number) {
+  return (await api.get(`/api/tickets/my-tickets/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function replyCustomerTicket(token: string, id: string | number, message: string, attachments?: unknown[]) {
+  return (await api.post(`/api/tickets/my-tickets/${id}/reply`, { message, attachments }, { headers: authHeaders(token) })).data;
+}
+
+export async function reopenCustomerTicket(token: string, id: string | number) {
+  return (await api.post(`/api/tickets/my-tickets/${id}/reopen`, {}, { headers: authHeaders(token) })).data;
 }
 
 export default api;
