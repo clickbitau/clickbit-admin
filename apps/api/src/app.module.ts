@@ -18,6 +18,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ServiceTokensModule } from './service-tokens/service-tokens.module';
+import { HrFormsModule } from './hr-forms/hr-forms.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ServiceTokensModule } from './service-tokens/service-tokens.module';
     DepartmentsModule,
     NotificationsModule,
     ServiceTokensModule,
+    HrFormsModule,
   ],
 })
 export class AppModule {}
