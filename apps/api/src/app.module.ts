@@ -28,6 +28,9 @@ import { ContactModule } from './contact/contact.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ProjectLifecycleModule } from './project-lifecycle/project-lifecycle.module';
 import { PortalsModule } from './portals/portals.module';
+import { VerifyModule } from './verify/verify.module';
+import { CredentialsModule } from './credentials/credentials.module';
+import { ClickdeployModule } from './clickdeploy/clickdeploy.module';
 
 @Module({
   imports: [
@@ -60,6 +63,9 @@ import { PortalsModule } from './portals/portals.module';
     AnalyticsModule,
     ProjectLifecycleModule,
     PortalsModule,
+    VerifyModule,
+    CredentialsModule,
+    ClickdeployModule,
   ],
 })
 export class AppModule {}
