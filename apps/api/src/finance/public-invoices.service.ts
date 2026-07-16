@@ -315,8 +315,8 @@ export class PublicInvoicesService {
 
     const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'https://clickbit.com.au';
     const tokenParam = token ? `&token=${token}` : '';
-    const successUrl = `${frontendUrl}/pay/${invoice.package_code}/success?session_id={CHECKOUT_SESSION_ID}${tokenParam}`;
-    const cancelUrl = `${frontendUrl}/pay/${invoice.package_code}${token ? `?${tokenParam.slice(1)}` : ''}`;
+    const successUrl = `${frontendUrl}/pay/${invoice.package_code}?session_id={CHECKOUT_SESSION_ID}${tokenParam}`;
+    const cancelUrl = `${frontendUrl}/pay/${invoice.package_code}${tokenParam ? `?${tokenParam.slice(1)}` : ''}`;
 
     const lineItems: any[] = [
       {

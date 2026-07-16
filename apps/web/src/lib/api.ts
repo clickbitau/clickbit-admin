@@ -663,6 +663,11 @@ export async function downloadPublicInvoicePdf(code: string, token?: string): Pr
   return response.data;
 }
 
+export async function confirmPublicInvoicePayment(code: string, sessionId: string, token?: string): Promise<any> {
+  const response = await api.get(`/api/invoices/pay/${code}/success`, { params: { session_id: sessionId, token } });
+  return response.data;
+}
+
 export async function fetchPayments(
   token: string,
   params?: Record<string, string | number | boolean>,

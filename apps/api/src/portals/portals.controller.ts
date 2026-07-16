@@ -7,14 +7,19 @@ import {
   Param,
   Query,
   Req,
+  Res,
+  Header,
+  HttpStatus,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { RequestWithUser } from '../types/request-with-user';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { PortalsService } from './portals.service';
+import { setNoCache } from '../finance/finance-utils';
 
 @Controller('agent')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
@@ -157,8 +162,12 @@ export class CustomerController {
 
   @Get('invoices/:id/pdf')
   @Roles('customer', 'admin')
-  async invoicePdf(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
-    return this.service.customerInvoicePdf(req.user, id);
+  @Header('Content-Type', 'application/pdf')
+  async invoicePdf(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    setNoCache(res);
+    const { buffer, filename } = await this.service.customerInvoicePdf(req.user, id);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(HttpStatus.OK).send(buffer);
   }
 
   @Post('invoices/:id/pay')

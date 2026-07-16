@@ -1,29 +1,46 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { fetchPublicInvoice, createInvoiceCheckout, downloadPublicInvoicePdf } from '@/lib/api';
+import { fetchPublicInvoice, createInvoiceCheckout, downloadPublicInvoicePdf, confirmPublicInvoicePayment } from '@/lib/api';
 import { toast } from 'sonner';
 import { Download, CreditCard, FileText } from 'lucide-react';
 
 export default function PublicPayPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const code = String(params.code);
   const token = searchParams.get('token') || undefined;
+  const sessionId = searchParams.get('session_id') || undefined;
   const [selectedPayment, setSelectedPayment] = useState<'full' | 'half'>('full');
+  const [verified, setVerified] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-invoice', code, token],
     queryFn: () => fetchPublicInvoice(code, token),
     enabled: !!code,
   });
+
+  useEffect(() => {
+    if (sessionId && code && !verified) {
+      setVerified(true);
+      confirmPublicInvoicePayment(code, sessionId, token)
+        .then(() => {
+          toast.success('Payment confirmed');
+          queryClient.invalidateQueries({ queryKey: ['public-invoice', code, token] });
+        })
+        .catch(() => {
+          toast.error('Payment confirmation failed');
+        });
+    }
+  }, [sessionId, code, token, verified, queryClient]);
 
   const checkoutMutation = useMutation({
     mutationFn: () => createInvoiceCheckout(code, selectedPayment, token),

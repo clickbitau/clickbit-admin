@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { PublicInvoicesService } from '../finance/public-invoices.service';
 
 interface UserLike {
   id: number;
@@ -25,7 +27,10 @@ function cleanIds(values: (number | null | undefined)[]): number[] {
 
 @Injectable()
 export class PortalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publicInvoices: PublicInvoicesService,
+  ) {}
 
   private async resolveCustomer(user: UserLike) {
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
@@ -357,17 +362,28 @@ export class PortalsService {
 
   async customerInvoicePdf(user: UserLike, id: number) {
     const invoice = await this.customerInvoiceDetail(user, id);
-    return { success: true, message: 'PDF generation not implemented in this pass', data: invoice.data };
+    return this.publicInvoices.generatePdf(invoice.data.id);
   }
 
-  async customerPayInvoice(user: UserLike, id: number, _body: any) {
-    const invoice = await this.customerInvoiceDetail(user, id);
-    return { success: true, message: 'Stripe payment not configured in this pass', data: invoice.data };
+  private async ensureInvoiceToken(invoice: any) {
+    if (invoice.token) return invoice.token;
+    const token = randomUUID();
+    await this.prisma.invoices.update({ where: { id: invoice.id }, data: { token } });
+    return token;
   }
 
-  async customerVerifyPayment(user: UserLike, id: number, _body: any) {
+  async customerPayInvoice(user: UserLike, id: number, body: any) {
     const invoice = await this.customerInvoiceDetail(user, id);
-    return { success: true, message: 'Payment verification not configured in this pass', data: invoice.data };
+    const token = await this.ensureInvoiceToken(invoice.data);
+    return this.publicInvoices.createCheckoutSession(invoice.data.package_code, body, token);
+  }
+
+  async customerVerifyPayment(user: UserLike, id: number, body: any) {
+    const invoice = await this.customerInvoiceDetail(user, id);
+    const sessionId = body?.session_id || body?.sessionId;
+    if (!sessionId) throw new BadRequestException('session_id is required');
+    const result = await this.publicInvoices.confirmPayment(invoice.data.package_code, sessionId, invoice.data.token || undefined);
+    return { success: result.success, data: result.package };
   }
 
   async customerDocuments(user: UserLike, query: any) {

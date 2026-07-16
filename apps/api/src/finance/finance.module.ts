@@ -15,6 +15,7 @@ import { PdfService } from './pdf.service';
 
 @Module({
   imports: [AuthModule],
+  exports: [PublicInvoicesService, PdfService],
   controllers: [
     ExpensesController,
     PaymentsController,
