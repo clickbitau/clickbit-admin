@@ -20,6 +20,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ServiceTokensModule } from './service-tokens/service-tokens.module';
 import { HrFormsModule } from './hr-forms/hr-forms.module';
 import { HrContractsModule } from './hr-contracts/hr-contracts.module';
+import { BugReportsModule } from './bug-reports/bug-reports.module';
+import { TicketAutomationModule } from './ticket-automation/ticket-automation.module';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { HrContractsModule } from './hr-contracts/hr-contracts.module';
     ServiceTokensModule,
     HrFormsModule,
     HrContractsModule,
+    BugReportsModule,
+    TicketAutomationModule,
   ],
 })
 export class AppModule {}
