@@ -24,6 +24,7 @@ import { BugReportsModule } from './bug-reports/bug-reports.module';
 import { TicketAutomationModule } from './ticket-automation/ticket-automation.module';
 import { StaffAdvancesModule } from './staff-advances/staff-advances.module';
 import { ContactModule } from './contact/contact.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { ContactModule } from './contact/contact.module';
     TicketAutomationModule,
     StaffAdvancesModule,
     ContactModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}
