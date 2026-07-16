@@ -1,5 +1,8 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevinService } from './devin.service';
+import { GithubService } from './github.service';
+import { BugFixPipelineService } from './bug-fix-pipeline.service';
 
 const bugReportInclude = {
   profiles_bug_reports_reported_byToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
@@ -16,7 +19,12 @@ function normalize(b: any) {
 
 @Injectable()
 export class BugReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly devin: DevinService,
+    private readonly github: GithubService,
+    private readonly pipeline: BugFixPipelineService,
+  ) {}
 
   async findAll(query: Record<string, unknown>) {
     const where: any = {};
@@ -52,16 +60,25 @@ export class BugReportsService {
     return { success: true, data: stats };
   }
 
-  getRepos() {
-    return { success: true, data: ['clickbitau/clickbit', 'clickbitau/clickbit-admin', 'clickbitau/click-deploy'] };
+  async getRepos() {
+    const repos = await this.pipeline.getAvailableRepos();
+    return { success: true, data: repos };
   }
 
-  getConfig() {
+  async getConfig() {
+    const devinConfigured = this.devin.isConfigured();
+    const githubConfigured = this.github.isConfigured();
+
+    const [devinStatus, githubStatus] = await Promise.all([
+      devinConfigured ? this.devin.testConnection().catch(() => ({ success: false, error: 'test failed' })) : Promise.resolve(null),
+      githubConfigured ? this.github.testConnection().catch(() => ({ success: false, error: 'test failed' })) : Promise.resolve(null),
+    ]);
+
     return {
       success: true,
       data: {
-        devin: { configured: false, status: null },
-        github: { configured: false, status: null },
+        devin: { configured: devinConfigured, status: devinStatus },
+        github: { configured: githubConfigured, status: githubStatus },
       },
     };
   }
@@ -73,13 +90,24 @@ export class BugReportsService {
     if (!['admin', 'manager'].includes(role) && bugReport.reported_by !== user.id) {
       throw new ForbiddenException('Not authorized to view this bug report');
     }
-    return { success: true, data: { ...normalize(bugReport), pipelineStatus: null } };
+    return { success: true, data: { ...normalize(bugReport), pipelineStatus: this.pipeline.getPipelineStatus(id) } };
   }
 
   async prDetails(id: number) {
     const bugReport = await this.prisma.bug_reports.findUnique({ where: { id } });
     if (!bugReport) throw new NotFoundException('Bug report not found');
     if (!bugReport.pull_request_number) throw new BadRequestException('No pull request associated with this bug report');
+
+    let prDetails: any = null;
+    if (this.github.isConfigured()) {
+      try {
+        const repoInfo = this.github.parseRepoFromUrl(bugReport.pull_request_url || '');
+        prDetails = await this.github.getPRDetails(bugReport.pull_request_number, repoInfo?.owner, repoInfo?.repo);
+      } catch (error: any) {
+        prDetails = { error: error.message };
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -87,11 +115,15 @@ export class BugReportsService {
         bugTitle: bugReport.title,
         pullRequestUrl: bugReport.pull_request_url,
         pullRequestNumber: bugReport.pull_request_number,
+        ...prDetails,
       },
     };
   }
 
-  async create(userId: number, dto: any) {
+  async create(user: any, dto: any) {
+    const isAdminOrManager = ['admin', 'manager'].includes(String(user.role).toLowerCase());
+    const safeRequireApproval = isAdminOrManager ? (dto.require_approval ?? false) : true;
+
     const bugReport = await this.prisma.bug_reports.create({
       data: {
         title: dto.title,
@@ -100,14 +132,20 @@ export class BugReportsService {
         priority: dto.priority || 'medium',
         screenshot_url: dto.screenshot_url,
         target_repo: dto.target_repo || 'clickbitau/clickbit',
-        require_approval: dto.require_approval ?? false,
-        reported_by: userId,
+        require_approval: safeRequireApproval,
+        reported_by: user.id,
         status: 'pending',
       },
       include: bugReportInclude,
     });
 
-    return { success: true, data: normalize(bugReport), pipeline: { started: false, message: 'Pipeline integration not implemented' } };
+    const pipelineResult = await this.pipeline.startPipeline(bugReport, {
+      autoMerge: !safeRequireApproval,
+      requireApproval: safeRequireApproval,
+    });
+
+    const updated = await this.prisma.bug_reports.findUnique({ where: { id: bugReport.id }, include: bugReportInclude });
+    return { success: true, data: normalize(updated || bugReport), pipeline: pipelineResult };
   }
 
   async updateStatus(id: number, dto: any) {
@@ -120,7 +158,7 @@ export class BugReportsService {
   }
 
   async markFixed(userId: number, id: number, dto: any) {
-    const prNumber = this.getPRNumberFromUrl(dto.pull_request_url);
+    const prNumber = this.github.getPRNumberFromUrl(dto.pull_request_url);
     const bugReport = await this.prisma.bug_reports.update({
       where: { id },
       data: {
@@ -133,17 +171,34 @@ export class BugReportsService {
       },
       include: bugReportInclude,
     });
+
+    if (dto.auto_merge && prNumber) {
+      await this.pipeline.approveAndMerge(id, userId).catch((error: any) => {
+        console.error(`[BugReportsService] Auto-merge failed for bug #${id}:`, error.message);
+      });
+    }
+
     return { success: true, data: normalize(bugReport) };
   }
 
-  syncAll() {
-    return { success: true, data: { synced: 0, message: 'Devin session sync not implemented' } };
+  async syncAll() {
+    const result = await this.pipeline.syncAllActive();
+    return { success: true, data: result };
   }
 
   async syncOne(id: number) {
     const bugReport = await this.prisma.bug_reports.findUnique({ where: { id } });
     if (!bugReport) throw new NotFoundException('Bug report not found');
-    return { success: true, message: 'Devin session sync not implemented', previousStatus: bugReport.status, newStatus: bugReport.status, data: normalize(bugReport) };
+    const previousStatus = bugReport.status;
+    const result = await this.pipeline.syncBugReport(id);
+    const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    return {
+      success: true,
+      message: result ? `Status synced: ${previousStatus} → ${updated?.status}` : 'No changes',
+      previousStatus,
+      newStatus: updated?.status,
+      data: normalize(updated || bugReport),
+    };
   }
 
   async retry(id: number) {
@@ -152,16 +207,24 @@ export class BugReportsService {
     if (!['failed', 'cancelled'].includes(bugReport.status || '')) {
       throw new BadRequestException('Can only retry failed or cancelled bug reports');
     }
-    const updated = await this.prisma.bug_reports.update({ where: { id }, data: { status: 'pending' }, include: bugReportInclude });
-    return { success: true, data: normalize(updated), pipeline: { retried: false, message: 'Pipeline retry not implemented' } };
+
+    const pipelineResult = await this.pipeline.retryPipeline(id, {
+      autoMerge: !bugReport.require_approval,
+      requireApproval: bugReport.require_approval,
+    });
+
+    const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    return { success: true, data: normalize(updated || bugReport), pipeline: pipelineResult };
   }
 
-  async approve(id: number) {
+  async approve(userId: number, id: number) {
     const bugReport = await this.prisma.bug_reports.findUnique({ where: { id } });
     if (!bugReport) throw new NotFoundException('Bug report not found');
     if (!bugReport.pull_request_url) throw new BadRequestException('No pull request to approve');
-    const updated = await this.prisma.bug_reports.update({ where: { id }, data: { status: 'merged' }, include: bugReportInclude });
-    return { success: true, data: normalize(updated), result: { merged: false, message: 'Auto-merge not implemented' } };
+
+    const result = await this.pipeline.approveAndMerge(id, userId);
+    const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    return { success: true, data: normalize(updated || bugReport), result };
   }
 
   async forceMerge(userId: number, id: number) {
@@ -170,19 +233,16 @@ export class BugReportsService {
     if (!bugReport.pull_request_url || !bugReport.pull_request_number) {
       throw new BadRequestException('No pull request associated with this bug report');
     }
-    const updated = await this.prisma.bug_reports.update({
-      where: { id },
-      data: { status: 'merged', merged_at: new Date(), approved_by: userId, approved_at: new Date() },
-      include: bugReportInclude,
-    });
-    return { success: true, message: `PR #${bugReport.pull_request_number} marked as merged`, data: normalize(updated) };
+
+    const result = await this.pipeline.approveAndMerge(id, userId);
+    const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    return { success: true, message: `PR #${bugReport.pull_request_number} merge attempted`, data: normalize(updated || bugReport), result };
   }
 
   async cancel(id: number) {
-    const bugReport = await this.prisma.bug_reports.findUnique({ where: { id } });
-    if (!bugReport) throw new NotFoundException('Bug report not found');
-    const updated = await this.prisma.bug_reports.update({ where: { id }, data: { status: 'cancelled' }, include: bugReportInclude });
-    return { success: true, data: normalize(updated), result: { cancelled: true } };
+    await this.pipeline.cancelPipeline(id);
+    const bugReport = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    return { success: true, data: normalize(bugReport || {}), result: { cancelled: true } };
   }
 
   async remove(id: number) {
@@ -193,10 +253,5 @@ export class BugReportsService {
     }
     await this.prisma.bug_reports.delete({ where: { id } });
     return { success: true, message: 'Bug report deleted' };
-  }
-
-  private getPRNumberFromUrl(url: string): number | null {
-    const match = url.match(/\/pull\/(\d+)/);
-    return match ? Number(match[1]) : null;
   }
 }
