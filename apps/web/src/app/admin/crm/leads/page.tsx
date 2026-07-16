@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
@@ -46,7 +47,7 @@ import {
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { CrmLead, Pipeline, PipelineStage, User } from '@/types/crm';
-import { Plus, Search, RefreshCw } from 'lucide-react';
+import { Plus, Search, RefreshCw, UserPlus, TrendingUp, Target, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LeadsPage() {
@@ -109,10 +110,10 @@ export default function LeadsPage() {
   const stats = useMemo(() => {
     const totalValue = leads.reduce((sum, l) => sum + (Number(l.estimated_value ?? 0)), 0);
     return [
-      { label: 'Total Leads', value: pagination.totalItems },
-      { label: 'Total Value', value: formatCurrency(totalValue) },
-      { label: 'Open', value: leads.filter((l) => l.status === 'open').length },
-      { label: 'Avg Score', value: leads.length ? Math.round(leads.reduce((s, l) => s + (l.lead_score ?? 0), 0) / leads.length) : 0 },
+      { label: 'Total Leads', value: pagination.totalItems, icon: UserPlus, accent: 'primary' as const },
+      { label: 'Total Value', value: formatCurrency(totalValue), icon: TrendingUp, accent: 'success' as const },
+      { label: 'Open', value: leads.filter((l) => l.status === 'open').length, icon: Target, accent: 'warning' as const },
+      { label: 'Avg Score', value: leads.length ? Math.round(leads.reduce((s, l) => s + (l.lead_score ?? 0), 0) / leads.length) : 0, icon: BarChart3, accent: 'secondary' as const },
     ];
   }, [leads, pagination.totalItems]);
 
@@ -156,24 +157,15 @@ export default function LeadsPage() {
   const stageOptions = currentPipeline?.stages ?? [];
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
-            <p className="text-muted-foreground">Track and score sales leads</p>
-          </div>
-          <div className="flex items-center gap-2">
+    <PageShell title="Leads" icon={UserPlus} description="Track and score sales leads" actions={<div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => recalculateLeadScores(token!).then(() => { toast.success('Scores recalculated'); queryClient.invalidateQueries({ queryKey: ['leads'] }); }).catch((err: Error) => toast.error(err.message || 'Failed'))}>
               <RefreshCw className="mr-1 h-4 w-4" /> Recalculate
             </Button>
             <Button onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="mr-1 h-4 w-4" /> New Lead</Button>
-          </div>
-        </div>
+        </div>}>
+      <StatCards cards={stats} />
 
-        <StatCards cards={stats} />
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
+      <div className="nm-raised p-4 grid grid-cols-1 gap-3 sm:grid-cols-6">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search leads..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -220,8 +212,8 @@ export default function LeadsPage() {
           </Select>
         </div>
 
-        <DataTable
-          headers={[
+      <DataTable
+        headers={[
             { key: 'lead', label: 'Lead' },
             { key: 'score', label: 'Score' },
             { key: 'status', label: 'Status' },
@@ -265,17 +257,16 @@ export default function LeadsPage() {
               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleting(lead)}>Delete</Button>
             </div>,
           ]}
-        />
+      />
 
-        <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
-      </div>
+      <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
 
       <LeadFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} pipelines={pipelines ?? []} stages={stageOptions} team={team ?? []} onSubmit={handleSubmit} loading={createMutation.isPending || updateMutation.isPending} />
 
       <ConfirmDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)} title="Delete Lead" description={`Delete "${deleting?.name}"?`} onConfirm={() => deleting && deleteMutation.mutate(deleting.id)} loading={deleteMutation.isPending} />
 
       <ScoreDialog lead={scoring} onClose={() => setScoring(null)} onSave={async (score) => { if (scoring) { await updateLeadScore(token!, scoring.id, score); toast.success('Score updated'); queryClient.invalidateQueries({ queryKey: ['leads'] }); setScoring(null); } }} />
-    </div>
+    </PageShell>
   );
 }
 

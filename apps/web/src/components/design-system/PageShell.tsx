@@ -1,25 +1,31 @@
+import { LucideIcon } from 'lucide-react';
+
 interface PageShellProps {
   title: string;
   description?: string;
+  icon?: LucideIcon;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function PageShell({ title, description, actions, children }: PageShellProps) {
+export function PageShell({ title, description, icon: Icon, actions, children }: PageShellProps) {
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-            {description && (
-              <p className="text-muted-foreground">{description}</p>
+    <div className="admin-page animate-fade-in">
+        <div className="admin-header">
+          <div className="flex items-center gap-4">
+            {Icon && (
+              <div className="nm-raised-sm w-11 h-11 flex items-center justify-center flex-shrink-0">
+                <Icon className="w-5 h-5 text-primary" />
+              </div>
             )}
+            <div>
+              <h1 className="admin-title">{title}</h1>
+              {description && <p className="admin-subtitle">{description}</p>}
+            </div>
           </div>
-          {actions}
+          {actions && <div className="flex items-center gap-3 flex-shrink-0">{actions}</div>}
         </div>
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
