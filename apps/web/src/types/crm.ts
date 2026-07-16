@@ -392,3 +392,33 @@ export interface ContactStats {
   newThisMonth: number;
   activeCustomers: number;
 }
+
+export interface OrderItem {
+  id: number;
+  product_name?: string;
+  quantity?: number;
+  unit_price?: number | string;
+  total_price?: number | string;
+  status?: string;
+  created_at?: string;
+}
+
+export interface Order {
+  id: number;
+  order_number?: string;
+  status?: string;
+  payment_status?: string;
+  subtotal?: number | string;
+  tax_amount?: number | string;
+  shipping_amount?: number | string;
+  discount_amount?: number | string;
+  total_amount?: number | string;
+  currency?: string;
+  customer_notes?: string;
+  admin_notes?: string;
+  estimated_delivery?: string;
+  shipped_at?: string;
+  delivered_at?: string;
+  order_items?: OrderItem[];
+  created_at?: string;
+}
