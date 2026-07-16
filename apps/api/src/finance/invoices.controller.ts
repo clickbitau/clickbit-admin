@@ -1,17 +1,21 @@
-import { Body, Controller, Delete, Get, HttpStatus, Param, ParseIntPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpStatus, Param, ParseIntPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RequestWithUser } from '../types/request-with-user';
 import { InvoicesService } from './invoices.service';
+import { PublicInvoicesService } from './public-invoices.service';
 import { CreateInvoiceDto, GetInvoicesQueryDto, RecordPaymentDto, UpdateInvoiceDto } from './dto/invoices.dto';
 import { setNoCache } from './finance-utils';
 
 @Controller('invoices')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
 export class InvoicesController {
-  constructor(private readonly invoicesService: InvoicesService) {}
+  constructor(
+    private readonly invoicesService: InvoicesService,
+    private readonly publicInvoicesService: PublicInvoicesService,
+  ) {}
 
   @Get('stats')
   @Roles('admin', 'manager')
@@ -42,6 +46,17 @@ export class InvoicesController {
     return res.json(await this.invoicesService.findOne(id));
   }
 
+  @Get(':id/pdf')
+  @Roles('admin', 'manager')
+  @Header('Content-Type', 'application/pdf')
+  async getPdf(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    setNoCache(res);
+    const { buffer, filename } = await this.publicInvoicesService.generatePdf(id);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
   @Put(':id')
   @Roles('admin', 'manager')
   async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateInvoiceDto, @Res() res: Response) {
@@ -67,7 +82,7 @@ export class InvoicesController {
   @Roles('admin', 'manager')
   async send(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser, @Res() res: Response) {
     setNoCache(res);
-    return res.json(await this.invoicesService.send(id, req.get('origin')));
+    return res.json(await this.invoicesService.send(id, req.get('origin'), req.user.email));
   }
 
   @Post(':id/mark-paid')

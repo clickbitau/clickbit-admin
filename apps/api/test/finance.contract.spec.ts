@@ -18,9 +18,11 @@ describe('Finance legacy contract tests', () => {
 
     const detailEnvelope = { success: true, data: { id: 1, invoice_number: 'INV-2026-00001', payments: [] } };
 
+    const pdfService = { generatePdf: jest.fn() } as any;
+
     it('GET /api/invoices returns the legacy list envelope', async () => {
       const service = { findAll: jest.fn().mockResolvedValue(listEnvelope) } as any;
-      const controller = new InvoicesController(service);
+      const controller = new InvoicesController(service, pdfService);
       const res = buildRes();
       await controller.findAll({}, res);
       expect(service.findAll).toHaveBeenCalled();
@@ -29,7 +31,7 @@ describe('Finance legacy contract tests', () => {
 
     it('GET /api/invoices/:id returns the legacy { success, data } envelope', async () => {
       const service = { findOne: jest.fn().mockResolvedValue(detailEnvelope) } as any;
-      const controller = new InvoicesController(service);
+      const controller = new InvoicesController(service, pdfService);
       const res = buildRes();
       await controller.findOne(1, res);
       expect(service.findOne).toHaveBeenCalledWith(1);
@@ -46,7 +48,7 @@ describe('Finance legacy contract tests', () => {
           creditBalance: 0,
         }),
       } as any;
-      const controller = new InvoicesController(service);
+      const controller = new InvoicesController(service, pdfService);
       const res = buildRes();
       const req = { user: { id: 1 } } as any;
       await controller.recordPayment(1, { amount: 50 }, req, res);

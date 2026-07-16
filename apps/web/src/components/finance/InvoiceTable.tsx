@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   Table,
   TableBody,
@@ -72,7 +73,11 @@ export function InvoiceTable({ invoices, loading }: InvoiceTableProps) {
         <TableBody>
           {invoices.map((invoice) => (
             <TableRow key={invoice.id}>
-              <TableCell className="font-medium">{invoice.invoice_number || invoice.package_code}</TableCell>
+              <TableCell className="font-medium">
+                <Link href={`/admin/finance/invoices/${invoice.id}`} className="hover:underline">
+                  {invoice.invoice_number || invoice.package_code}
+                </Link>
+              </TableCell>
               <TableCell>
                 <div className="flex flex-col">
                   <span>{invoice.client_name}</span>

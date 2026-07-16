@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, document_type_enum } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../common/email.service';
 import {
   asDocumentType,
   asJsonInput,
@@ -12,6 +14,7 @@ import {
   parseLineItems,
   parseNumber,
 } from './finance-utils';
+import { PublicInvoicesService } from './public-invoices.service';
 
 function statusTransitionValid(from: string | null | undefined, to: string): { valid: boolean; message?: string } {
   if (!from || from === to) return { valid: true };
@@ -40,7 +43,11 @@ function calculateTotals(items: { quantity: number; unit_price: number }[], taxT
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publicInvoicesService: PublicInvoicesService,
+    private readonly emailService: EmailService,
+  ) {}
 
   private get invoices() {
     return this.prisma.invoices;
@@ -438,21 +445,39 @@ export class InvoicesService {
     return buildLegacyMessageEnvelope('Invoice voided successfully', { id: updated.id, package_code: updated.package_code, status: updated.status });
   }
 
-  async send(id: number, origin?: string) {
+  async send(id: number, origin?: string, _userEmail?: string) {
     const invoice = await this.invoices.findUnique({ where: { id, deleted_at: null } });
     if (!invoice) throw new NotFoundException({ message: 'Invoice not found' });
 
+    const token = invoice.token || randomUUID();
+    const defaultValidUntil = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     const updated = await this.invoices.update({
       where: { id },
-      data: { status: 'sent', sent_at: new Date(), sent_count: { increment: 1 } },
+      data: {
+        status: 'sent',
+        sent_at: new Date(),
+        sent_count: { increment: 1 },
+        token,
+        valid_until: invoice.valid_until || defaultValidUntil,
+        updated_at: new Date(),
+      },
       include: invoiceInclude,
     });
+
+    const { buffer } = await this.publicInvoicesService.generatePdf(updated.id);
+    const emailResult = await this.emailService.sendInvoiceEmail(mapInvoice(updated, true), buffer, origin);
 
     const frontendUrl = process.env.FRONTEND_URL || origin || 'https://clickbit.com.au';
     const tokenParam = updated.token ? `?token=${updated.token}` : '';
     const paymentUrl = `${frontendUrl}/pay/${updated.package_code}${tokenParam}`;
 
-    return { message: 'Package marked as sent', paymentUrl, package: mapInvoice(updated) };
+    return {
+      message: 'Invoice sent successfully',
+      sent: emailResult.sent,
+      paymentUrl,
+      package: mapInvoice(updated, true),
+      emailError: emailResult.error,
+    };
   }
 
   async markPaid(id: number, userId: number) {
