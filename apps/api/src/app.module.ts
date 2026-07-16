@@ -23,6 +23,7 @@ import { HrContractsModule } from './hr-contracts/hr-contracts.module';
 import { BugReportsModule } from './bug-reports/bug-reports.module';
 import { TicketAutomationModule } from './ticket-automation/ticket-automation.module';
 import { StaffAdvancesModule } from './staff-advances/staff-advances.module';
+import { ContactModule } from './contact/contact.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { StaffAdvancesModule } from './staff-advances/staff-advances.module';
     BugReportsModule,
     TicketAutomationModule,
     StaffAdvancesModule,
+    ContactModule,
   ],
 })
 export class AppModule {}
