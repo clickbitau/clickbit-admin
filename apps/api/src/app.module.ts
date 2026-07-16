@@ -22,6 +22,7 @@ import { HrFormsModule } from './hr-forms/hr-forms.module';
 import { HrContractsModule } from './hr-contracts/hr-contracts.module';
 import { BugReportsModule } from './bug-reports/bug-reports.module';
 import { TicketAutomationModule } from './ticket-automation/ticket-automation.module';
+import { StaffAdvancesModule } from './staff-advances/staff-advances.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { TicketAutomationModule } from './ticket-automation/ticket-automation.mo
     HrContractsModule,
     BugReportsModule,
     TicketAutomationModule,
+    StaffAdvancesModule,
   ],
 })
 export class AppModule {}
