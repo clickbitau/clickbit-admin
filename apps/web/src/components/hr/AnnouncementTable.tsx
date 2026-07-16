@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,6 +12,7 @@ interface AnnouncementTableProps {
 }
 
 export function AnnouncementTable({ announcements, loading }: AnnouncementTableProps) {
+  const router = useRouter();
   if (loading) {
     return (
       <div className="space-y-2">
@@ -54,7 +56,7 @@ export function AnnouncementTable({ announcements, loading }: AnnouncementTableP
         </TableHeader>
         <TableBody>
           {announcements.map((announcement) => (
-            <TableRow key={announcement.id}>
+            <TableRow key={announcement.id} className="cursor-pointer" onClick={() => router.push(`/admin/hr/announcements/${announcement.id}`)}>
               <TableCell className="font-medium">{announcement.title}</TableCell>
               <TableCell className="capitalize">{(announcement.type || 'general').replace(/_/g, ' ')}</TableCell>
               <TableCell className="capitalize">{announcement.priority || 'normal'}</TableCell>

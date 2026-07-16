@@ -139,7 +139,7 @@ export class TimeOffService {
   }
 
   async approve(id: number, dto: Record<string, unknown>, _user: Profile) {
-    const request = await this.findOne(id);
+    const request = await this.findOneRaw(id);
     if (request.status !== 'pending') {
       throw new BadRequestException({ success: false, message: 'Request is not pending' });
     }
@@ -162,7 +162,7 @@ export class TimeOffService {
   }
 
   async reject(id: number, dto: Record<string, unknown>, _user: Profile) {
-    const request = await this.findOne(id);
+    const request = await this.findOneRaw(id);
     if (request.status !== 'pending') {
       throw new BadRequestException({ success: false, message: 'Request is not pending' });
     }
@@ -186,7 +186,7 @@ export class TimeOffService {
   }
 
   async revoke(id: number, dto: Record<string, unknown>, _user: Profile) {
-    const request = await this.findOne(id);
+    const request = await this.findOneRaw(id);
     if (request.status !== 'approved') {
       throw new BadRequestException({ success: false, message: 'Only approved requests can be revoked' });
     }
@@ -207,7 +207,7 @@ export class TimeOffService {
   }
 
   async cancel(id: number, user: Profile) {
-    const request = await this.findOne(id);
+    const request = await this.findOneRaw(id);
     const employee = await this.prisma.employees.findFirst({ where: { user_id: user.id, deleted_at: null } });
     if (request.employee_id !== employee?.id && !this.isAdminOrManager(user) && user.role !== 'admin') {
       throw new ForbiddenException({ success: false, message: 'Not authorized' });
@@ -254,7 +254,13 @@ export class TimeOffService {
     return buildLegacyDataEnvelope(events);
   }
 
-  private async findOne(id: number) {
+  async findOne(id: number) {
+    const request = await this.prisma.hr_time_off_requests.findUnique({ where: { id }, include: timeOffInclude });
+    if (!request) throw new NotFoundException({ success: false, message: 'Request not found' });
+    return buildLegacyDataEnvelope(mapTimeOff(request));
+  }
+
+  private async findOneRaw(id: number) {
     const request = await this.prisma.hr_time_off_requests.findUnique({ where: { id } });
     if (!request) throw new NotFoundException({ success: false, message: 'Request not found' });
     return request;

@@ -689,6 +689,54 @@ export async function fetchPublicHolidays(
   return (await api.get('/api/hr/public-holidays', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchTimeOffRequest(token: string, id: string | number): Promise<{ success: boolean; data: TimeOffRequest }> {
+  return (await api.get(`/api/hr/time-off/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function approveTimeOff(token: string, id: string | number, notes?: string): Promise<{ success: boolean; message: string; data?: TimeOffRequest }> {
+  return (await api.post(`/api/hr/time-off/${id}/approve`, { notes }, { headers: authHeaders(token) })).data;
+}
+
+export async function rejectTimeOff(token: string, id: string | number, notes?: string): Promise<{ success: boolean; message: string; data?: TimeOffRequest }> {
+  return (await api.post(`/api/hr/time-off/${id}/reject`, { notes }, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAnnouncement(token: string, id: string | number): Promise<Announcement> {
+  return (await api.get(`/api/hr/announcements/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateAnnouncement(token: string, id: string | number, data: Partial<Announcement>): Promise<Announcement> {
+  return (await api.put(`/api/hr/announcements/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteAnnouncement(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/hr/announcements/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchReminder(token: string, id: string | number): Promise<Reminder> {
+  return (await api.get(`/api/hr/reminders/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateReminder(token: string, id: string | number, data: Partial<Reminder>): Promise<Reminder> {
+  return (await api.put(`/api/hr/reminders/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteReminder(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/hr/reminders/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchPublicHoliday(token: string, id: string | number): Promise<{ success: boolean; data: PublicHoliday }> {
+  return (await api.get(`/api/hr/public-holidays/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function updatePublicHoliday(token: string, id: string | number, data: Partial<PublicHoliday>): Promise<{ success: boolean; data: PublicHoliday }> {
+  return (await api.put(`/api/hr/public-holidays/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deletePublicHoliday(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/hr/public-holidays/${id}`, { headers: authHeaders(token) })).data;
+}
+
 // ─── Support ─────────────────────────────────────────────────────────────
 
 export async function fetchTickets(

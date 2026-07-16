@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,6 +12,7 @@ interface PublicHolidayTableProps {
 }
 
 export function PublicHolidayTable({ holidays, loading }: PublicHolidayTableProps) {
+  const router = useRouter();
   if (loading) {
     return (
       <div className="space-y-2">
@@ -40,7 +42,7 @@ export function PublicHolidayTable({ holidays, loading }: PublicHolidayTableProp
         </TableHeader>
         <TableBody>
           {holidays.map((holiday) => (
-            <TableRow key={holiday.id}>
+            <TableRow key={holiday.id} className="cursor-pointer" onClick={() => router.push(`/admin/hr/public-holidays/${holiday.id}`)}>
               <TableCell className="font-medium">{holiday.name}</TableCell>
               <TableCell>{formatDate(holiday.holiday_date)}</TableCell>
               <TableCell>{holiday.location || '-'}</TableCell>
