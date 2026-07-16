@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Delete,
   Query,
@@ -144,5 +145,68 @@ export class UploadController {
     const result = await this.storageService.deleteByUrl(url);
     if (!result.success) throw new InternalServerErrorException(result.error || 'Delete failed');
     return { success: true, message: 'File deleted successfully' };
+  }
+
+  @Post('attachment')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAttachment(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('bucket') bucket: string,
+    @Query('folder') folder: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    if (!file) throw new BadRequestException('No file uploaded');
+
+    const allowedBuckets = [
+      'attachments',
+      'task-attachments',
+      'ticket-attachments',
+      'project-attachments',
+      'chat-attachments',
+      'documents',
+      'hr-documents',
+      'finance-documents',
+    ];
+    const targetBucket = allowedBuckets.includes(bucket) ? bucket : 'attachments';
+
+    const result = await this.storageService.upload(
+      file.buffer,
+      targetBucket,
+      file.originalname,
+      file.mimetype,
+      folder || '',
+    );
+
+    if (!result.success) {
+      throw new InternalServerErrorException(result.error || 'Upload failed');
+    }
+
+    return {
+      message: 'File uploaded successfully',
+      url: result.url,
+      filename: result.filename,
+      key: result.key,
+      bucket: targetBucket,
+      originalName: file.originalname,
+      originalSize: file.size,
+      mimetype: file.mimetype,
+    };
+  }
+
+  @Get('signed-url')
+  async getSignedUrl(@Query('url') url: string, @Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    if (!url) throw new BadRequestException('url is required');
+
+    const parsed = this.storageService.parseStorageUrl(url);
+    if (!parsed) throw new BadRequestException('Invalid storage URL');
+
+    const signed = await this.storageService.getSignedUrl(parsed.bucket, parsed.key);
+    if (!signed.success || !signed.url) {
+      throw new InternalServerErrorException(signed.error || 'Failed to refresh signed URL');
+    }
+
+    return { url: signed.url };
   }
 }
