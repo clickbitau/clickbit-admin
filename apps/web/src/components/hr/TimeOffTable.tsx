@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,6 +12,7 @@ interface TimeOffTableProps {
 }
 
 export function TimeOffTable({ requests, loading }: TimeOffTableProps) {
+  const router = useRouter();
   if (loading) {
     return (
       <div className="space-y-2">
@@ -60,7 +62,7 @@ export function TimeOffTable({ requests, loading }: TimeOffTableProps) {
             const user = request.employee?.user;
             const name = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : `Employee #${request.employee_id}`;
             return (
-              <TableRow key={request.id}>
+              <TableRow key={request.id} className="cursor-pointer" onClick={() => router.push(`/admin/hr/time-off/${request.id}`)}>
                 <TableCell className="font-medium">{name}</TableCell>
                 <TableCell className="capitalize">{request.leave_type}</TableCell>
                 <TableCell>{formatDate(request.start_date)}</TableCell>

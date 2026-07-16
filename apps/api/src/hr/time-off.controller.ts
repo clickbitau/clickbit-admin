@@ -25,6 +25,12 @@ export class TimeOffController {
     return res.json(await this.timeOffService.findAll(query, req.user));
   }
 
+  @Get(':id')
+  async findOne(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.timeOffService.findOne(id));
+  }
+
   @Post()
   async create(@Body() dto: CreateTimeOffDto, @Req() req: RequestWithUser, @Res() res: Response) {
     setNoCache(res);

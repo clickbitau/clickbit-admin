@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,6 +12,7 @@ interface ReminderTableProps {
 }
 
 export function ReminderTable({ reminders, loading }: ReminderTableProps) {
+  const router = useRouter();
   if (loading) {
     return (
       <div className="space-y-2">
@@ -51,7 +53,7 @@ export function ReminderTable({ reminders, loading }: ReminderTableProps) {
         </TableHeader>
         <TableBody>
           {reminders.map((reminder) => (
-            <TableRow key={reminder.id}>
+            <TableRow key={reminder.id} className="cursor-pointer" onClick={() => router.push(`/admin/hr/reminders/${reminder.id}`)}>
               <TableCell className="font-medium">{reminder.title}</TableCell>
               <TableCell className="capitalize">{reminder.trigger_type || 'regular'}</TableCell>
               <TableCell>{formatDate(reminder.reminder_date)}</TableCell>

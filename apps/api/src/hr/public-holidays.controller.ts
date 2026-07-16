@@ -19,6 +19,13 @@ export class PublicHolidaysController {
     return res.json(await this.publicHolidaysService.findAll(query, req.user));
   }
 
+  @Get(':id')
+  @Roles('admin', 'manager')
+  async findOne(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.publicHolidaysService.findOne(id));
+  }
+
   @Post('import')
   @Roles('admin', 'manager')
   async import(@Body() dto: ImportPublicHolidaysDto, @Req() req: RequestWithUser, @Res() res: Response) {

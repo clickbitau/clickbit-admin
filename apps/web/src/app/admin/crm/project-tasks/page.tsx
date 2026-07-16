@@ -25,6 +25,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchTasks, fetchAssignees, updateTaskStatus } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { ProjectTask, User } from '@/types/crm';
+import Link from 'next/link';
 import { Plus, Search, FolderKanban as FolderKanbanIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -125,7 +126,7 @@ export default function ProjectTasksPage() {
         keyExtractor={(t) => t.id}
         loading={isLoading}
         renderRow={(t) => [
-          <div key="task"><p className="font-medium">{t.title}</p><p className="text-xs text-muted-foreground">{t.description}</p></div>,
+          <div key="task"><Link href={`/admin/crm/project-tasks/${t.id}`} className="font-medium hover:underline">{t.title}</Link><p className="text-xs text-muted-foreground">{t.description}</p></div>,
           <span key="project" className="text-sm text-muted-foreground">{t.crmProject?.name || t.project?.title || '-'}</span>,
           <StatusBadge key="status" status={t.status} />,
           <PriorityBadge key="priority" priority={t.priority} />,

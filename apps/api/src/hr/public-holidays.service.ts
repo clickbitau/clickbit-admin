@@ -118,10 +118,10 @@ export class PublicHolidaysService {
     return buildLegacyMessageEnvelope(`Successfully imported ${imported} holidays for ${locationName}.`);
   }
 
-  private async findOne(id: number) {
+  async findOne(id: number) {
     const holiday = await this.prisma.hr_public_holidays.findUnique({ where: { id } });
     if (!holiday) throw new NotFoundException({ success: false, message: 'Holiday not found' });
-    return holiday;
+    return buildLegacyDataEnvelope(holiday);
   }
 
   private fetchHolidays(year: number, countryCode: string): Promise<Array<{ date: string; name: string; global: boolean }>> {

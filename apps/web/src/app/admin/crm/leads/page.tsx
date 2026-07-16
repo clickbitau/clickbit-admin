@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -228,7 +229,7 @@ export default function LeadsPage() {
           loading={isLoading}
           renderRow={(lead) => [
             <div key="lead">
-              <p className="font-medium">{lead.name}</p>
+              <Link href={`/admin/crm/leads/${lead.id}`} className="font-medium hover:underline">{lead.name}</Link>
               <p className="text-xs text-muted-foreground">{lead.email}{lead.phone ? ` · ${lead.phone}` : ''}</p>
               {lead.company && <p className="text-xs text-muted-foreground">{lead.company.name}</p>}
             </div>,

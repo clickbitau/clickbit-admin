@@ -1,10 +1,12 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { fetchContacts } from '@/lib/crm-api';
 import type { Contact } from '@clickbit/shared';
 
 export default function ContactsPage() {
+  const router = useRouter();
   return (
     <ResourceListPage<Contact>
       title="Contacts"
@@ -19,6 +21,7 @@ export default function ContactsPage() {
         { key: 'lifecycle_stage', header: 'Lifecycle Stage' },
         { key: 'created_at', header: 'Created' },
       ]}
+      onRowClick={(row) => router.push(`/admin/crm/contacts/${row.id}`)}
     />
   );
 }
