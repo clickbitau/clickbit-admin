@@ -165,17 +165,22 @@ The recommended migration order after auth/CRM is:
 6. **content / marketing** — `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/team/*`, `/api/public/*`.
 7. ✅ **settings / admin** — `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*` (see PR #12). `/api/credentials/*` deferred to gap-filling pass.
 
-## Background-worker services to migrate
+## Background-worker services to migrate ✅
 
-The following recurring/background jobs currently live in the legacy Express process and must move into the `apps/api` worker process (or a dedicated NestJS worker) so the admin API remains stateless:
+Implemented in `apps/api/src/workers/` as NestJS `@Cron` / `@Interval` jobs, gated by `RUN_SCHEDULERS=true`:
 
-- `mailSyncWorker` (IMAP sync and inbound email processing)
-- Payroll/scheduling workers: `payrollScheduler`, `reminderScheduler`, `recurringTaskScheduler`, `shiftScheduler`, `attendanceScheduler`
 - `blogScheduler` (scheduled publishing)
+- `reminderScheduler`
+- `recurringTaskScheduler`
+- `shiftNotificationScheduler` / `attendanceMonitorService`
+- `payrollAutomationService` (placeholder pending payslip math)
+- `mailSyncWorker` (placeholder pending IMAP/SMTP integration)
 - `analyticsAlerts`
 - `announcementAutomationService`
+- `sessionSyncService`
+- `taskReminderService`
 
-Run these as NestJS `@Cron` / `@Interval` jobs or as a separate `apps/worker` process that shares `packages/shared` and the Prisma client.
+Deferred to gap-filling: actual email dispatch, IMAP sync, full payroll calculation.
 
 ## Validation checklist per module
 
