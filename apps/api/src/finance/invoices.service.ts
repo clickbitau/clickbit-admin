@@ -587,4 +587,102 @@ export class InvoicesService {
       errors: errors.length > 0 ? errors : undefined,
     };
   }
+
+  async createFromContact(userId: number, contactId: number) {
+    const contact = await this.prisma.contacts.findUnique({ where: { id: contactId, deleted_at: null } });
+    if (!contact) throw new NotFoundException({ message: 'Contact not found' });
+
+    const customFields = JSON.parse((contact.custom_fields as string) || '{}') as Record<string, any>;
+    const items: any[] = [];
+    const selectedServices = customFields.selectedServices || {};
+    for (const [serviceId, service] of Object.entries(selectedServices)) {
+      if (service && typeof service === 'object') {
+        items.push({
+          name: (service as any).name || (service as any).serviceName || `Service ${serviceId}`,
+          description: (service as any).description || '',
+          quantity: 1,
+          unit_price: parseFloat((service as any).price) || 0,
+          total: parseFloat((service as any).price) || 0,
+        });
+      }
+    }
+    const selectedFeatures = customFields.selectedFeatures || {};
+    for (const [_serviceId, features] of Object.entries(selectedFeatures)) {
+      if (features && typeof features === 'object') {
+        for (const [featureId, feature] of Object.entries(features as any)) {
+          if (feature && typeof feature === 'object') {
+            items.push({
+              name: (feature as any).name || (feature as any).featureName || `Feature ${featureId}`,
+              description: (feature as any).description || '',
+              quantity: 1,
+              unit_price: parseFloat((feature as any).price) || 0,
+              total: parseFloat((feature as any).price) || 0,
+            });
+          }
+        }
+      }
+    }
+    if (items.length === 0) {
+      items.push({ name: 'Custom Services', description: 'Services to be specified', quantity: 1, unit_price: 0, total: 0 });
+    }
+
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+    const taxRate = 10;
+    const taxAmount = subtotal * (taxRate / 100);
+    const total = subtotal + taxAmount;
+
+    const projectName = customFields.projectName || '';
+    const projectDescription = customFields.projectDescription || '';
+    const budget = customFields.budget || '';
+    const clientNotes = [
+      projectName ? `Project: ${projectName}` : '',
+      projectDescription ? `Description: ${projectDescription}` : '',
+      customFields.businessObjectives ? `Objectives: ${customFields.businessObjectives}` : '',
+      customFields.targetAudience ? `Target Audience: ${customFields.targetAudience}` : '',
+      budget ? `Budget: ${budget}` : '',
+      customFields.startDate ? `Start Date: ${customFields.startDate}` : '',
+      customFields.endDate ? `End Date: ${customFields.endDate}` : '',
+      customFields.milestones ? `Milestones: ${customFields.milestones}` : '',
+      customFields.projectConstraints ? `Constraints: ${customFields.projectConstraints}` : '',
+      customFields.futureExpansion ? `Future Plans: ${customFields.futureExpansion}` : '',
+    ].filter(Boolean).join('\n');
+
+    const title = projectName ? `${projectName.replace(/^project:\s*/i, '').trim()} - Custom Package` : `Custom Package for ${contact.name}`;
+
+    const dto = {
+      source_id: contact.id,
+      source_type: 'contact',
+      client_name: customFields.clientName || customFields.primaryContact || contact.name || 'Customer',
+      client_email: customFields.email || contact.email || '',
+      client_phone: customFields.contactNumber || contact.phone || null,
+      client_company: customFields.companyName || contact.company || null,
+      title,
+      description: projectDescription || contact.subject || 'Custom service package based on project requirements',
+      client_notes: clientNotes || contact.message || null,
+      notes: `Created from Power Your Project form submission (Contact ID: ${contact.id})`,
+      items,
+      line_items: items,
+      tax_type: 'gst_calculated',
+      tax_rate: taxRate,
+      tax_amount: taxAmount,
+      subtotal,
+      total_amount: total,
+      amount_due: total,
+      currency: 'AUD',
+      status: 'draft',
+      document_type: 'invoice',
+      issue_date: new Date().toISOString().split('T')[0],
+    };
+
+    const created = await this.create(userId, dto);
+    return { success: true, package: created };
+  }
+
+  async recoverStripePayment(id: number) {
+    return this.publicInvoicesService.recoverStripePayment(id);
+  }
+
+  async recoverStripeByClient(dto: { client_name: string }) {
+    return this.publicInvoicesService.recoverStripeByClientName(dto.client_name);
+  }
 }
