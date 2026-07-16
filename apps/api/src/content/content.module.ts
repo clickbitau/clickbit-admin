@@ -34,5 +34,14 @@ import { MarketingService } from './marketing.service';
     BlogService,
     MarketingService,
   ],
+  exports: [
+    PublicContentService,
+    ServicesService,
+    PortfolioService,
+    TeamService,
+    ReviewsService,
+    BlogService,
+    MarketingService,
+  ],
 })
 export class ContentModule {}

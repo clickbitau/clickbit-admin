@@ -15,6 +15,7 @@ export * from './hr';
 export * from './support';
 export * from './communication';
 export * from './content';
+export * from './settings';
 
 export type UserRole = 'admin' | 'manager' | 'employee' | 'customer' | 'agent';
 
