@@ -48,6 +48,17 @@ import type {
   MessageListResponse,
   Workspace,
 } from '@/types/communication';
+import type {
+  BlogPost,
+  Comment,
+  ContentLegacyDataResponse,
+  ContentLegacyListResponse,
+  ContentLegacyMessageResponse,
+  PortfolioItem,
+  Review,
+  Service,
+  TeamMember,
+} from '@/types/content';
 
 const api = axios.create({
   baseURL: '/',
@@ -899,6 +910,136 @@ export async function updateMailTemplate(token: string, id: string, data: Partia
 
 export async function deleteMailTemplate(token: string, id: string): Promise<CommunicationLegacyMessageResponse> {
   return (await api.delete(`/api/mail/templates/${id}`, { headers: authHeaders(token) })).data;
+}
+
+// ─── Content / Marketing ───────────────────────────────────────────────────
+
+export async function fetchServices(params?: Record<string, string | number | boolean>): Promise<Service[]> {
+  return (await api.get('/api/services', { params })).data;
+}
+
+export async function fetchServiceBySlug(slug: string): Promise<Service> {
+  return (await api.get(`/api/services/${slug}`)).data;
+}
+
+export async function fetchAdminServices(token: string, params?: Record<string, string | number | boolean>): Promise<{ items: Service[]; pagination: { total: number; limit: number | null; offset: number; hasMore: boolean } }> {
+  return (await api.get('/api/services/admin/all', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createService(token: string, data: Partial<Service>): Promise<{ message: string; item: Service }> {
+  return (await api.post('/api/services/admin', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateService(token: string, id: number, data: Partial<Service>): Promise<{ message: string; item: Service }> {
+  return (await api.put(`/api/services/admin/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteService(token: string, id: number): Promise<ContentLegacyMessageResponse> {
+  return (await api.delete(`/api/services/admin/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchPortfolio(params?: Record<string, string | number | boolean>): Promise<{ items: PortfolioItem[]; pagination: { total: number; limit: number | null; offset: number; hasMore: boolean } }> {
+  return (await api.get('/api/portfolio', { params })).data;
+}
+
+export async function fetchPortfolioBySlug(slug: string): Promise<PortfolioItem> {
+  return (await api.get(`/api/portfolio/${slug}`)).data;
+}
+
+export async function fetchAdminPortfolio(token: string, params?: Record<string, string | number | boolean>): Promise<{ items: PortfolioItem[]; pagination: { total: number; limit: number; offset: number; hasMore: boolean } }> {
+  return (await api.get('/api/portfolio/admin/all', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createPortfolioItem(token: string, data: Partial<PortfolioItem>): Promise<{ message: string; item: PortfolioItem }> {
+  return (await api.post('/api/portfolio/admin', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updatePortfolioItem(token: string, id: number, data: Partial<PortfolioItem>): Promise<{ message: string; item: PortfolioItem }> {
+  return (await api.put(`/api/portfolio/admin/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deletePortfolioItem(token: string, id: number): Promise<ContentLegacyMessageResponse> {
+  return (await api.delete(`/api/portfolio/admin/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchTeamMembers(): Promise<TeamMember[]> {
+  return (await api.get('/api/team')).data;
+}
+
+export async function fetchAdminTeamMembers(token: string): Promise<TeamMember[]> {
+  return (await api.get('/api/team/admin/all', { headers: authHeaders(token) })).data;
+}
+
+export async function createTeamMember(token: string, data: Partial<TeamMember>): Promise<TeamMember> {
+  return (await api.post('/api/team', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateTeamMember(token: string, id: number, data: Partial<TeamMember>): Promise<TeamMember> {
+  return (await api.put(`/api/team/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteTeamMember(token: string, id: number): Promise<ContentLegacyMessageResponse> {
+  return (await api.delete(`/api/team/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchReviews(params?: Record<string, string | number | boolean>): Promise<Review[]> {
+  return (await api.get('/api/reviews', { params })).data;
+}
+
+export async function submitReview(data: Partial<Review>): Promise<{ message: string; review: Review }> {
+  return (await api.post('/api/reviews', data)).data;
+}
+
+export async function fetchAdminReviews(token: string, params?: Record<string, string | number | boolean>): Promise<{ reviews: Review[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number }; stats: unknown }> {
+  return (await api.get('/api/admin/reviews', { params, headers: authHeaders(token) })).data;
+}
+
+export async function updateReviewStatus(token: string, id: number, status: string): Promise<{ message: string; review: Review }> {
+  return (await api.put(`/api/admin/reviews/${id}/status`, { status }, { headers: authHeaders(token) })).data;
+}
+
+export async function updateReview(token: string, id: number, data: Partial<Review>): Promise<{ message: string; review: Review }> {
+  return (await api.put(`/api/admin/reviews/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteReview(token: string, id: number): Promise<ContentLegacyMessageResponse> {
+  return (await api.delete(`/api/admin/reviews/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchBlogPosts(params?: Record<string, string | number | boolean>): Promise<{ posts: BlogPost[]; pagination: { total: number; limit: number | null; offset: number; hasMore: boolean } }> {
+  return (await api.get('/api/blog', { params })).data;
+}
+
+export async function fetchBlogPost(slug: string): Promise<BlogPost> {
+  return (await api.get(`/api/blog/${slug}`)).data;
+}
+
+export async function fetchBlogComments(slug: string): Promise<{ comments: Comment[]; commentsDisabled: boolean; totalCount: number }> {
+  return (await api.get(`/api/blog/${slug}/comments`)).data;
+}
+
+export async function submitComment(slug: string, data: { author_name: string; author_email: string; content: string; parent_id?: number }): Promise<{ message: string; comment: Comment }> {
+  return (await api.post(`/api/blog/${slug}/comments`, data)).data;
+}
+
+export async function fetchAdminBlogPosts(token: string, params?: Record<string, string | number | boolean>): Promise<{ posts: BlogPost[]; pagination: { total: number; limit: number; offset: number; hasMore: boolean } }> {
+  return (await api.get('/api/blog/admin/all', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createBlogPost(token: string, data: Partial<BlogPost>): Promise<{ message: string; post: BlogPost }> {
+  return (await api.post('/api/blog/admin', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateBlogPost(token: string, id: number, data: Partial<BlogPost>): Promise<{ message: string; post: BlogPost }> {
+  return (await api.put(`/api/blog/admin/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteBlogPost(token: string, id: number): Promise<ContentLegacyMessageResponse> {
+  return (await api.delete(`/api/blog/admin/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchPublicContent(key: string): Promise<unknown> {
+  return (await api.get(`/api/public/${key}`)).data;
 }
 
 export default api;
