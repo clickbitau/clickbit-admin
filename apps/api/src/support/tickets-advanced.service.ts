@@ -1,5 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
+import * as crypto from 'crypto';
+import * as http from 'http';
+import * as https from 'https';
 import { PrismaService } from '../prisma/prisma.service';
 
 function toNum(value: unknown): number | undefined {
@@ -117,8 +120,23 @@ export class TicketsAdvancedService {
   // -------------------------------------------------------------------------
   // Audit log
   // -------------------------------------------------------------------------
-  auditLog(_ticketId: number, _query: any) {
-    return { success: true, data: [], pagination: { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 } };
+  async auditLog(ticketId: number, query: any) {
+    await this.ensureTicket(ticketId);
+    const { page, limit, skip } = this.paginate(query);
+    const [rows, total] = await Promise.all([
+      this.prisma.audit_logs.findMany({
+        where: { resource_type: 'tickets', resource_id: String(ticketId) },
+        orderBy: { event_time: 'desc' },
+        take: limit,
+        skip,
+      }),
+      this.prisma.audit_logs.count({ where: { resource_type: 'tickets', resource_id: String(ticketId) } }),
+    ]);
+    return {
+      success: true,
+      data: rows,
+      pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit },
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -175,7 +193,27 @@ export class TicketsAdvancedService {
   }
 
   slaDefaults() {
-    return { success: true, data: [] };
+    return {
+      success: true,
+      data: [
+        {
+          name: 'Billing Tickets',
+          description: 'Auto-assign billing tickets',
+          conditions: { match_all: true, rules: [{ field: 'category', operator: 'equals', value: 'billing' }] },
+          action_type: 'add_tag',
+          action_value: { tag: 'billing-team' },
+          priority: 100,
+        },
+        {
+          name: 'Urgent Tickets Alert',
+          description: 'Add urgent tag to urgent priority tickets',
+          conditions: { match_all: true, rules: [{ field: 'priority', operator: 'equals', value: 'urgent' }] },
+          action_type: 'add_tag',
+          action_value: { tag: 'needs-attention' },
+          priority: 90,
+        },
+      ],
+    };
   }
 
   async slaStatus(ticketId: number) {
@@ -198,24 +236,245 @@ export class TicketsAdvancedService {
   // -------------------------------------------------------------------------
   // Assignment rules
   // -------------------------------------------------------------------------
-  listAssignmentRules() {
-    return { success: true, data: [] };
+  private evaluateCondition(ticket: any, condition: any): boolean {
+    const { field, operator, value } = condition;
+    const ticketValue = ticket[field];
+    switch (operator) {
+      case 'equals':
+        return ticketValue === value;
+      case 'not_equals':
+        return ticketValue !== value;
+      case 'in':
+        return Array.isArray(value) && value.includes(ticketValue);
+      case 'not_in':
+        return Array.isArray(value) && !value.includes(ticketValue);
+      case 'contains':
+        return typeof ticketValue === 'string' && ticketValue.toLowerCase().includes(String(value).toLowerCase());
+      case 'not_contains':
+        return typeof ticketValue === 'string' && !ticketValue.toLowerCase().includes(String(value).toLowerCase());
+      case 'starts_with':
+        return typeof ticketValue === 'string' && ticketValue.toLowerCase().startsWith(String(value).toLowerCase());
+      case 'ends_with':
+        return typeof ticketValue === 'string' && ticketValue.toLowerCase().endsWith(String(value).toLowerCase());
+      case 'includes':
+        return Array.isArray(ticketValue) && ticketValue.includes(value);
+      case 'not_includes':
+        return Array.isArray(ticketValue) && !ticketValue.includes(value);
+      case 'is_empty':
+        return !ticketValue || (Array.isArray(ticketValue) && ticketValue.length === 0);
+      case 'is_not_empty':
+        return !!ticketValue && (!Array.isArray(ticketValue) || ticketValue.length > 0);
+      case 'regex':
+        try {
+          return new RegExp(value, 'i').test(ticketValue);
+        } catch {
+          return false;
+        }
+      default:
+        return false;
+    }
   }
 
-  createAssignmentRule(_body: any) {
-    throw new BadRequestException('Assignment rules not implemented in this pass');
+  private matchesConditions(conditions: any, ticket: any): boolean {
+    if (!conditions) return true;
+    const { match_all, rules } = conditions || {};
+    if (!rules || !Array.isArray(rules) || rules.length === 0) return true;
+    return match_all
+      ? rules.every((r: any) => this.evaluateCondition(ticket, r))
+      : rules.some((r: any) => this.evaluateCondition(ticket, r));
   }
 
-  updateAssignmentRule(_id: number, _body: any) {
-    throw new BadRequestException('Assignment rules not implemented in this pass');
+  private async executeRuleAction(rule: any, ticket: any, apply = true) {
+    const ticketId = ticket.id;
+    const updates: any = {};
+    let actionDescription = '';
+
+    switch (rule.action_type) {
+      case 'assign_user':
+        if (rule.assign_to_user_id) {
+          updates.assigned_to = rule.assign_to_user_id;
+          actionDescription = `Assigned to user ${rule.assign_to_user_id}`;
+        }
+        break;
+
+      case 'assign_round_robin': {
+        const rrUsers = Array.isArray(rule.round_robin_users) ? rule.round_robin_users : [];
+        if (rrUsers.length > 0) {
+          const index = (rule.round_robin_index ?? 0) % rrUsers.length;
+          updates.assigned_to = rrUsers[index];
+          if (apply) {
+            await this.prisma.ticket_assignment_rules.update({
+              where: { id: rule.id },
+              data: { round_robin_index: ((rule.round_robin_index ?? 0) + 1) % rrUsers.length } as any,
+            });
+          }
+          actionDescription = `Round robin assigned to user ${updates.assigned_to}`;
+        }
+        break;
+      }
+
+      case 'assign_least_busy': {
+        const users = Array.isArray(rule.round_robin_users) ? rule.round_robin_users : [];
+        if (users.length > 0) {
+          const counts = await Promise.all(
+            users.map(async (userId: number) => ({
+              userId,
+              count: await this.prisma.tickets.count({
+                where: {
+                  assigned_to: userId,
+                  status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] },
+                  deleted_at: null,
+                } as any,
+              }),
+            })),
+          );
+          const least = counts.reduce((min, curr) => (curr.count < min.count ? curr : min), counts[0]);
+          updates.assigned_to = least.userId;
+          actionDescription = `Assigned to least busy user ${least.userId} (${least.count} tickets)`;
+        }
+        break;
+      }
+
+      case 'add_tag': {
+        const tag = rule.action_value?.tag;
+        if (tag) {
+          const current = await this.prisma.tickets.findUnique({ where: { id: ticketId }, select: { tags: true } });
+          const currentTags = Array.isArray(current?.tags) ? (current.tags as any[]) : [];
+          if (!currentTags.includes(tag)) {
+            updates.tags = [...currentTags, tag];
+            actionDescription = `Added tag "${tag}"`;
+          }
+        }
+        break;
+      }
+
+      case 'set_priority': {
+        const priority = rule.action_value?.priority;
+        if (priority) {
+          updates.priority = priority;
+          actionDescription = `Set priority to "${priority}"`;
+        }
+        break;
+      }
+
+      case 'add_watcher': {
+        const userId = rule.action_value?.user_id;
+        if (userId) {
+          if (apply) {
+            await this.prisma.ticket_watchers.upsert({
+              where: { ticket_id_user_id: { ticket_id: ticketId, user_id: Number(userId) } },
+              create: { ticket_id: ticketId, user_id: Number(userId), notify_on_reply: true, notify_on_status_change: true } as any,
+              update: {} as any,
+            });
+          }
+          actionDescription = `Added watcher user ${userId}`;
+        }
+        break;
+      }
+    }
+
+    if (apply && Object.keys(updates).length > 0) {
+      await this.prisma.tickets.update({ where: { id: ticketId }, data: updates });
+    }
+
+    return { updates, actionDescription };
   }
 
-  deleteAssignmentRule(_id: number) {
-    throw new BadRequestException('Assignment rules not implemented in this pass');
+  async processTicket(ticketId: number, triggerType = 'create') {
+    const ticket = await this.ensureTicket(ticketId);
+    const rules = await this.prisma.ticket_assignment_rules.findMany({
+      where: { is_active: true, trigger_on: { in: [triggerType, 'both'] } as any },
+      orderBy: { priority: 'desc' },
+    });
+    const applied: { rule: string; actionDescription: string; rule_id: number }[] = [];
+
+    for (const rule of rules) {
+      if (this.matchesConditions(rule.conditions, ticket)) {
+        const { actionDescription } = await this.executeRuleAction(rule, ticket, true);
+        applied.push({ rule: rule.name, actionDescription, rule_id: rule.id });
+        await this.prisma.ticket_assignment_rules.update({
+          where: { id: rule.id },
+          data: { times_triggered: { increment: 1 }, last_triggered_at: new Date() } as any,
+        });
+        if (rule.stop_processing) break;
+      }
+    }
+
+    return { success: true, data: applied };
   }
 
-  testAssignmentRule(_body: any) {
-    return { success: true, data: null, message: 'Assignment rules not implemented in this pass' };
+  async listAssignmentRules() {
+    const rows = await this.prisma.ticket_assignment_rules.findMany({ orderBy: { priority: 'desc' } });
+    return { success: true, data: rows };
+  }
+
+  async createAssignmentRule(body: any, userId: number) {
+    const row = await this.prisma.ticket_assignment_rules.create({
+      data: {
+        name: body.name,
+        description: body.description,
+        is_active: body.is_active ?? true,
+        priority: Number(body.priority ?? 0),
+        conditions: body.conditions ?? { match_all: true, rules: [] },
+        action_type: body.action_type || 'assign_user',
+        action_value: body.action_value ?? null,
+        assign_to_user_id: body.assign_to_user_id ? Number(body.assign_to_user_id) : null,
+        round_robin_users: body.round_robin_users ?? [],
+        round_robin_index: Number(body.round_robin_index ?? 0),
+        stop_processing: body.stop_processing ?? true,
+        apply_to_existing: body.apply_to_existing ?? false,
+        trigger_on: body.trigger_on || 'create',
+        created_by: userId,
+      } as any,
+    });
+    return { success: true, data: row };
+  }
+
+  async updateAssignmentRule(id: number, body: any) {
+    const existing = await this.prisma.ticket_assignment_rules.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Assignment rule not found');
+    const data: any = {};
+    const fields = [
+      'name',
+      'description',
+      'is_active',
+      'priority',
+      'conditions',
+      'action_type',
+      'action_value',
+      'assign_to_user_id',
+      'round_robin_users',
+      'round_robin_index',
+      'stop_processing',
+      'apply_to_existing',
+      'trigger_on',
+    ];
+    for (const f of fields) if (body[f] !== undefined) data[f] = body[f];
+    const row = await this.prisma.ticket_assignment_rules.update({ where: { id }, data });
+    return { success: true, data: row };
+  }
+
+  async deleteAssignmentRule(id: number) {
+    const existing = await this.prisma.ticket_assignment_rules.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Assignment rule not found');
+    await this.prisma.ticket_assignment_rules.delete({ where: { id } });
+    return { success: true, message: 'Assignment rule deleted' };
+  }
+
+  async testAssignmentRule(body: any) {
+    const ticketId = Number(body.ticket_id);
+    if (!ticketId) throw new BadRequestException('ticket_id is required');
+    await this.ensureTicket(ticketId);
+    const ruleId = body.rule_id ? Number(body.rule_id) : null;
+    if (ruleId) {
+      const rule = await this.prisma.ticket_assignment_rules.findUnique({ where: { id: ruleId } });
+      if (!rule) throw new NotFoundException('Rule not found');
+      const ticket = await this.prisma.tickets.findUnique({ where: { id: ticketId } });
+      const matches = this.matchesConditions(rule.conditions, ticket);
+      return { success: true, data: { matches, rule: rule.name } };
+    }
+    const result = await this.processTicket(ticketId, body.trigger_on || 'create');
+    return { success: true, data: result.data };
   }
 
   // -------------------------------------------------------------------------
@@ -223,7 +482,8 @@ export class TicketsAdvancedService {
   // -------------------------------------------------------------------------
   async listWebhooks() {
     const rows = await this.prisma.ticket_webhooks.findMany({ orderBy: { created_at: 'desc' } });
-    return { success: true, data: rows };
+    const masked = rows.map((wh) => ({ ...wh, secret: wh.secret ? '••••••••' : null }));
+    return { success: true, data: masked };
   }
 
   async createWebhook(body: any, userId: number) {
@@ -263,8 +523,104 @@ export class TicketsAdvancedService {
     return { success: true, message: 'Webhook deleted' };
   }
 
-  testWebhook(_id: number) {
-    return { success: true, message: 'Webhook test not implemented in this pass' };
+  async testWebhook(id: number) {
+    const webhook = await this.prisma.ticket_webhooks.findUnique({ where: { id } });
+    if (!webhook) throw new NotFoundException('Webhook not found');
+    if (!webhook.url) throw new BadRequestException('Webhook URL is missing');
+
+    const payload = {
+      event: 'test',
+      timestamp: new Date().toISOString(),
+      ticket: {
+        id: 0,
+        ticket_number: 'TKT-TEST',
+        subject: 'Test Webhook Delivery',
+        status: 'open',
+        priority: 'medium',
+        category: 'general',
+        contact_email: 'test@example.com',
+        tags: ['test'],
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      test: true,
+    };
+
+    const body = JSON.stringify(payload);
+    const signature = webhook.secret ? crypto.createHmac('sha256', webhook.secret).update(body).digest('hex') : null;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'TicketSystem-Webhook/1.0',
+      'X-Webhook-Event': 'test',
+      'X-Webhook-Delivery': `${webhook.id}-${Date.now()}`,
+      ...(webhook.headers && typeof webhook.headers === 'object' ? (webhook.headers as Record<string, string>) : {}),
+      ...(signature ? { 'X-Webhook-Signature': `sha256=${signature}` } : {}),
+    };
+
+    const startTime = Date.now();
+    const result = await this.sendHttpRequest(webhook.url, 'POST', headers, body, (webhook.timeout_seconds ?? 30) * 1000);
+    const responseTime = Date.now() - startTime;
+    const success = result.status !== undefined && result.status >= 200 && result.status < 300;
+
+    await this.prisma.ticket_webhooks.update({
+      where: { id },
+      data: {
+        last_triggered_at: new Date(),
+        last_status_code: result.status ?? null,
+        last_error: success ? null : (result.error || result.body || 'Request failed').substring(0, 500),
+      },
+    });
+
+    return {
+      success,
+      message: success ? 'Test successful' : 'Test failed',
+      status: result.status,
+      responseTime,
+      body: result.body ? result.body.substring(0, 500) : result.error,
+    };
+  }
+
+  private sendHttpRequest(
+    url: string,
+    method: string,
+    headers: Record<string, string>,
+    body: string,
+    timeoutMs: number,
+  ): Promise<{ status?: number; body?: string; error?: string }> {
+    return new Promise((resolve) => {
+      try {
+        const target = new URL(url);
+        const transport = target.protocol === 'https:' ? https : http;
+        const req = transport.request(
+          {
+            hostname: target.hostname,
+            port: target.port || (target.protocol === 'https:' ? 443 : 80),
+            path: target.pathname + target.search,
+            method,
+            headers,
+            timeout: timeoutMs,
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+              data += chunk;
+            });
+            res.on('end', () => {
+              resolve({ status: res.statusCode, body: data });
+            });
+          },
+        );
+        req.on('error', (err) => resolve({ error: err.message }));
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ error: 'Request timeout' });
+        });
+        if (body) req.write(body);
+        req.end();
+      } catch (err: any) {
+        resolve({ error: err.message });
+      }
+    });
   }
 
   webhookLogs(_id: number, _query: any) {
@@ -272,7 +628,23 @@ export class TicketsAdvancedService {
   }
 
   webhookEvents() {
-    return { success: true, data: ['ticket.created', 'ticket.updated', 'ticket.replied', 'ticket.resolved', 'ticket.closed', 'ticket.assigned'] };
+    return {
+      success: true,
+      data: [
+        'ticket.created',
+        'ticket.updated',
+        'ticket.deleted',
+        'ticket.status_changed',
+        'ticket.assigned',
+        'ticket.resolved',
+        'ticket.closed',
+        'ticket.reopened',
+        'ticket.sla_warning',
+        'ticket.sla_breached',
+        'message.created',
+        'message.staff_reply',
+      ],
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -424,7 +796,21 @@ export class TicketsAdvancedService {
   }
 
   boardDefaults() {
-    return { success: true, data: [] };
+    return {
+      success: true,
+      data: {
+        columns: [
+          { id: 'backlog', name: 'Backlog', status: 'backlog' },
+          { id: 'open', name: 'Open', status: 'open' },
+          { id: 'in_progress', name: 'In Progress', status: 'in_progress' },
+          { id: 'waiting_customer', name: 'Waiting Customer', status: 'waiting_customer' },
+          { id: 'waiting_staff', name: 'Waiting Staff', status: 'waiting_staff' },
+          { id: 'resolved', name: 'Resolved', status: 'resolved' },
+          { id: 'closed', name: 'Closed', status: 'closed' },
+        ],
+        card_fields: ['priority', 'assignee', 'due_date', 'category'],
+      },
+    };
   }
 
   async moveTicket(body: any) {
