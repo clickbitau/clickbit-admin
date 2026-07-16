@@ -11,6 +11,7 @@ import { Transform, Type } from 'class-transformer';
 
 export * from './crm';
 export * from './finance';
+export * from './hr';
 
 export type UserRole = 'admin' | 'manager' | 'employee' | 'customer' | 'agent';
 

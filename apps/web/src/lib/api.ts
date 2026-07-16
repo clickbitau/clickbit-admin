@@ -19,6 +19,7 @@ import type {
   ValueBreakdownResponse,
 } from '@/types/crm';
 import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
+import type { Announcement, Employee, HrDashboardData, PublicHoliday, Reminder, TimeOffRequest } from '@/types/hr';
 
 const api = axios.create({
   baseURL: '/',
@@ -606,6 +607,47 @@ export async function fetchExpenses(
 
 export async function fetchExpense(token: string, id: string | number): Promise<{ success: boolean; data: Expense }> {
   return (await api.get<{ success: boolean; data: Expense }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
+}
+
+// ─── HR ────────────────────────────────────────────────────────────────────
+
+export async function fetchHrDashboard(token: string): Promise<{ success: boolean; data: HrDashboardData }> {
+  return (await api.get<{ success: boolean; data: HrDashboardData }>('/api/hr/dashboard', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployees(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: Employee[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  return (await api.get('/api/hr/employees', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchTimeOff(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: TimeOffRequest[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  return (await api.get('/api/hr/time-off', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAnnouncements(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: Announcement[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  return (await api.get('/api/hr/announcements', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchReminders(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: Reminder[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  return (await api.get('/api/hr/reminders', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchPublicHolidays(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: PublicHoliday[]; count: number }> {
+  return (await api.get('/api/hr/public-holidays', { params, headers: authHeaders(token) })).data;
 }
 
 export default api;
