@@ -20,21 +20,54 @@ function mapMessage(message: Record<string, unknown> & { profiles?: Record<strin
   return { ...message, sender, profiles: undefined };
 }
 
+function mapProfileName(p?: Record<string, unknown> | null) {
+  if (!p) return undefined;
+  const first = typeof p.first_name === 'string' ? p.first_name : '';
+  const last = typeof p.last_name === 'string' ? p.last_name : '';
+  const email = typeof p.email === 'string' ? p.email : undefined;
+  const name = `${first} ${last}`.trim() || email || undefined;
+  return { ...(p), name, email };
+}
+
 function mapTicket(ticket: Record<string, unknown>): Record<string, unknown> {
   const t = { ...ticket };
   const user = t.profiles_tickets_user_idToprofiles as Record<string, unknown> | undefined;
   const assignee = t.profiles_tickets_assigned_toToprofiles as Record<string, unknown> | undefined;
   if (user) {
-    t.user = user;
+    t.user = mapProfileName(user);
     delete t.profiles_tickets_user_idToprofiles;
   }
   if (assignee) {
-    t.assignee = assignee;
+    t.assignee = mapProfileName(assignee);
     delete t.profiles_tickets_assigned_toToprofiles;
   }
   if (Array.isArray(t.ticket_messages)) {
     t.messages = t.ticket_messages.map((m) => mapMessage(m as Record<string, unknown> & { profiles?: Record<string, unknown> | null }));
     delete t.ticket_messages;
+  }
+  if (Array.isArray(t.ticket_watchers)) {
+    t.watchers = t.ticket_watchers.map((w: any) => mapProfileName(w.profiles));
+    delete t.ticket_watchers;
+  }
+  if (Array.isArray(t.ticket_time_logs)) {
+    t.time_logs = t.ticket_time_logs.map((log: any) => ({
+      ...log,
+      user: mapProfileName(log.profiles),
+      profiles: undefined,
+    }));
+    delete t.ticket_time_logs;
+  }
+  if (t.bug_reports_tickets_bug_report_idTobug_reports) {
+    t.bug_report = t.bug_reports_tickets_bug_report_idTobug_reports;
+    delete t.bug_reports_tickets_bug_report_idTobug_reports;
+  }
+  if (t.tickets) {
+    t.parent_ticket = t.tickets;
+    delete t.tickets;
+  }
+  if (Array.isArray(t.other_tickets)) {
+    t.child_tickets = t.other_tickets;
+    delete t.other_tickets;
   }
   return t;
 }
@@ -762,7 +795,14 @@ export class TicketsService {
       include: {
         profiles_tickets_user_idToprofiles: { select: profileSelect },
         profiles_tickets_assigned_toToprofiles: { select: profileBasic },
+        crm_projects: true,
+        deals: true,
+        bug_reports_tickets_bug_report_idTobug_reports: { select: { id: true, title: true, status: true } },
+        tickets: true,
+        other_tickets: { select: { id: true, ticket_number: true, subject: true, status: true } },
         ticket_messages: { orderBy: { created_at: 'asc' as const }, include: { profiles: { select: profileSelect } } },
+        ticket_watchers: { include: { profiles: { select: profileBasic } } },
+        ticket_time_logs: { orderBy: { created_at: 'desc' as const }, include: { profiles: { select: profileBasic } } },
       },
     });
     if (!ticket) throw new NotFoundException({ message: 'Ticket not found' });
