@@ -30,6 +30,7 @@ import type { AnalyticsDashboard } from '@/types/analytics';
 import type { AppDocument } from '@/types/documents';
 import type { BillingSettings, PdfTemplate, SettingRow } from '@/types/settings';
 import type { DashboardStats, FinanceDashboardData } from '@/types/dashboard';
+import type { BugReport, BugReportConfig, BugReportListResponse, BugReportStats, CreateBugReportInput } from '@/types/bug-reports';
 import type { Announcement, Contract, Employee, HrDashboardData, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,
@@ -1776,6 +1777,63 @@ export async function clonePdfTemplate(token: string, id: string | number) {
 
 export async function previewPdfTemplate(token: string, id: string | number): Promise<Blob> {
   return (await api.post(`/api/settings/pdf-templates/${id}/preview`, {}, { headers: authHeaders(token), responseType: 'blob' })).data;
+}
+
+// ─── Bug Reports ─────────────────────────────────────────────────────────────
+
+export async function fetchBugReports(
+  token: string,
+  params?: { status?: string; category?: string; target_repo?: string; limit?: number; offset?: number },
+): Promise<BugReportListResponse> {
+  return (await api.get('/api/bug-reports', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchBugReport(token: string, id: string | number): Promise<{ success: boolean; data: BugReport & { pipelineStatus?: string | null } }> {
+  return (await api.get(`/api/bug-reports/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchBugReportStats(token: string): Promise<{ success: boolean; data: BugReportStats }> {
+  return (await api.get('/api/bug-reports/stats', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchBugReportConfig(token: string): Promise<{ success: boolean; data: BugReportConfig }> {
+  return (await api.get('/api/bug-reports/config', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchBugReportPrDetails(token: string, id: string | number): Promise<{ success: boolean; data: Record<string, unknown> }> {
+  return (await api.get(`/api/bug-reports/${id}/pr-details`, { headers: authHeaders(token) })).data;
+}
+
+export async function createBugReport(token: string, data: CreateBugReportInput): Promise<{ success: boolean; data: BugReport }> {
+  return (await api.post('/api/bug-reports', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateBugReportStatus(token: string, id: string | number, data: { status: string; note?: string }): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/bug-reports/${id}/status`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function markBugReportFixed(token: string, id: string | number, data: { fix_summary?: string }): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/bug-reports/${id}/fixed`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function syncBugReports(token: string): Promise<{ success: boolean; message: string }> {
+  return (await api.post('/api/bug-reports/sync-all', {}, { headers: authHeaders(token) })).data;
+}
+
+export async function syncBugReport(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/bug-reports/${id}/sync`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function retryBugReport(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/bug-reports/${id}/retry`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function approveBugReport(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/bug-reports/${id}/approve`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function forceMergeBugReport(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/bug-reports/${id}/force-merge`, {}, { headers: authHeaders(token) })).data;
 }
 
 export default api;
