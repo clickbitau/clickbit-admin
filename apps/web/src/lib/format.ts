@@ -31,3 +31,16 @@ export function getInitials(name?: string | null): string {
     .toUpperCase()
     .slice(0, 2);
 }
+
+export function daysUntil(value: string | Date | undefined | null): string {
+  if (!value) return '-';
+  const target = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(target.getTime())) return '-';
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  const diff = Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return 'Today';
+  if (diff < 0) return `${Math.abs(diff)}d overdue`;
+  return `${diff}d`;
+}

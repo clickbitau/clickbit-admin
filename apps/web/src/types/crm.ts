@@ -114,7 +114,12 @@ export interface CrmLead {
   company_id?: number | null;
   company_name?: string | null;
   company?: Company | null;
+  contact_id?: number | null;
+  contact?: CrmContact | null;
+  converted_contact_id?: number | null;
+  converted_contact?: CrmContact | null;
   job_title?: string | null;
+  website?: string | null;
   pipeline_id?: number | null;
   pipeline?: Pipeline | null;
   stage_id?: number | null;
@@ -126,13 +131,30 @@ export interface CrmLead {
   currency?: string;
   lead_score?: number;
   lead_source?: string;
+  probability?: number;
   priority?: string;
   expected_close_date?: string | null;
+  actual_close_date?: string | null;
+  last_activity_at?: string | null;
+  next_activity_date?: string | null;
   description?: string | null;
+  requirements?: string | null;
+  won_reason?: string | null;
+  lost_reason?: string | null;
+  competitor?: string | null;
+  tags?: unknown;
+  custom_fields?: unknown;
   position?: number;
   created_at?: string;
   updated_at?: string;
   type?: 'lead';
+}
+
+export interface CrmLeadDetail extends CrmLead {
+  activities?: Activity[];
+  notes?: Note[];
+  deals?: Deal[];
+  companyContacts?: { id: number; name: string; email?: string | null; phone?: string | null }[];
 }
 
 export interface Deal {
@@ -158,8 +180,12 @@ export interface Deal {
   probability?: number;
   expected_close_date?: string | null;
   actual_close_date?: string | null;
+  won_reason?: string | null;
+  lost_reason?: string | null;
+  competitor?: string | null;
   lead_source?: string;
   position?: number;
+  contactAssociations?: { contact: CrmContact }[];
   created_at?: string;
   updated_at?: string;
   type?: 'deal';
@@ -185,6 +211,9 @@ export interface DealDetail extends Deal {
   notes?: Note[];
   stageHistory?: DealStageHistoryItem[];
   contactAssociations?: { contact: CrmContact }[];
+  projects?: CrmProject[];
+  expenses?: unknown[];
+  invoices?: unknown[];
 }
 
 export interface Activity {
