@@ -396,6 +396,46 @@ export class PortalsService {
     };
   }
 
+  async customerCompany(user: UserLike) {
+    const { contactIds, companyIds } = await this.resolveCustomer(user);
+    const companyId = companyIds[0];
+    if (!companyId) {
+      const contactCompanyId = contactIds.length
+        ? (await this.prisma.contacts.findFirst({ where: { id: { in: contactIds } }, select: { company_id: true } }))?.company_id
+        : undefined;
+      if (contactCompanyId) companyIds.push(contactCompanyId);
+    }
+    const company = await this.prisma.companies.findFirst({
+      where: { id: { in: companyIds }, deleted_at: null },
+      include: { contacts_contacts_company_idTocompanies: { take: 1, orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true } } },
+    });
+    if (!company) return { success: true, data: null };
+    const primaryContact = (company as any).contacts_contacts_company_idTocompanies?.[0] || null;
+    return {
+      success: true,
+      data: {
+        id: company.id,
+        name: company.name,
+        domain: company.domain,
+        industry: company.industry,
+        company_size: company.company_size,
+        email: company.email,
+        phone: company.phone,
+        address: company.address_line1,
+        address_line2: company.address_line2,
+        city: company.city,
+        state: company.state,
+        country: company.country,
+        postal_code: company.postal_code,
+        logo_url: company.logo_url,
+        website: company.domain,
+        description: company.description,
+        created_at: company.created_at,
+        primary_contact: primaryContact,
+      },
+    };
+  }
+
   async customerOrders(user: UserLike, query: any) {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
     const page = Math.max(1, Number(query.page ?? 1));

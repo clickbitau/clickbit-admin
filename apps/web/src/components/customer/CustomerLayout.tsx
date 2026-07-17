@@ -7,6 +7,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from '@/components/admin/ThemeToggle';
 import {
   LayoutDashboard,
+  Building2,
   Receipt,
   ShoppingCart,
   FolderKanban,
@@ -29,6 +30,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/customer/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/customer/company', label: 'Company', icon: Building2 },
   { href: '/customer/invoices', label: 'Invoices', icon: Receipt },
   { href: '/customer/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/customer/projects', label: 'Projects', icon: FolderKanban },
