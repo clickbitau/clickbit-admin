@@ -1,7 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { fetchAutomations } from '@/lib/crm-api';
+import { Button } from '@/components/ui/button';
 import type { CrmAutomation } from '@clickbit/shared';
 
 export default function AutomationsPage() {
@@ -17,6 +19,7 @@ export default function AutomationsPage() {
         { key: 'action_type', header: 'Action' },
         { key: 'is_active', header: 'Active' },
       ]}
+      actions={<Button asChild><Link href="/admin/crm/automations/new">New Automation</Link></Button>}
     />
   );
 }
