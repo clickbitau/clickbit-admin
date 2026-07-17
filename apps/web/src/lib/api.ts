@@ -45,7 +45,7 @@ import type {
   TicketStats,
   TicketQuota,
 } from '@/types/support';
-import type { MonitoredSite, MonitoredSitesResponse } from '@/types/notifications';
+import type { MonitoredSite, MonitoredSitesResponse, Notification, NotificationsResponse } from '@/types/notifications';
 import type { CreateStaffAdvanceInput, StaffAdvance, StaffAdvanceListResponse } from '@/types/staff-advances';
 import type {
   CachedEmail,
@@ -1136,6 +1136,21 @@ export async function clearAllMonitoredSites(token: string): Promise<{ success: 
   return (await api.delete<{ success: boolean; message: string }>('/api/notifications/sites', { headers: authHeaders(token) })).data;
 }
 
+export async function fetchNotifications(
+  token: string,
+  params?: { unread?: boolean; limit?: number },
+): Promise<NotificationsResponse> {
+  return (await api.get('/api/notifications', { params, headers: authHeaders(token) })).data;
+}
+
+export async function markNotificationRead(token: string, id: number): Promise<{ success: boolean; data: Notification; unreadCount: number }> {
+  return (await api.put(`/api/notifications/${id}/read`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function markAllNotificationsRead(token: string): Promise<{ success: boolean; message: string; unreadCount: number }> {
+  return (await api.put('/api/notifications/read-all', {}, { headers: authHeaders(token) })).data;
+}
+
 // ─── Communication ─────────────────────────────────────────────────────────
 
 export async function fetchChatParticipants(token: string): Promise<{ success: boolean; data: { id: number; first_name: string; last_name: string; email: string; avatar?: string | null; role?: string }[] }> {
@@ -1491,6 +1506,18 @@ export async function fetchFinanceDashboard(
 
 export async function fetchAuditLogs(token: string, params?: Record<string, string | number | boolean>) {
   return (await api.get('/api/admin/audit-logs', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAuditLogEntityTypes(token: string): Promise<{ success: boolean; data: { entity_type: string; count: number; last_activity: string }[] }> {
+  return (await api.get('/api/admin/audit-logs/entity-types/list', { headers: authHeaders(token) })).data;
+}
+
+export async function restoreAuditLog(token: string, id: string): Promise<{ success: boolean; message: string; data?: unknown; error?: string }> {
+  return (await api.post(`/api/admin/audit-logs/${id}/restore`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function undoAuditLog(token: string, id: string): Promise<{ success: boolean; message: string; data?: unknown; error?: string }> {
+  return (await api.post(`/api/admin/audit-logs/${id}/undo`, {}, { headers: authHeaders(token) })).data;
 }
 
 // ─── Customer portal ───────────────────────────────────────────────────────

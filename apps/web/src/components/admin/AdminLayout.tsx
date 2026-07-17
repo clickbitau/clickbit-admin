@@ -23,6 +23,7 @@ import {
   Briefcase,
   Megaphone,
   Bell,
+  BellDot,
   Calendar,
   Clock,
   FileClock,
@@ -158,6 +159,13 @@ const sections: NavSection[] = [
     label: 'Documents',
     icon: FileText,
     href: '/admin/documents',
+    links: [],
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: BellDot,
+    href: '/admin/notifications',
     links: [],
   },
   {
