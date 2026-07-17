@@ -2,13 +2,14 @@
 
 import { LucideIcon } from 'lucide-react';
 
-interface StatCard {
+export interface StatCard {
   label: string;
   value: string | number;
   icon?: LucideIcon;
   sub?: string;
   trend?: number;
   accent?: 'primary' | 'secondary' | 'success' | 'warning' | 'destructive';
+  onClick?: () => void;
 }
 
 interface StatCardsProps {
@@ -29,8 +30,14 @@ export function StatCards({ cards }: StatCardsProps) {
       {cards.map((card) => {
         const Icon = card.icon;
         const color = accentMap[card.accent || 'primary'];
+        const clickable = !!card.onClick;
+        const Wrapper = clickable ? 'button' : 'div';
         return (
-          <div key={card.label} className="nm-raised p-4 sm:p-5">
+          <Wrapper
+            key={card.label}
+            onClick={card.onClick}
+            className={`nm-raised p-4 sm:p-5 text-left w-full ${clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+          >
             <div className="flex items-center justify-between mb-2 sm:mb-3">
               <span className="stat-label">{card.label}</span>
               {Icon && (
@@ -48,7 +55,7 @@ export function StatCards({ cards }: StatCardsProps) {
               )}
             </div>
             {card.sub && <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>}
-          </div>
+          </Wrapper>
         );
       })}
     </div>

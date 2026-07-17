@@ -150,3 +150,40 @@ export interface Expense {
   updated_at?: string;
   deleted_at?: string | null;
 }
+
+export interface InvoiceStats {
+  total: number;
+  draft: number;
+  sent: number;
+  viewed: number;
+  partial: number;
+  paid: number;
+  cancelled: number;
+  expired: number;
+  overdue: number;
+  [key: string]: number;
+}
+
+export interface PaymentStats {
+  totalCount: number;
+  totalValue: number;
+  completedCount: number;
+  completedTotal: number;
+  pendingCount: number;
+  failedCount: number;
+  refundedCount: number;
+  refundedTotal: number;
+  byStatus: { status: string; count: number; total: number }[];
+  byMethod: { method: string; count: number; total: number }[];
+}
+
+export interface ExpenseStats {
+  total_count: number;
+  total_amount: number;
+  by_category: Record<string, { count: number; amount: number }>;
+  by_status: Record<string, { count: number; amount: number }>;
+  by_month: Record<string, { count: number; amount: number }>;
+  pending_approval: number;
+  pending_reimbursement: number;
+  billable_unbilled: number;
+}

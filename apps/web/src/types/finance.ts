@@ -1,1 +1,1 @@
-export type { Invoice, InvoiceLineItem, InvoiceListResponse, Payment, PaymentListResponse, Expense } from '@clickbit/shared';
+export type { Invoice, InvoiceLineItem, InvoiceListResponse, Payment, PaymentListResponse, Expense, InvoiceStats, PaymentStats, ExpenseStats } from '@clickbit/shared';
