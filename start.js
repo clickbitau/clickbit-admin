@@ -1,13 +1,17 @@
 const { spawn } = require('child_process');
 
+const baseEnv = { ...process.env };
+
 const api = spawn('node', ['dist/apps/api/src/main'], {
   cwd: '/app/apps/api',
   stdio: 'inherit',
+  env: { ...baseEnv, PORT: '5001' },
 });
 
 const web = spawn('node', ['server.js'], {
   cwd: '/app/apps/web',
   stdio: 'inherit',
+  env: { ...baseEnv, PORT: '3001' },
 });
 
 const shutdown = (code) => {
