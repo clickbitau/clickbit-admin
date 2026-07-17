@@ -11,27 +11,45 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmployeeTable } from '@/components/hr/EmployeeTable';
 import { StatCards } from '@/components/design-system/StatCards';
-import { fetchEmployees, fetchHrStats } from '@/lib/api';
+import { fetchEmployees, fetchHrStats, fetchDepartments } from '@/lib/api';
 import Link from 'next/link';
 
-const statusOptions = ['', 'active', 'on_leave', 'suspended', 'terminated'];
+const statusOptions = ['', 'active', 'inactive', 'on_leave', 'terminated'];
+const typeOptions = ['', 'full_time', 'part_time', 'contract', 'casual', 'intern'];
+const sortOptions = [
+  { key: 'hire_date', label: 'Hire date' },
+  { key: 'created_at', label: 'Created' },
+  { key: 'last_name', label: 'Last name' },
+];
 
 export default function AdminHrEmployeesPage() {
   const { token } = useAuth();
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [department, setDepartment] = useState('');
+  const [employmentType, setEmploymentType] = useState('');
+  const [sortBy, setSortBy] = useState('hire_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['employees', token, page, search, status],
+    queryKey: ['employees', token, page, search, status, department, employmentType, sortBy, sortOrder],
     queryFn: async () => {
       if (!token) throw new Error('No token');
-      const params: Record<string, string | number> = { page, limit: 12 };
+      const params: Record<string, string | number> = { page, limit: 12, sortBy, sortOrder };
       if (search) params.search = search;
       if (status) params.employment_status = status;
+      if (department) params.department = department;
+      if (employmentType) params.employment_type = employmentType;
       return fetchEmployees(token, params);
     },
+    enabled: !!token,
+  });
+
+  const { data: departmentsData } = useQuery({
+    queryKey: ['departments', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchDepartments(token); },
     enabled: !!token,
   });
 
@@ -80,6 +98,35 @@ export default function AdminHrEmployeesPage() {
             <option key={s} value={s}>{s ? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'All statuses'}</option>
           ))}
         </select>
+        <select
+          value={department}
+          onChange={(e) => { setDepartment(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        >
+          <option value="">All departments</option>
+          {(departmentsData?.data ?? []).map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+        </select>
+        <select
+          value={employmentType}
+          onChange={(e) => { setEmploymentType(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        >
+          {typeOptions.map((t) => <option key={t} value={t}>{t ? t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'All types'}</option>)}
+        </select>
+        <select
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        >
+          {sortOptions.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+        >
+          {sortOrder === 'asc' ? 'Asc' : 'Desc'}
+        </Button>
       </div>
 
       <Card>
