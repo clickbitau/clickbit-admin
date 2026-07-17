@@ -1530,6 +1530,10 @@ export async function fetchCustomerDashboard(token: string) {
   return (await api.get('/api/customer/dashboard', { headers: authHeaders(token) })).data;
 }
 
+export async function fetchCustomerCompany(token: string) {
+  return (await api.get('/api/customer/company', { headers: authHeaders(token) })).data;
+}
+
 export async function fetchCustomerOrders(
   token: string,
   params?: { page?: number; limit?: number; search?: string }
