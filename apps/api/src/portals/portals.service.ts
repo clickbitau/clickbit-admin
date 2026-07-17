@@ -65,6 +65,7 @@ export class PortalsService {
 
     const clients = await this.prisma.contacts.findMany({
       where: { agent_id: agentContact.id, deleted_at: null },
+      include: { companies_contacts_company_idTocompanies: { select: { id: true, name: true } } },
     });
     const companies = await this.prisma.companies.findMany({
       where: { agent_id: agentContact.id, deleted_at: null },
@@ -100,32 +101,92 @@ export class PortalsService {
   // Agent portal
   // -------------------------------------------------------------------------
   async agentDashboard(user: UserLike) {
-    const { clients, contactIds, companyIds } = await this.resolveAgent(user);
+    const { agentContact, clients, contactIds, companyIds } = await this.resolveAgent(user);
     const invoiceWhere = this.invoiceScope(contactIds, companyIds);
     const projectWhere = this.projectScope(contactIds, companyIds);
 
-    const [invoiceStats, projectCount, ticketCount, clientCount, companyCount] = await Promise.all([
+    const [invoiceStats, overdueInvoices, projectCount, ticketCount, companyCount] = await Promise.all([
       this.prisma.invoices.aggregate({ where: invoiceWhere, _sum: { total_amount: true, amount_paid: true }, _count: true }),
+      this.prisma.invoices.findMany({
+        where: { ...invoiceWhere, due_date: { lt: new Date() } },
+        select: { total_amount: true, amount_paid: true },
+      }),
       this.prisma.crm_projects.count({ where: projectWhere }),
       this.prisma.tickets.count({ where: this.ticketScopeByEmails(clients.map((c) => c.email).filter(Boolean), contactIds) }),
-      this.prisma.contacts.count({ where: { id: { in: contactIds }, deleted_at: null } }),
       this.prisma.companies.count({ where: { id: { in: companyIds }, deleted_at: null } }),
     ]);
 
     const total = toNum0(invoiceStats._sum?.total_amount);
     const paid = toNum0(invoiceStats._sum?.amount_paid);
+    const outstanding = total - paid;
+    const overdueAmount = overdueInvoices.reduce(
+      (sum, inv) => (toNum0(inv.total_amount) > toNum0(inv.amount_paid) ? sum + toNum0(inv.total_amount) - toNum0(inv.amount_paid) : sum),
+      0,
+    );
+    const clientCount = clients.length;
+    const clientRevenue = total;
+    const commissionRate = toNum0(agentContact.commission_rate);
+    const commissionDue = agentContact.commission_type === 'percentage' ? (clientRevenue * commissionRate) / 100 : clientCount * commissionRate;
+
+    const agentCompany = agentContact.company_id
+      ? await this.prisma.companies.findUnique({ where: { id: agentContact.company_id }, select: { name: true } })
+      : null;
+
+    const topClients = clients.slice(0, 8).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      company: c.companies_contacts_company_idTocompanies?.name || null,
+      total_revenue: toNum0(c.total_revenue),
+      lifecycle_stage: c.lifecycle_stage,
+      created_at: c.created_at,
+      last_contacted_at: c.last_contacted_at,
+    }));
+
     return {
       success: true,
       data: {
-        clients: clientCount,
-        companies: companyCount,
-        active_projects: projectCount,
-        open_tickets: ticketCount,
-        total_invoiced: total,
-        total_paid: paid,
-        outstanding: total - paid,
+        agent: {
+          id: agentContact.id,
+          name: agentContact.name,
+          email: agentContact.email,
+          company: agentCompany?.name || null,
+          commission_type: agentContact.commission_type,
+          commission_rate: commissionRate,
+        },
+        stats: {
+          total_clients: clientCount,
+          client_revenue: clientRevenue,
+          own_revenue: commissionDue,
+          total_invoices: toNum0(invoiceStats._count),
+          paid_amount: paid,
+          outstanding_amount: outstanding,
+          overdue_amount: overdueAmount,
+          active_projects: projectCount,
+          commission_due: commissionDue,
+          companies: companyCount,
+          open_tickets: ticketCount,
+        },
+        clients: topClients,
       },
     };
+  }
+
+  async agentClients(user: UserLike) {
+    const { agentContact, clients } = await this.resolveAgent(user);
+    const mapped = clients.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      company: c.companies_contacts_company_idTocompanies?.name || null,
+      total_revenue: toNum0(c.total_revenue),
+      lifecycle_stage: c.lifecycle_stage,
+      created_at: c.created_at,
+      last_contacted_at: c.last_contacted_at,
+    }));
+    return { success: true, data: { agent_id: agentContact.id, clients: mapped } };
   }
 
   async agentInvoices(user: UserLike, query: any) {

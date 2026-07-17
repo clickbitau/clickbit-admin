@@ -1642,6 +1642,52 @@ export async function reopenCustomerTicket(token: string, id: string | number) {
   return (await api.post(`/api/tickets/my-tickets/${id}/reopen`, {}, { headers: authHeaders(token) })).data;
 }
 
+// ─── Agent portal ───────────────────────────────────────────────────────────
+
+export async function fetchAgentPortalDashboard(token: string): Promise<{
+  agent: { id: number; name: string; email?: string; company?: string; commission_type: string; commission_rate: number };
+  stats: Record<string, number>;
+  clients: unknown[];
+}> {
+  return (await api.get('/api/agent/dashboard', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalClients(token: string): Promise<{ success: boolean; data: { clients: unknown[] } }> {
+  return (await api.get('/api/agent/clients', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalCompanies(token: string): Promise<{ success: boolean; data: unknown[] }> {
+  return (await api.get('/api/agent/companies', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalInvoices(token: string, params?: { page?: number; limit?: number }) {
+  return (await api.get('/api/agent/invoices', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalProjects(token: string, params?: { page?: number; limit?: number }) {
+  return (await api.get('/api/agent/projects', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalProject(token: string, id: string | number) {
+  return (await api.get(`/api/agent/projects/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalTickets(token: string, params?: { page?: number; limit?: number; status?: string }) {
+  return (await api.get('/api/agent/tickets', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAgentPortalTicket(token: string, id: string | number) {
+  return (await api.get(`/api/agent/tickets/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function createAgentPortalTicket(token: string, body: { contact_id: number; subject: string; description?: string; priority?: string }) {
+  return (await api.post('/api/agent/tickets', body, { headers: authHeaders(token) })).data;
+}
+
+export async function replyAgentPortalTicket(token: string, id: string | number, message: string, is_internal?: boolean) {
+  return (await api.post(`/api/agent/tickets/${id}/reply`, { message, is_internal }, { headers: authHeaders(token) })).data;
+}
+
 // ─── HR Time Clock, Timesheets & Shifts ─────────────────────────────────────
 
 export async function fetchTimeClockStatus(token: string): Promise<{ success: boolean; data: TimeClockStatus }> {
