@@ -17,10 +17,14 @@ import { asJsonInput, buildLegacyList, buildPagination, mapProjectSupportPeriod,
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: { status?: string; search?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
+  async findAll(query: { status?: string; search?: string; company_id?: string | number; manager_id?: string | number; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
     const { status, search, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
+    const companyId = query.company_id ? Number(query.company_id) : undefined;
+    const managerId = query.manager_id ? Number(query.manager_id) : undefined;
     const where: { [key: string]: unknown } = { deleted_at: null };
     if (status) where.status = status;
+    if (companyId) where.company_id = companyId;
+    if (managerId) where.manager_id = managerId;
     if (search) {
       (where as { AND: unknown[] }).AND = [
         {
