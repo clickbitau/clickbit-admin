@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -66,6 +67,10 @@ export class KpiService {
 
   async employeeHistory(employeeId: number, user: UserLike) {
     await this.ensureAdminOrSelf(user, employeeId);
+    const employee = await this.prisma.employees.findUnique({
+      where: { id: employeeId },
+      include: { profiles: { select: { first_name: true, last_name: true, email: true, avatar: true } } },
+    });
     let rows: any[] = [];
     try {
       rows = await this.prisma.hr_kpi_scores.findMany({
@@ -75,10 +80,10 @@ export class KpiService {
     } catch (e: any) {
       if (e.code !== 'P2021') throw e;
     }
-    return rows.map((r) => this.mapScore(r));
+    return rows.map((r) => this.mapScore(r, employee));
   }
 
-  async snapshot(period: string, user: UserLike) {
+  async snapshot(period: string, user: UserLike, employeeIds?: number[]) {
     this.ensureAdminOrManager(user);
     if (!/^\d{4}-\d{2}$/.test(period)) throw new NotFoundException('Invalid period format. Use YYYY-MM');
 
@@ -86,7 +91,10 @@ export class KpiService {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59, 999);
 
-    const employees = await this.prisma.employees.findMany({ where: { employment_status: 'active' } });
+    const where: Prisma.employeesWhereInput = employeeIds?.length
+      ? { id: { in: employeeIds } }
+      : { employment_status: 'active' };
+    const employees = await this.prisma.employees.findMany({ where });
     const results: any[] = [];
 
     for (const emp of employees) {
@@ -323,10 +331,17 @@ export class KpiService {
   }
 
   private mapScore(s: any, employee?: any) {
+    const profile = employee?.profiles;
     return {
       id: s.id,
       employee_id: s.employee_id,
-      employee,
+      employee: employee
+        ? {
+            ...employee,
+            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || profile?.email || `Employee ${employee.id}`,
+            email: profile?.email,
+          }
+        : undefined,
       period: s.period,
       total_score: this.toNumber(s.total_score),
       punctuality_score: this.toNumber(s.punctuality_score),

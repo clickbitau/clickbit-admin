@@ -26,9 +26,9 @@ export class KpiController {
   @Post('snapshot')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'hr')
-  async snapshot(@Body() body: { period?: string }, @Req() req: RequestWithUser) {
+  async snapshot(@Body() body: { period?: string; employee_ids?: number[] }, @Req() req: RequestWithUser) {
     const period = body?.period || new Date().toISOString().substring(0, 7);
-    return this.kpiService.snapshot(period, req.user);
+    return this.kpiService.snapshot(period, req.user, body?.employee_ids);
   }
 
   @Get('live/:id')

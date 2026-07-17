@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Calendar, RefreshCw, Trophy, Users } from 'lucide-react';
@@ -26,6 +27,7 @@ function scoreVariant(score: number) {
 
 export default function AdminHrKpiPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState(currentPeriod());
 
@@ -113,7 +115,11 @@ export default function AdminHrKpiPage() {
                   </TableRow>
                 )}
                 {scores.map((s: any) => (
-                  <TableRow key={`${s.employee_id}-${s.period}`}>
+                  <TableRow
+                    key={`${s.employee_id}-${s.period}`}
+                    className="cursor-pointer hover:bg-primary/5"
+                    onClick={() => router.push(`/admin/hr/kpi/${s.employee_id}`)}
+                  >
                     <TableCell className="font-medium">{s.employee?.name || `Employee ${s.employee_id}`}</TableCell>
                     <TableCell>
                       <Badge variant={scoreVariant(s.total_score) as any}>{s.total_score?.toFixed(1) || 0}</Badge>
