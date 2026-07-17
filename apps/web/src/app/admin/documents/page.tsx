@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +24,7 @@ function formatBytes(bytes?: number | null) {
 
 export default function AdminDocumentsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -112,7 +114,11 @@ export default function AdminDocumentsPage() {
                   </TableRow>
                 )}
                 {documents.map((doc: any) => (
-                  <TableRow key={doc.id}>
+                  <TableRow
+                    key={doc.id}
+                    className="cursor-pointer hover:bg-primary/5"
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/documents/${doc.id}`); }}
+                  >
                     <TableCell className="font-medium truncate max-w-xs">{doc.name || doc.original_name || `Document ${doc.id}`}</TableCell>
                     <TableCell className="uppercase text-xs">{doc.file_type || '-'}</TableCell>
                     <TableCell>{formatBytes(doc.file_size)}</TableCell>

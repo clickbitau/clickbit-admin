@@ -317,22 +317,31 @@ export class DocumentsService {
       orderBy: { created_at: 'desc' },
       include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true } } },
     });
-    return rows.map((doc) => ({
-      id: `project-${doc.id}`,
-      source_id: doc.id,
-      project_id: doc.project_id,
-      title: doc.file_name,
-      filename: doc.file_name,
-      type: 'project',
-      category: 'project',
-      size: doc.file_size,
-      url: doc.file_url,
-      file_url: doc.file_url,
-      mime_type: doc.file_type,
-      uploaded_by: doc.profiles ? `${doc.profiles.first_name} ${doc.profiles.last_name}` : 'Unknown',
-      created_at: doc.created_at,
-      download_count: 0,
-    }));
+    return rows.map((doc) => {
+      const uploaderName = doc.profiles ? `${doc.profiles.first_name || ''} ${doc.profiles.last_name || ''}`.trim() || doc.profiles.email : 'Unknown';
+      return {
+        id: `project-${doc.id}`,
+        source_id: doc.id,
+        project_id: doc.project_id,
+        title: doc.file_name,
+        name: doc.file_name,
+        original_name: doc.file_name,
+        filename: doc.file_name,
+        type: 'project',
+        file_type: doc.file_type,
+        category: 'project',
+        size: doc.file_size,
+        file_size: doc.file_size,
+        url: doc.file_url,
+        file_url: doc.file_url,
+        mime_type: doc.file_type,
+        uploaded_by: doc.uploaded_by,
+        uploader: { name: uploaderName, email: doc.profiles?.email },
+        created_at: doc.created_at,
+        download_count: 0,
+        status: 'active',
+      };
+    });
   }
 
   private buildDocumentPayload(
@@ -403,23 +412,30 @@ export class DocumentsService {
     url?: string | null,
   ): Record<string, unknown> {
     const uploader = doc.profiles_documents_uploaded_byToprofiles;
+    const uploaderName = uploader ? `${uploader.first_name || ''} ${uploader.last_name || ''}`.trim() || uploader.email : 'Unknown';
     return {
       id: doc.id,
-      filename: doc.filename,
-      original_filename: doc.original_filename,
+      name: doc.filename || doc.title,
+      original_name: doc.original_filename,
       title: doc.title,
       description: doc.description,
+      file_type: doc.mime_type || doc.document_type,
       type: doc.document_type,
       category: doc.category,
+      file_size: doc.file_size,
       size: doc.file_size,
       url,
-      file_url: doc.file_url,
+      signed_url: url,
+      file_url: url || doc.file_url,
       mime_type: doc.mime_type,
       is_sensitive: doc.is_sensitive,
       is_public: doc.is_public,
+      related_entity_type: doc.related_entity_type,
+      related_entity_id: doc.related_entity_id,
       access_level: doc.access_level,
       tags: doc.tags,
-      uploaded_by: uploader ? `${uploader.first_name} ${uploader.last_name}` : 'Unknown',
+      uploaded_by: doc.uploaded_by,
+      uploader: { name: uploaderName, email: uploader?.email },
       created_at: doc.created_at,
       updated_at: doc.updated_at,
       download_count: doc.download_count,
