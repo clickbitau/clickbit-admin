@@ -24,3 +24,26 @@ export interface MonitoredSitesResponse {
   sites: MonitoredSite[];
   stats: MonitoredSiteStats;
 }
+
+export interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type: string;
+  source?: string | null;
+  monitor_name?: string | null;
+  monitor_url?: string | null;
+  status?: string | null;
+  is_read?: boolean;
+  read_at?: string | null;
+  user_id?: number | null;
+  metadata?: string | Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface NotificationsResponse {
+  success: boolean;
+  data: Notification[];
+  unreadCount: number;
+}
