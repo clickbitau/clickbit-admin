@@ -88,6 +88,15 @@ export class DealsController {
     return this.dealsService.findOne(id);
   }
 
+  @Get(':id/related')
+  async getRelated(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.dealsService.getRelated(id);
+  }
+
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,

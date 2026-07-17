@@ -6,11 +6,14 @@ import type {
   ContactStats,
   CrmContact,
   CrmLead,
+  CrmLeadDetail,
   CrmProject,
   CrmSubproject,
   Deal,
   DealDetail,
+  DealStageHistoryItem,
   Document,
+  Note,
   Order,
   Pipeline,
   PipelineStage,
@@ -264,6 +267,16 @@ export async function fetchDeal(token: string, id: string | number): Promise<Dea
   return extractSingle<DealDetail>(response, 'deal');
 }
 
+export async function fetchDealDetail(
+  token: string,
+  id: string | number,
+): Promise<{ deal: DealDetail; activities: Activity[]; notes: Note[]; stageHistory: DealStageHistoryItem[]; projects: CrmProject[]; expenses: unknown[]; invoices: unknown[] }> {
+  const response = await api.get(`/api/crm/deals/${id}/related`, {
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
 export async function createDeal(token: string, data: Partial<Deal>): Promise<Deal> {
   const response = await api.post<{ deal: Deal }>('/api/crm/deals', data, {
     headers: authHeaders(token),
@@ -333,6 +346,16 @@ export async function fetchLead(token: string, id: string | number): Promise<Crm
     headers: authHeaders(token),
   });
   return extractSingle<CrmLead>(response, 'lead');
+}
+
+export async function fetchLeadDetail(
+  token: string,
+  id: string | number,
+): Promise<{ lead: CrmLeadDetail; activities: Activity[]; notes: Note[]; deals: Deal[]; companyContacts: { id: number; name: string; email?: string | null; phone?: string | null }[] }> {
+  const response = await api.get(`/api/crm/leads/${id}/related`, {
+    headers: authHeaders(token),
+  });
+  return response.data;
 }
 
 export async function createLead(token: string, data: Partial<CrmLead>): Promise<CrmLead> {

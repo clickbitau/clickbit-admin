@@ -116,6 +116,15 @@ export class LeadsController {
     return this.leadsService.findOne(id);
   }
 
+  @Get(':id/related')
+  async getRelated(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.leadsService.getRelated(id);
+  }
+
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,

@@ -96,7 +96,90 @@ export class DealsService {
       },
     });
     if (!deal) throw new NotFoundException('Deal not found');
-    return { deal };
+    const owner = deal.owner_id
+      ? await this.prisma.profiles.findUnique({ where: { id: deal.owner_id }, select: { id: true, first_name: true, last_name: true, avatar: true } })
+      : null;
+    const mapped = {
+      ...deal,
+      value: toNumber(deal.value),
+      stage: deal.crm_pipeline_stages,
+      pipeline: deal.crm_pipelines,
+      contact: deal.contacts,
+      company: deal.companies,
+      owner,
+      contactAssociations: deal.crm_deal_contacts?.map((dc: any) => ({ contact: dc.contacts })) ?? [],
+    };
+    return { deal: mapped };
+  }
+
+  async getRelated(id: number) {
+    const dealResult = await this.findOne(id);
+    const deal = dealResult.deal;
+
+    const [activities, notes, stageHistory, projects, expenses, invoices] = await Promise.all([
+      this.prisma.crm_activities.findMany({
+        where: { deal_id: id },
+        include: {
+          profiles_crm_activities_owner_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+          profiles_crm_activities_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true } },
+          profiles_crm_activities_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.crm_notes.findMany({
+        where: { deal_id: id },
+        include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.crm_deal_stage_history.findMany({
+        where: { deal_id: id },
+        include: {
+          crm_pipeline_stages_crm_deal_stage_history_from_stage_idTocrm_pipeline_stages: { select: { id: true, name: true } },
+          crm_pipeline_stages_crm_deal_stage_history_to_stage_idTocrm_pipeline_stages: { select: { id: true, name: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.crm_projects.findMany({
+        where: { deal_id: id, deleted_at: null },
+        select: { id: true, name: true, project_number: true, status: true, progress_percentage: true, budget: true, currency: true, start_date: true, due_date: true },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.expenses.findMany({
+        where: { deal_id: id },
+        select: { id: true, description: true, total_amount: true, currency: true, expense_date: true, category: true, status: true },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.invoices.findMany({
+        where: { deal_id: id, deleted_at: null },
+        select: { id: true, title: true, package_code: true, total_amount: true, currency: true, status: true, issue_date: true, payment_status: true },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    return {
+      deal,
+      activities: activities.map((a: any) => ({
+        ...a,
+        owner: a.profiles_crm_activities_owner_idToprofiles,
+        assignee: a.profiles_crm_activities_assigned_toToprofiles,
+        creator: a.profiles_crm_activities_created_byToprofiles,
+      })),
+      notes: notes.map((n: any) => ({ ...n, creator: n.profiles })),
+      stageHistory: stageHistory.map((h: any) => ({
+        ...h,
+        fromStage: h.crm_pipeline_stages_crm_deal_stage_history_from_stage_idTocrm_pipeline_stages,
+        toStage: h.crm_pipeline_stages_crm_deal_stage_history_to_stage_idTocrm_pipeline_stages,
+      })),
+      projects,
+      expenses: expenses.map((e: any) => ({ ...e, amount: toNumber(e.total_amount), date: e.expense_date })),
+      invoices: invoices.map((i: any) => ({ ...i, total_amount: toNumber(i.total_amount) })),
+    };
   }
 
   async create(userId: number, dto: CreateDealDto) {

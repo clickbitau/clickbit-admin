@@ -79,6 +79,68 @@ export class LeadsService {
     return { lead: await this.enrichLead(lead) };
   }
 
+  async getRelated(id: number) {
+    const leadResult = await this.findOne(id);
+    const lead = leadResult.lead;
+    const contactId = lead.contact_id;
+    const companyId = lead.company_id;
+
+    const or: any[] = [];
+    if (contactId) or.push({ contact_id: contactId });
+    if (companyId) or.push({ company_id: companyId });
+
+    const [activities, notes, deals, companyContacts] = await Promise.all([
+      or.length
+        ? this.prisma.crm_activities.findMany({
+            where: { OR: or },
+            include: {
+              profiles_crm_activities_owner_idToprofiles: { select: { id: true, first_name: true, last_name: true } },
+              profiles_crm_activities_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true } },
+              profiles_crm_activities_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
+            },
+            orderBy: { created_at: 'desc' },
+            take: 50,
+          })
+        : [],
+      or.length
+        ? this.prisma.crm_notes.findMany({
+            where: { OR: or },
+            include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
+            orderBy: { created_at: 'desc' },
+            take: 50,
+          })
+        : [],
+      or.length
+        ? this.prisma.deals.findMany({
+            where: { AND: [{ OR: or }, { deleted_at: null }] },
+            select: { id: true, title: true, deal_number: true, value: true, currency: true, status: true, priority: true, stage_id: true },
+            orderBy: { created_at: 'desc' },
+            take: 50,
+          })
+        : [],
+      companyId
+        ? this.prisma.contacts.findMany({
+            where: { company_id: companyId },
+            select: { id: true, name: true, email: true, phone: true },
+            take: 50,
+          })
+        : [],
+    ]);
+
+    return {
+      lead,
+      activities: (activities as any[]).map((a) => ({
+        ...a,
+        owner: a.profiles_crm_activities_owner_idToprofiles,
+        assignee: a.profiles_crm_activities_assigned_toToprofiles,
+        creator: a.profiles_crm_activities_created_byToprofiles,
+      })),
+      notes: (notes as any[]).map((n) => ({ ...n, creator: n.profiles })),
+      deals: (deals as any[]).map((d) => ({ ...d, value: toNumber(d.value) })),
+      companyContacts,
+    };
+  }
+
   async create(userId: number, dto: CreateLeadDto) {
     const stage = await this.prisma.crm_pipeline_stages.findUnique({
       where: { id: dto.stage_id },
@@ -496,6 +558,7 @@ export class LeadsService {
 
     const stage = await this.prisma.crm_pipeline_stages.findUnique({
       where: { id: lead.stage_id },
+      include: { crm_pipelines: true },
     });
 
     return {
@@ -507,6 +570,7 @@ export class LeadsService {
       contact,
       converted_contact: convertedContact,
       stage,
+      pipeline: stage?.crm_pipelines ?? null,
       estimated_value: toNumber(lead.estimated_value),
       probability: lead.probability ?? 0,
     };
