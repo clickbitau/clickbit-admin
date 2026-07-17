@@ -56,6 +56,13 @@ export class PayslipsController {
     return this.payslipsService.findPayslips(query as unknown as Record<string, unknown>, req.user);
   }
 
+  @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'employee')
+  async findOne(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.payslipsService.findOne(id, req.user);
+  }
+
   @Post('calculate-single')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')

@@ -136,6 +136,29 @@ export class PayslipsService {
     return { success: true, data: rows.map((p) => this.mapPayslip(p)) };
   }
 
+  async findOne(id: number, user: UserLike) {
+    const payslip = await this.prisma.payslips.findUnique({
+      where: { id },
+      include: {
+        employees: {
+          include: {
+            profiles: { select: { first_name: true, last_name: true, email: true, avatar: true } },
+          },
+        },
+      },
+    });
+    if (!payslip) throw new NotFoundException('Payslip not found');
+
+    if (user.role !== 'admin' && user.role !== 'manager') {
+      const emp = await this.prisma.employees.findFirst({ where: { user_id: user.id } });
+      if (!emp || payslip.employee_id !== emp.id) {
+        throw new ForbiddenException('Not authorized to view this payslip');
+      }
+    }
+
+    return { success: true, data: this.mapPayslip(payslip) };
+  }
+
   async calculateSingle(dto: Record<string, unknown>, user: UserLike) {
     const employeeId = this.asNumber(dto.employeeId);
     if (!employeeId) throw new BadRequestException('employeeId is required');
@@ -829,9 +852,16 @@ export class PayslipsService {
   }
 
   private mapPayslip(p: any) {
+    const profile = p.employees?.profiles;
     return {
       ...p,
-      employee: p.employees,
+      employee: p.employees
+        ? {
+            ...p.employees,
+            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || profile?.email || `Employee ${p.employees.id}`,
+            email: profile?.email,
+          }
+        : undefined,
     };
   }
 

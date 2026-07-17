@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Banknote, Calendar, Calculator, Download, FileText, Mail, Trash2 } from 'lucide-react';
@@ -20,6 +21,7 @@ function formatCurrency(value: number | string | undefined, currency?: string) {
 
 export default function AdminHrPayslipsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -165,7 +167,11 @@ export default function AdminHrPayslipsPage() {
                   </TableRow>
                 )}
                 {payslips.map((p: any) => (
-                  <TableRow key={p.id}>
+                  <TableRow
+                    key={p.id}
+                    className="cursor-pointer hover:bg-primary/5"
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/payslips/${p.id}`); }}
+                  >
                     <TableCell>{p.employee?.name || `Employee ${p.employee_id}`}</TableCell>
                     <TableCell>{new Date(p.pay_period_start).toLocaleDateString()} — {new Date(p.pay_period_end).toLocaleDateString()}</TableCell>
                     <TableCell>{new Date(p.payment_date).toLocaleDateString()}</TableCell>

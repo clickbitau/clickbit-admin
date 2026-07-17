@@ -86,6 +86,8 @@ export interface Payslip {
   line_items?: unknown[];
   leave_data?: Record<string, unknown>;
   notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
   employee?: { name?: string; email?: string };
 }
 
