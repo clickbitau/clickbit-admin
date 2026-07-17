@@ -5,6 +5,8 @@ import { AnnouncementsController } from '../src/hr/announcements.controller';
 import { RemindersController } from '../src/hr/reminders.controller';
 import { PublicHolidaysController } from '../src/hr/public-holidays.controller';
 import { TimeClockController } from '../src/hr/time-clock.controller';
+import { TimesheetsController } from '../src/hr/timesheets.controller';
+import { ShiftsController } from '../src/hr/shifts.controller';
 
 describe('HR legacy contract tests', () => {
   const buildRes = () => ({ set: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as any);
@@ -212,6 +214,72 @@ describe('HR legacy contract tests', () => {
       const req = { user: { id: 1, role: 'employee' }, headers: {}, ip: '127.0.0.1' } as any;
       await controller.clockIn({}, req, res);
       expect(service.clockIn).toHaveBeenCalledWith(req.user, {}, req);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+  });
+
+  describe('TimesheetsController', () => {
+    it('GET /api/hr/timesheets returns { success, data }', async () => {
+      const service = { findAll: jest.fn().mockResolvedValue({ success: true, data: [], summary: {}, pagination: { total: 0, page: 1, pages: 1, limit: 50 } }) } as any;
+      const controller = new TimesheetsController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' } } as any;
+      await controller.findAll({}, req, res);
+      expect(service.findAll).toHaveBeenCalledWith(expect.anything(), req.user);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('POST /api/hr/timesheets/:id/approve returns { success, message, data }', async () => {
+      const service = { approve: jest.fn().mockResolvedValue({ success: true, message: 'Time entry approved', data: { id: 1 } }) } as any;
+      const controller = new TimesheetsController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' } } as any;
+      await controller.approve('1', req, res);
+      expect(service.approve).toHaveBeenCalledWith(1, req.user, req);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('POST /api/hr/timesheets/manual returns { success, message, data } with 201', async () => {
+      const service = { manual: jest.fn().mockResolvedValue({ success: true, message: 'Manual time entry created', data: { id: 1 } }) } as any;
+      const controller = new TimesheetsController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' }, headers: {}, ip: '127.0.0.1' } as any;
+      await controller.manual({ clock_in_time: '2026-07-15T09:00:00Z', reason: 'Test' }, req, res);
+      expect(service.manual).toHaveBeenCalledWith(expect.anything(), req.user, req);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+  });
+
+  describe('ShiftsController', () => {
+    it('GET /api/hr/shifts returns { success, data }', async () => {
+      const service = { findAll: jest.fn().mockResolvedValue({ success: true, data: [] }) } as any;
+      const controller = new ShiftsController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' } } as any;
+      await controller.findAll({}, req, res);
+      expect(service.findAll).toHaveBeenCalledWith(expect.anything(), req.user);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('POST /api/hr/shifts returns { success, data } with 201', async () => {
+      const service = { create: jest.fn().mockResolvedValue({ success: true, data: { id: 1 } }) } as any;
+      const controller = new ShiftsController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' } } as any;
+      await controller.create({ employee_id: '1', shift_date: '2026-07-15', start_time: '09:00', end_time: '17:00' }, req, res);
+      expect(service.create).toHaveBeenCalledWith(expect.anything(), req.user, req);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('POST /api/hr/shifts/copy-week returns { success, message, data }', async () => {
+      const service = { copyWeek: jest.fn().mockResolvedValue({ success: true, message: '1 shifts copied', data: [] }) } as any;
+      const controller = new ShiftsController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' } } as any;
+      await controller.copyWeek({ source_week_start: '2026-07-14', target_week_start: '2026-07-21' }, req, res);
+      expect(service.copyWeek).toHaveBeenCalledWith(expect.anything(), req.user, req);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
