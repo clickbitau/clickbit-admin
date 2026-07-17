@@ -99,7 +99,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <PageShell title="Projects" icon={FolderKanban} description="Track project delivery and budgets" actions={<Button onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="mr-1 h-4 w-4" /> New Project</Button>}>
+    <PageShell title="Projects" icon={FolderKanban} description="Track project delivery and budgets" actions={<Button asChild><Link href="/admin/crm/projects/new"><Plus className="mr-1 h-4 w-4" /> New Project</Link></Button>}>
       <StatCards cards={statCards} />
 
       <div className="nm-raised p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
