@@ -74,6 +74,9 @@ export default function AdminSupportPage() {
         <Button variant="outline" asChild>
           <Link href="/admin/support/automation">Automation</Link>
         </Button>
+        <Button asChild>
+          <Link href="/admin/support/new">New Ticket</Link>
+        </Button>
       </div>
 
       <Card>
