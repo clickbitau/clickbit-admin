@@ -1,6 +1,7 @@
 export interface Employee {
   id: number;
   user_id: number;
+  name?: string | null;
   employee_number?: string | null;
   employment_type?: string | null;
   employment_status?: string | null;

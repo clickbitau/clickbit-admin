@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label';
 
 function getDashboardPath(role?: string) {
   const r = (role || 'customer').toLowerCase();
-  if (['admin', 'manager', 'employee'].includes(r)) return '/admin';
+  if (['admin', 'manager'].includes(r)) return '/admin';
   if (r === 'agent') return '/agent/dashboard';
+  if (r === 'employee') return '/employee/dashboard';
   return '/customer/dashboard';
 }
 

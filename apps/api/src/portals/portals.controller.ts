@@ -230,3 +230,69 @@ export class CustomerController {
     return this.service.customerAddTaskComment(req.user, id, body);
   }
 }
+
+@Controller('employee')
+@UseGuards(SupabaseAuthGuard, RolesGuard)
+export class EmployeeController {
+  constructor(private readonly service: PortalsService) {}
+
+  @Get('me')
+  @Roles('employee', 'admin')
+  async me(@Req() req: RequestWithUser) {
+    return this.service.employeeMe(req.user);
+  }
+
+  @Get('dashboard')
+  @Roles('employee', 'admin')
+  async dashboard(@Req() req: RequestWithUser) {
+    return this.service.employeeDashboard(req.user);
+  }
+
+  @Get('contracts')
+  @Roles('employee', 'admin')
+  async contracts(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.employeeContracts(req.user, query);
+  }
+
+  @Get('contracts/:id')
+  @Roles('employee', 'admin')
+  async contractDetail(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.employeeContractDetail(req.user, id);
+  }
+
+  @Get('payslips')
+  @Roles('employee', 'admin')
+  async payslips(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.employeePayslips(req.user, query);
+  }
+
+  @Get('payslips/:id')
+  @Roles('employee', 'admin')
+  async payslipDetail(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.employeePayslipDetail(req.user, id);
+  }
+
+  @Get('time-off')
+  @Roles('employee', 'admin')
+  async timeOff(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.employeeTimeOff(req.user, query);
+  }
+
+  @Get('tasks')
+  @Roles('employee', 'admin')
+  async tasks(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.employeeTasks(req.user, query);
+  }
+
+  @Get('tasks/:id')
+  @Roles('employee', 'admin')
+  async taskDetail(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.employeeTaskDetail(req.user, id);
+  }
+
+  @Post('it-support')
+  @Roles('employee', 'admin')
+  async itSupport(@Req() req: RequestWithUser, @Body() body: any) {
+    return this.service.employeeItSupportTicket(req.user, body);
+  }
+}
