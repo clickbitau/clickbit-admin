@@ -11,7 +11,7 @@ const api = spawn('node', ['dist/apps/api/src/main'], {
 const web = spawn('node', ['server.js'], {
   cwd: '/app/apps/web',
   stdio: 'inherit',
-  env: { ...baseEnv, PORT: '3001' },
+  env: { ...baseEnv, PORT: '3001', HOSTNAME: '0.0.0.0' },
 });
 
 const shutdown = (code) => {
