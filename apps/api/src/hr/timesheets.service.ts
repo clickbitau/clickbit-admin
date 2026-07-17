@@ -31,9 +31,11 @@ function mapTimeEntry(entry: any) {
     ...employee,
     name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || profile?.email || 'Unknown Employee',
     user: profile,
+    hourly_rate: profile?.hourly_rate,
   };
   mapped.shift = shift;
-  mapped.work_items_count = Array.isArray(workItems) ? workItems.length : 0;
+  mapped.work_items = Array.isArray(workItems) ? workItems : [];
+  mapped.work_items_count = mapped.work_items.length;
   delete mapped.employees;
   delete mapped.hr_shifts;
   delete mapped.time_entry_work_items;
@@ -203,6 +205,37 @@ export class TimesheetsService {
         limit,
       },
     };
+  }
+
+  async findOne(id: number, user: Profile) {
+    const entry = await this.prisma.hr_time_entries.findUnique({
+      where: { id },
+      include: {
+        employees: { include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } } },
+        hr_shifts: true,
+        time_entry_work_items: {
+          include: { project_tasks: { select: { id: true, title: true, status: true } } },
+          orderBy: { created_at: 'asc' },
+        },
+      },
+    });
+    if (!entry) throw new NotFoundException({ success: false, message: 'Time entry not found' });
+
+    if (user.role !== 'admin' && user.role !== 'manager') {
+      const employee = await this.findEmployee(user.id);
+      if (!employee || entry.employee_id !== employee.id) {
+        throw new ForbiddenException({ success: false, message: 'Not authorized to view this time entry' });
+      }
+    }
+
+    const approver = entry.approved_by
+      ? await this.prisma.profiles.findUnique({ where: { id: entry.approved_by }, select: { first_name: true, last_name: true } })
+      : null;
+
+    const mapped = mapTimeEntry(entry);
+    mapped.approved_by_name = approver ? `${approver.first_name || ''} ${approver.last_name || ''}`.trim() : undefined;
+    mapped.work_items = mapped.time_entry_work_items || [];
+    return buildLegacyDataEnvelope(mapped);
   }
 
   async summary(employeeId: number, query: any) {

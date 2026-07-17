@@ -26,11 +26,23 @@ export interface TimeEntry {
   clock_out_time?: string | null;
   clock_in_address?: string | null;
   clock_out_address?: string | null;
+  clock_in_notes?: string | null;
+  clock_out_notes?: string | null;
+  notes?: string | null;
   break_minutes?: number;
   total_minutes?: number | null;
+  overtime_minutes?: number | null;
   status: 'active' | 'completed' | 'approved' | 'rejected' | 'edited';
-  employee?: { name?: string; email?: string };
+  gps_coordinates?: string | null;
+  approved_by?: number | null;
+  approved_at?: string | null;
+  approved_by_name?: string | null;
+  admin_notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  employee?: { name?: string; email?: string; hourly_rate?: number | string | null };
   shift?: any;
+  work_items?: any[];
   work_items_count?: number;
 }
 
