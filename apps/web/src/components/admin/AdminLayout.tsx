@@ -152,6 +152,20 @@ const sections: NavSection[] = [
     ],
   },
   {
+    id: 'documents',
+    label: 'Documents',
+    icon: FileText,
+    href: '/admin/documents',
+    links: [],
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    href: '/admin/analytics',
+    links: [],
+  },
+  {
     id: 'settings',
     label: 'Admin',
     icon: Settings,
@@ -160,6 +174,7 @@ const sections: NavSection[] = [
       { href: '/admin/settings/users', label: 'Users', icon: Users },
       { href: '/admin/settings/audit-logs', label: 'Audit Logs', icon: Activity },
       { href: '/admin/settings/dashboard', label: 'Dashboard', icon: BarChart3 },
+      { href: '/admin/settings/pdf-templates', label: 'PDF Templates', icon: FileText },
       { href: '/admin/settings/profile', label: 'Profile', icon: UserCircle },
     ],
   },
