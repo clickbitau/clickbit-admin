@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { fetchEmployee, updateEmployee, deleteEmployee } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import type { Employee } from '@/types/hr';
-import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase } from 'lucide-react';
+import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase, FileClock, ClipboardList, GraduationCap, Plus } from 'lucide-react';
 
 const employmentTypes = ['full_time', 'part_time', 'contract', 'casual', 'intern'];
 const employmentStatuses = ['active', 'inactive', 'terminated', 'on_leave'];
@@ -155,6 +155,8 @@ export default function AdminEmployeeDetailPage() {
                       </div>
                       <div><Label>Annual leave</Label><Input type="number" value={form.annual_leave_balance ?? ''} onChange={(e) => setForm({ ...form, annual_leave_balance: Number(e.target.value) })} /></div>
                       <div><Label>Sick leave</Label><Input type="number" value={form.sick_leave_balance ?? ''} onChange={(e) => setForm({ ...form, sick_leave_balance: Number(e.target.value) })} /></div>
+                      <div><Label>Personal leave</Label><Input type="number" value={form.personal_leave_balance ?? ''} onChange={(e) => setForm({ ...form, personal_leave_balance: Number(e.target.value) })} /></div>
+                      <div className="md:col-span-2"><Label>Emergency contact</Label><Input value={form.emergency_contact_name || ''} placeholder="Name" onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })} className="mb-2" /><Input value={form.emergency_contact_phone || ''} placeholder="Phone" onChange={(e) => setForm({ ...form, emergency_contact_phone: e.target.value })} className="mb-2" /><Input value={form.emergency_contact_relationship || ''} placeholder="Relationship" onChange={(e) => setForm({ ...form, emergency_contact_relationship: e.target.value })} /></div>
                       <div className="md:col-span-2"><Label>Notes</Label><Textarea value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} /></div>
                     </div>
                   ) : (
@@ -169,6 +171,8 @@ export default function AdminEmployeeDetailPage() {
                       <p><span className="text-muted-foreground">Pay frequency:</span> {employee.pay_frequency || '—'}</p>
                       <p><span className="text-muted-foreground">Annual leave:</span> {employee.annual_leave_balance ?? '—'}</p>
                       <p><span className="text-muted-foreground">Sick leave:</span> {employee.sick_leave_balance ?? '—'}</p>
+                      <p><span className="text-muted-foreground">Personal leave:</span> {employee.personal_leave_balance ?? '—'}</p>
+                      <p><span className="text-muted-foreground">Emergency contact:</span> {employee.emergency_contact_name ? `${employee.emergency_contact_name} · ${employee.emergency_contact_phone || ''} · ${employee.emergency_contact_relationship || ''}` : '—'}</p>
                       {employee.notes && <p className="md:col-span-2"><span className="text-muted-foreground">Notes:</span> {employee.notes}</p>}
                     </div>
                   )}
@@ -272,6 +276,44 @@ export default function AdminEmployeeDetailPage() {
                       </li>
                     ))}
                   </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><FileClock className="h-5 w-5 text-primary" /><CardTitle>Shifts</CardTitle></CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {(employee.shifts || []).length === 0 && <li className="text-muted-foreground">No shifts.</li>}
+                    {(employee.shifts || []).slice(0, 5).map((row: any) => (
+                      <li key={row.id} className="flex items-center justify-between">
+                        <span>{formatDate(row.shift_date)} · {row.start_time?.slice(0,5) || ''} - {row.end_time?.slice(0,5) || ''}</span>
+                        <Badge variant={row.status === 'confirmed' ? 'default' : 'outline'}>{row.status || 'scheduled'}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><CardTitle>Documents</CardTitle></CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {(employee.documents || []).length === 0 && <li className="text-muted-foreground">No documents.</li>}
+                    {(employee.documents || []).slice(0, 5).map((row: any) => (
+                      <li key={row.id} className="flex items-center justify-between">
+                        <span className="truncate max-w-[200px]">{row.document_name || row.title || `Document #${row.id}`}</span>
+                        {row.file_url && <Button variant="ghost" size="sm" className="h-6 px-2" asChild><a href={row.file_url} target="_blank" rel="noreferrer">View</a></Button>}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><GraduationCap className="h-5 w-5 text-primary" /><CardTitle>Skills & Certifications</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <p><span className="text-muted-foreground">Skills:</span> {Array.isArray(employee.skills) ? employee.skills.join(', ') : employee.skills ? String(employee.skills) : '—'}</p>
+                  <p><span className="text-muted-foreground">Certifications:</span> {Array.isArray(employee.certifications) ? employee.certifications.join(', ') : employee.certifications ? String(employee.certifications) : '—'}</p>
                 </CardContent>
               </Card>
 

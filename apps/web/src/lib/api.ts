@@ -871,6 +871,10 @@ export async function fetchHrStats(token: string): Promise<{ success: boolean; d
   return (await api.get<{ success: boolean; data: HrStats }>('/api/hr/stats', { headers: authHeaders(token) })).data;
 }
 
+export async function fetchDepartments(token: string): Promise<{ success: boolean; data: { id: number; name: string }[] }> {
+  return (await api.get<{ success: boolean; data: { id: number; name: string }[] }>('/api/departments', { headers: authHeaders(token) })).data;
+}
+
 export async function fetchEmployees(
   token: string,
   params?: Record<string, string | number | boolean>,
