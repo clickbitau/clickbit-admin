@@ -1,5 +1,6 @@
 'use client';
-import { Mail as MailIcon } from 'lucide-react';
+import Link from 'next/link';
+import { Mail as MailIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
@@ -75,6 +76,7 @@ export default function AdminCommunicationMailPage() {
     <PageShell
       title="Mail"
       icon={MailIcon}
+      actions={<Button asChild><Link href="/admin/communication/mail/compose"><Plus className="mr-1 h-4 w-4" /> Compose</Link></Button>}
     >
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

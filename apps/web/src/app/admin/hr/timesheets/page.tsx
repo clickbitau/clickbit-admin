@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, CheckCircle, Clock, Coffee, FileClock, XCircle } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Coffee, FileClock, Plus, XCircle } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
@@ -71,7 +72,7 @@ export default function AdminHrTimesheetsPage() {
   };
 
   return (
-    <PageShell title="Timesheets" icon={FileClock} description="Review, approve, and manage employee time entries.">
+    <PageShell title="Timesheets" icon={FileClock} description="Review, approve, and manage employee time entries." actions={<Button asChild><Link href="/admin/hr/timesheets/new"><Plus className="mr-1 h-4 w-4" /> New Entry</Link></Button>}>
       <StatCards cards={statCards} />
 
       <div className="flex flex-wrap gap-2">

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Star as StarIcon } from 'lucide-react';
+import { Plus, Star as StarIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
@@ -33,6 +33,7 @@ export default function AdminContentReviewsPage() {
     <PageShell
       title="Reviews"
       icon={StarIcon}
+      actions={<Button asChild><Link href="/admin/content/reviews/new"><Plus className="mr-1 h-4 w-4" /> New Review</Link></Button>}
     >
       <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
         <option value="all">All</option>
