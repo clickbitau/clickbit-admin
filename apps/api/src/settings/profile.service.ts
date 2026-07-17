@@ -2,12 +2,17 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { Profile } from '@clickbit/shared';
 import { asJson, stringValue } from './settings-utils';
 
 @Injectable()
 export class ProfileService {
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly storage: StorageService,
+  ) {}
 
   private getSupabaseAdmin() {
     const url = this.config.get<string>('SUPABASE_URL');
@@ -120,6 +125,54 @@ export class ProfileService {
     // Skip password verification if using Supabase Auth; admin deletion handled in users service.
     await this.prisma.profiles.update({ where: { id: user.id }, data: { status: 'inactive', updated_at: new Date() } });
     return { success: true, message: 'Account deactivated successfully' };
+  }
+
+  private async uploadImage(file: Express.Multer.File, bucket: string, folder: string, oldUrl?: string | null) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    if (!this.storage.isConfigured()) throw new BadRequestException('Storage is not configured');
+    const filename = `${Date.now()}-${file.originalname}`;
+    const result = await this.storage.upload(file.buffer, bucket, file.originalname, file.mimetype, folder, filename);
+    if (!result.success) throw new BadRequestException(result.error || 'Upload failed');
+    if (oldUrl) await this.storage.deleteByUrl(oldUrl, [bucket]).catch(() => {});
+    return result.url;
+  }
+
+  async uploadAvatar(user: Profile, file: Express.Multer.File) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
+    const url = await this.uploadImage(file, 'avatars', `user-${user.id}`, profile.avatar);
+    const updated = await this.prisma.profiles.update({ where: { id: user.id }, data: { avatar: url, updated_at: new Date() } });
+    return { success: true, message: 'Avatar uploaded successfully', data: { user: this.mapUser(updated) } };
+  }
+
+  async deleteAvatar(user: Profile) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
+    if (profile.avatar) await this.storage.deleteByUrl(profile.avatar, ['avatars']).catch(() => {});
+    const updated = await this.prisma.profiles.update({ where: { id: user.id }, data: { avatar: null, updated_at: new Date() } });
+    return { success: true, message: 'Avatar removed successfully', data: { user: this.mapUser(updated) } };
+  }
+
+  async uploadCompanyLogo(user: Profile, file: Express.Multer.File) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
+    const url = await this.uploadImage(file, 'logos', `user-${user.id}`, profile.company_logo);
+    const updated = await this.prisma.profiles.update({ where: { id: user.id }, data: { company_logo: url, updated_at: new Date() } });
+    if (updated.company_id) {
+      await this.prisma.companies.update({ where: { id: updated.company_id }, data: { logo_url: url, updated_at: new Date() } }).catch(() => {});
+    }
+    return { success: true, message: 'Company logo uploaded successfully', data: { user: this.mapUser(updated) } };
+  }
+
+  async deleteCompanyLogo(user: Profile) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
+    if (profile.company_logo) await this.storage.deleteByUrl(profile.company_logo, ['logos']).catch(() => {});
+    const updated = await this.prisma.profiles.update({ where: { id: user.id }, data: { company_logo: null, updated_at: new Date() } });
+    if (updated.company_id) {
+      await this.prisma.companies.update({ where: { id: updated.company_id }, data: { logo_url: null, updated_at: new Date() } }).catch(() => {});
+    }
+    return { success: true, message: 'Company logo removed successfully', data: { user: this.mapUser(updated) } };
   }
 
   private mapUser(user: any) {

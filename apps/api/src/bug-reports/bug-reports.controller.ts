@@ -51,7 +51,7 @@ export class BugReportsController {
 
   @Post()
   create(@Req() req: RequestWithUser, @Body() dto: CreateBugReportDto) {
-    return this.bugReportsService.create(req.user.id, dto);
+    return this.bugReportsService.create(req.user, dto);
   }
 
   @Post(':id/status')
@@ -92,8 +92,8 @@ export class BugReportsController {
   @Post(':id/approve')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  approve(@Param('id', ParseIntPipe) id: number) {
-    return this.bugReportsService.approve(id);
+  approve(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.bugReportsService.approve(req.user.id, id);
   }
 
   @Post(':id/force-merge')

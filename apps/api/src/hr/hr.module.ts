@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { StorageModule } from '../storage/storage.module';
 import { HrController } from './hr.controller';
 import { EmployeesController } from './employees.controller';
 import { TimeOffController } from './time-off.controller';
@@ -8,6 +9,9 @@ import { RemindersController } from './reminders.controller';
 import { PublicHolidaysController } from './public-holidays.controller';
 import { PayslipsController } from './payslips.controller';
 import { KpiController } from './kpi.controller';
+import { TimeClockController } from './time-clock.controller';
+import { TimesheetsController } from './timesheets.controller';
+import { ShiftsController } from './shifts.controller';
 import { EmployeesService } from './employees.service';
 import { TimeOffService } from './time-off.service';
 import { AnnouncementsService } from './announcements.service';
@@ -15,9 +19,12 @@ import { RemindersService } from './reminders.service';
 import { PublicHolidaysService } from './public-holidays.service';
 import { PayslipsService } from './payslips.service';
 import { KpiService } from './kpi.service';
+import { TimeClockService } from './time-clock.service';
+import { TimesheetsService } from './timesheets.service';
+import { ShiftsService } from './shifts.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, StorageModule],
   controllers: [
     HrController,
     EmployeesController,
@@ -27,7 +34,10 @@ import { KpiService } from './kpi.service';
     PublicHolidaysController,
     PayslipsController,
     KpiController,
+    TimeClockController,
+    TimesheetsController,
+    ShiftsController,
   ],
-  providers: [EmployeesService, TimeOffService, AnnouncementsService, RemindersService, PublicHolidaysService, PayslipsService, KpiService],
+  providers: [EmployeesService, TimeOffService, AnnouncementsService, RemindersService, PublicHolidaysService, PayslipsService, KpiService, TimeClockService, TimesheetsService, ShiftsService],
 })
 export class HrModule {}

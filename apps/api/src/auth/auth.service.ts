@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
@@ -184,6 +184,178 @@ export class AuthService {
   trustDevice(_body: any) { return { success: true, message: 'Trusted device saved' }; }
   checkTrust(_body: any) { return { trusted: false }; }
   removeTrustedDevice(_id: string) { return { success: true, message: 'Device removed' }; }
-  oauthCallback(_body: any) { throw new BadRequestException('OAuth callback not implemented in this pass'); }
-  authCallback(_query: any) { throw new BadRequestException('Auth callback not implemented in this pass'); }
+
+  async oauthCallback(body: any) {
+    const publicClient = this.ensurePublic();
+    if (body.code) {
+      const { data, error } = await (publicClient.auth as any).exchangeCodeForSession(body.code);
+      if (error || !data?.session) throw new BadRequestException(error?.message || 'OAuth code exchange failed');
+      const user = await this.getOrCreateProfile(data.user);
+      return {
+        success: true,
+        data: {
+          user,
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at,
+        },
+      };
+    }
+    if (body.id_token && body.provider) {
+      const { data, error } = await (publicClient.auth as any).signInWithIdToken({
+        provider: body.provider,
+        token: body.id_token,
+        nonce: body.nonce,
+      });
+      if (error || !data?.session) throw new BadRequestException(error?.message || 'OAuth token sign-in failed');
+      const user = await this.getOrCreateProfile(data.user);
+      return {
+        success: true,
+        data: {
+          user,
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at,
+        },
+      };
+    }
+    throw new BadRequestException('code or id_token + provider is required');
+  }
+
+  async authCallback(query: any) {
+    if (query.error) {
+      throw new BadRequestException(`${query.error}: ${query.error_description || ''}`);
+    }
+    return this.oauthCallback({ code: query.code, provider: query.provider });
+  }
+
+  private async getOrCreateProfile(supabaseUser: any) {
+    if (!supabaseUser?.id) throw new BadRequestException('No user returned from OAuth provider');
+    let profile = await this.prisma.profiles.findFirst({ where: { auth_uid: supabaseUser.id } });
+    if (profile) return profile;
+
+    const email = supabaseUser.email?.trim().toLowerCase();
+    const metadata = supabaseUser.user_metadata || {};
+    const fullName = metadata.full_name || metadata.name || '';
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    const firstName = metadata.first_name || parts[0] || 'User';
+    const lastName = metadata.last_name || parts.slice(1).join(' ') || '';
+
+    if (email) {
+      profile = await this.prisma.profiles.findFirst({ where: { email } });
+      if (profile) {
+        profile = await this.prisma.profiles.update({ where: { id: profile.id }, data: { auth_uid: supabaseUser.id } });
+        return profile;
+      }
+    }
+
+    profile = await this.prisma.profiles.create({
+      data: {
+        email: email || `oauth.${supabaseUser.id}@placeholder.local`,
+        auth_uid: supabaseUser.id,
+        first_name: firstName,
+        last_name: lastName,
+        role: 'customer',
+        status: 'active',
+        email_verified: !!supabaseUser.email_confirmed_at,
+      } as any,
+    });
+    return profile;
+  }
+
+  async linkedAccounts(user: any) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+    const linked = (Array.isArray(profile.linked_providers) ? profile.linked_providers : []) as any[];
+    return {
+      success: true,
+      data: {
+        email: profile.email,
+        primary_provider: linked[0]?.provider || 'email',
+        linked_accounts: linked,
+        supabase_uid: profile.auth_uid ? `***${profile.auth_uid.slice(-8)}` : null,
+      },
+    };
+  }
+
+  async linkProvider(user: any, dto: { provider: string; provider_id: string; provider_email?: string }) {
+    const { provider, provider_id } = dto;
+    if (!provider || !provider_id) throw new BadRequestException('provider and provider_id are required');
+    const valid = ['google', 'facebook', 'apple', 'github'];
+    if (!valid.includes(provider)) throw new BadRequestException(`Invalid provider. Must be one of: ${valid.join(', ')}`);
+
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+
+    const existing = await this.prisma.profiles.findFirst({
+      where: {
+        NOT: { id: user.id },
+        linked_providers: { path: ['$'], equals: [{ provider, provider_id }] },
+      },
+    });
+    if (existing) throw new BadRequestException(`This ${provider} account is already linked to another user`);
+
+    const linked = Array.isArray(profile.linked_providers) ? (profile.linked_providers as any[]) : [];
+    const idx = linked.findIndex((p) => p.provider === provider);
+    const entry = { provider, provider_id, provider_email: dto.provider_email || null, linked_at: new Date().toISOString() };
+    if (idx >= 0) linked[idx] = entry;
+    else linked.push(entry);
+
+    const updated = await this.prisma.profiles.update({
+      where: { id: user.id },
+      data: { linked_providers: linked as any },
+    });
+    return { success: true, message: `${provider} account linked successfully`, data: { linked_accounts: updated.linked_providers } };
+  }
+
+  async unlinkProvider(user: any, provider: string) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+    const linked = Array.isArray(profile.linked_providers) ? (profile.linked_providers as any[]) : [];
+    const remaining = linked.filter((p) => p.provider !== provider);
+    if (remaining.length === linked.length) throw new BadRequestException(`${provider} is not linked to this account`);
+    if (remaining.length === 0 && !profile.password && !profile.email_verified) {
+      throw new BadRequestException('Cannot unlink the last login method. Please set a password or verify your email first.');
+    }
+    const updated = await this.prisma.profiles.update({
+      where: { id: user.id },
+      data: { linked_providers: remaining as any },
+    });
+    return { success: true, message: `${provider} account unlinked successfully`, data: { linked_accounts: updated.linked_providers } };
+  }
+
+  async socialLogin(dto: { access_token?: string; refresh_token?: string; provider?: string; provider_id?: string }) {
+    if (!dto.access_token) throw new BadRequestException('access_token is required');
+    const publicClient = this.ensurePublic();
+    const { data, error } = await publicClient.auth.getUser(dto.access_token);
+    if (error || !data.user) throw new BadRequestException(error?.message || 'Invalid access token');
+    const profile = await this.getOrCreateProfile(data.user);
+    return {
+      success: true,
+      message: 'Login successful',
+      data: {
+        user: profile,
+        accessToken: dto.access_token,
+        refreshToken: dto.refresh_token || null,
+        isNewUser: !profile.password,
+      },
+    };
+  }
+
+  async verifyEmail(dto: { token?: string; type?: string }) {
+    if (!dto.token) throw new BadRequestException('token is required');
+    const publicClient = this.ensurePublic();
+    const type = (dto.type as any) || 'email';
+    const { data, error } = await (publicClient.auth as any).verifyOtp({ token_hash: dto.token, type });
+    if (error) throw new BadRequestException(error.message);
+    const user = data?.user;
+    if (user?.id) {
+      const profile = await this.prisma.profiles.findFirst({ where: { auth_uid: user.id } });
+      if (profile) {
+        await this.prisma.profiles.update({ where: { id: profile.id }, data: { email_verified: true } });
+      }
+    }
+    const frontendUrl = (this.config.get<string>('FRONTEND_URL') || 'https://clickbit.com.au').replace(/\/$/, '');
+    return { success: true, verified: true, redirectUrl: `${frontendUrl}/login?verified=true` };
+  }
 }

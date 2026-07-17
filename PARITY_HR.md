@@ -29,42 +29,42 @@ Target implementation: `clickbitau/clickbit-admin/apps/api/src/hr/`.
 
 | Legacy Route | New Route | Status | Notes |
 |---|---|---|---|
-| GET /api/hr/time-clock/status | `GET /api/hr/time-clock/status` | 🚧 | |
-| POST /api/hr/time-clock/auto-clock-in | `POST /api/hr/time-clock/auto-clock-in` | 🚧 | |
-| POST /api/hr/time-clock/upload-photo | `POST /api/hr/time-clock/upload-photo` | 🚧 | File upload |
-| POST /api/hr/time-clock/clock-in | `POST /api/hr/time-clock/clock-in` | 🚧 | |
-| POST /api/hr/time-clock/clock-out | `POST /api/hr/time-clock/clock-out` | 🚧 | |
-| POST /api/hr/time-clock/start-break | `POST /api/hr/time-clock/start-break` | 🚧 | |
-| POST /api/hr/time-clock/end-break | `POST /api/hr/time-clock/end-break` | 🚧 | |
-| GET /api/hr/time-clock/active | `GET /api/hr/time-clock/active` | 🚧 | |
-| POST /api/hr/time-clock/breadcrumb | `POST /api/hr/time-clock/breadcrumb` | 🚧 | |
-| GET /api/hr/timesheets | `GET /api/hr/timesheets` | 🚧 | |
-| GET /api/hr/timesheets/summary/:employeeId | `GET /api/hr/timesheets/summary/:employeeId` | 🚧 | |
-| PUT /api/hr/timesheets/:id/edit | `PUT /api/hr/timesheets/:id/edit` | 🚧 | |
-| POST /api/hr/timesheets/:id/approve | `POST /api/hr/timesheets/:id/approve` | 🚧 | |
-| POST /api/hr/timesheets/:id/reject | `POST /api/hr/timesheets/:id/reject` | 🚧 | |
-| GET /api/hr/timesheets/:id/tasks | `GET /api/hr/timesheets/:id/tasks` | 🚧 | |
-| POST /api/hr/timesheets/:id/work-items | `POST /api/hr/timesheets/:id/work-items` | 🚧 | |
-| DELETE /api/hr/timesheets/:id/work-items/:itemId | `DELETE ...` | 🚧 | |
-| POST /api/hr/timesheets/manual | `POST /api/hr/timesheets/manual` | 🚧 | |
-| POST /api/hr/timesheets/bulk-delete | `POST /api/hr/timesheets/bulk-delete` | 🚧 | |
-| DELETE /api/hr/timesheets/:id | `DELETE /api/hr/timesheets/:id` | 🚧 | |
+| GET /api/hr/time-clock/status | `GET /api/hr/time-clock/status` | ✅ | |
+| POST /api/hr/time-clock/auto-clock-in | `POST /api/hr/time-clock/auto-clock-in` | ✅ | |
+| POST /api/hr/time-clock/upload-photo | `POST /api/hr/time-clock/upload-photo` | ✅ | File upload to Supabase Storage |
+| POST /api/hr/time-clock/clock-in | `POST /api/hr/time-clock/clock-in` | ✅ | |
+| POST /api/hr/time-clock/clock-out | `POST /api/hr/time-clock/clock-out` | ✅ | |
+| POST /api/hr/time-clock/start-break | `POST /api/hr/time-clock/start-break` | ✅ | |
+| POST /api/hr/time-clock/end-break | `POST /api/hr/time-clock/end-break` | ✅ | |
+| GET /api/hr/time-clock/active | `GET /api/hr/time-clock/active` | ✅ | |
+| POST /api/hr/time-clock/breadcrumb | `POST /api/hr/time-clock/breadcrumb` | ✅ | |
+| GET /api/hr/timesheets | `GET /api/hr/timesheets` | ✅ | List/search with summary |
+| GET /api/hr/timesheets/summary/:employeeId | `GET /api/hr/timesheets/summary/:employeeId` | ✅ | |
+| PUT /api/hr/timesheets/:id/edit | `PUT /api/hr/timesheets/:id/edit` | ✅ | |
+| POST /api/hr/timesheets/:id/approve | `POST /api/hr/timesheets/:id/approve` | ✅ | |
+| POST /api/hr/timesheets/:id/reject | `POST /api/hr/timesheets/:id/reject` | ✅ | |
+| GET /api/hr/timesheets/:id/tasks | `GET /api/hr/timesheets/:id/tasks` | ✅ | |
+| POST /api/hr/timesheets/:id/work-items | `POST /api/hr/timesheets/:id/work-items` | ✅ | |
+| DELETE /api/hr/timesheets/:id/work-items/:itemId | `DELETE ...` | ✅ | |
+| POST /api/hr/timesheets/manual | `POST /api/hr/timesheets/manual` | ✅ | |
+| POST /api/hr/timesheets/bulk-delete | `POST /api/hr/timesheets/bulk-delete` | ✅ | |
+| DELETE /api/hr/timesheets/:id | `DELETE /api/hr/timesheets/:id` | ✅ | |
 
 ## Shifts
 
 | Legacy Route | New Route | Status | Notes |
 |---|---|---|---|
-| GET /api/hr/shifts | `GET /api/hr/shifts` | 🚧 | |
-| POST /api/hr/shifts | `POST /api/hr/shifts` | 🚧 | |
-| POST /api/hr/shifts/batch | `POST /api/hr/shifts/batch` | 🚧 | |
-| PUT /api/hr/shifts/:id | `PUT /api/hr/shifts/:id` | 🚧 | |
-| DELETE /api/hr/shifts/:id | `DELETE /api/hr/shifts/:id` | 🚧 | |
-| DELETE /api/hr/shifts/employee/:employeeId | `DELETE ...` | 🚧 | |
-| POST /api/hr/shifts/:id/confirm | `POST /api/hr/shifts/:id/confirm` | 🚧 | |
-| POST /api/hr/shifts/publish | `POST /api/hr/shifts/publish` | 🚧 | |
-| POST /api/hr/shifts/copy-week | `POST /api/hr/shifts/copy-week` | 🚧 | |
-| GET /api/hr/shifts/open | `GET /api/hr/shifts/open` | 🚧 | |
-| POST /api/hr/shifts/:id/claim | `POST /api/hr/shifts/:id/claim` | 🚧 | |
+| GET /api/hr/shifts | `GET /api/hr/shifts` | ✅ | |
+| POST /api/hr/shifts | `POST /api/hr/shifts` | ✅ | |
+| POST /api/hr/shifts/batch | `POST /api/hr/shifts/batch` | ✅ | |
+| PUT /api/hr/shifts/:id | `PUT /api/hr/shifts/:id` | ✅ | |
+| DELETE /api/hr/shifts/:id | `DELETE /api/hr/shifts/:id` | ✅ | |
+| DELETE /api/hr/shifts/employee/:employeeId | `DELETE ...` | ✅ | |
+| POST /api/hr/shifts/:id/confirm | `POST /api/hr/shifts/:id/confirm` | ✅ | |
+| POST /api/hr/shifts/publish | `POST /api/hr/shifts/publish` | ✅ | |
+| POST /api/hr/shifts/copy-week | `POST /api/hr/shifts/copy-week` | ✅ | |
+| GET /api/hr/shifts/open | `GET /api/hr/shifts/open` | ✅ | |
+| POST /api/hr/shifts/:id/claim | `POST /api/hr/shifts/:id/claim` | ✅ | |
 
 ## Time Off
 

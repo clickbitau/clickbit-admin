@@ -117,4 +117,29 @@ export class InvoicesController {
     setNoCache(res);
     return res.json(await this.invoicesService.recalculateAllPayments());
   }
+
+  @Post('from-contact/:contactId')
+  @Roles('admin', 'manager')
+  async createFromContact(
+    @Param('contactId', ParseIntPipe) contactId: number,
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+  ) {
+    setNoCache(res);
+    return res.status(HttpStatus.CREATED).json(await this.invoicesService.createFromContact(req.user.id, contactId));
+  }
+
+  @Post(':id/recover-stripe-payment')
+  @Roles('admin')
+  async recoverStripePayment(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.invoicesService.recoverStripePayment(id));
+  }
+
+  @Post('recover-stripe-by-client')
+  @Roles('admin')
+  async recoverStripeByClient(@Body() body: any, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.invoicesService.recoverStripeByClient(body || {}));
+  }
 }

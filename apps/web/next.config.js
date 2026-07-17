@@ -3,6 +3,7 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   transpilePackages: ['@clickbit/shared'],
+  turbopack: {},
   webpack: (config) => {
     config.output.chunkLoadTimeout = 120000;
     return config;
