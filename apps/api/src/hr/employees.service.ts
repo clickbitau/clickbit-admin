@@ -287,11 +287,31 @@ export class EmployeesService {
     if (!this.isAdminOrManager(user) && !isOwner) {
       throw new ForbiddenException({ success: false, message: 'Not authorized to view this employee profile' });
     }
+
+    const [contracts, timeEntries, timeOffRequests, payslips, shifts] = await Promise.all([
+      this.prisma.hr_contracts.findMany({ where: { employee_id: id }, orderBy: { created_at: 'desc' }, take: 10 }),
+      this.prisma.hr_time_entries.findMany({ where: { employee_id: id }, orderBy: { clock_in_time: 'desc' }, take: 10 }),
+      this.prisma.hr_time_off_requests.findMany({ where: { employee_id: id }, orderBy: { submitted_at: 'desc' }, take: 10 }),
+      this.prisma.payslips.findMany({ where: { employee_id: id }, orderBy: { payment_date: 'desc' }, take: 10 }),
+      this.prisma.hr_shifts.findMany({ where: { employee_id: id }, orderBy: [{ shift_date: 'desc' }, { start_time: 'desc' }], take: 10 }),
+    ]);
+
+    const activeEntry = await this.prisma.hr_time_entries.findFirst({
+      where: { employee_id: id, clock_out_time: null },
+      orderBy: { clock_in_time: 'desc' },
+    });
+
     return {
       success: true,
       data: {
         ...mapEmployee(employee),
-        isWorking: false,
+        contracts,
+        timeEntries,
+        timeOffRequests,
+        payslips,
+        shifts,
+        activeEntry,
+        isWorking: !!activeEntry,
         todayHours: 0,
         weeklyHours: 0,
       },

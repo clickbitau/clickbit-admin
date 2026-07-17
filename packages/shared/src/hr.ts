@@ -52,9 +52,19 @@ export interface Employee {
   postcode?: string | null;
   timezone?: string | null;
   is_demo?: boolean;
-  user?: { id: number; first_name?: string; last_name?: string; email?: string } | null;
+  user?: { id: number; first_name?: string; last_name?: string; email?: string; avatar?: string | null; phone?: string | null; address?: string | null; role?: string | null } | null;
   manager?: { id: number; first_name?: string; last_name?: string; email?: string } | null;
   departmentInfo?: { id: number; name?: string } | null;
+  documents?: Record<string, unknown>[];
+  contracts?: Record<string, unknown>[];
+  timeEntries?: Record<string, unknown>[];
+  timeOffRequests?: Record<string, unknown>[];
+  payslips?: Record<string, unknown>[];
+  shifts?: Record<string, unknown>[];
+  isWorking?: boolean;
+  todayHours?: number;
+  weeklyHours?: number;
+  activeEntry?: Record<string, unknown> | null;
 }
 
 export interface TimeOffRequest {

@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { StatCards } from '@/components/design-system/StatCards';
+import { DataTable } from '@/components/design-system/DataTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,8 +18,9 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { fetchEmployee, updateEmployee, deleteEmployee } from '@/lib/api';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import type { Employee } from '@/types/hr';
-import { ArrowLeft, Users, Save, Trash } from 'lucide-react';
+import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase } from 'lucide-react';
 
 const employmentTypes = ['full_time', 'part_time', 'contract', 'casual', 'intern'];
 const employmentStatuses = ['active', 'inactive', 'terminated', 'on_leave'];
@@ -67,11 +70,18 @@ export default function AdminEmployeeDetailPage() {
     onError: () => toast.error('Failed to delete employee'),
   });
 
-  const handleSave = () => {
-    updateMutation.mutate(form);
-  };
+  const handleSave = () => updateMutation.mutate(form);
 
   const displayName = employee?.user ? `${employee.user.first_name} ${employee.user.last_name}` : `Employee #${id}`;
+
+  const statCards = employee
+    ? [
+        { label: 'Employment status', value: employee.employment_status || 'active', icon: Users, accent: employee.employment_status === 'active' ? 'success' as const : 'warning' as const },
+        { label: 'Hourly rate', value: formatCurrency(employee.hourly_rate ?? undefined), icon: Banknote },
+        { label: 'Salary', value: formatCurrency(employee.salary ?? undefined), icon: Banknote },
+        { label: 'Annual leave', value: `${employee.annual_leave_balance ?? 0} days`, icon: Calendar },
+      ]
+    : [];
 
   if (error) {
     return (
@@ -102,98 +112,182 @@ export default function AdminEmployeeDetailPage() {
       {isLoading || !employee ? (
         <Skeleton className="h-40 w-full" />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-2xl">{displayName}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{employee.user?.email} · {employee.employee_number || `EMP-${employee.id}`}</p>
-                  </div>
-                  <Badge variant={employee.employment_status === 'active' ? 'default' : 'secondary'}>{employee.employment_status || 'active'}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {isEditing ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div><Label>Position</Label><Input value={form.position || ''} onChange={(e) => setForm({ ...form, position: e.target.value })} /></div>
-                    <div><Label>Department</Label><Input value={form.department || ''} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
-                    <div><Label>Employee number</Label><Input value={form.employee_number || ''} onChange={(e) => setForm({ ...form, employee_number: e.target.value })} /></div>
-                    <div><Label>Employment type</Label>
-                      <select value={form.employment_type || ''} onChange={(e) => setForm({ ...form, employment_type: e.target.value })} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                        <option value="">Select...</option>
-                        {employmentTypes.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
-                      </select>
-                    </div>
-                    <div><Label>Employment status</Label>
-                      <select value={form.employment_status || ''} onChange={(e) => setForm({ ...form, employment_status: e.target.value })} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                        {employmentStatuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                      </select>
-                    </div>
-                    <div><Label>Hire date</Label><Input type="date" value={form.hire_date ? new Date(form.hire_date).toISOString().split('T')[0] : ''} onChange={(e) => setForm({ ...form, hire_date: e.target.value })} /></div>
-                    <div><Label>Hourly rate</Label><Input type="number" value={form.hourly_rate ?? ''} onChange={(e) => setForm({ ...form, hourly_rate: Number(e.target.value) })} /></div>
-                    <div><Label>Salary</Label><Input type="number" value={form.salary ?? ''} onChange={(e) => setForm({ ...form, salary: Number(e.target.value) })} /></div>
-                    <div><Label>Pay frequency</Label>
-                      <select value={form.pay_frequency || ''} onChange={(e) => setForm({ ...form, pay_frequency: e.target.value })} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                        <option value="">Select...</option>
-                        {payFrequencies.map((f) => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                    </div>
-                    <div><Label>Annual leave</Label><Input type="number" value={form.annual_leave_balance ?? ''} onChange={(e) => setForm({ ...form, annual_leave_balance: Number(e.target.value) })} /></div>
-                    <div><Label>Sick leave</Label><Input type="number" value={form.sick_leave_balance ?? ''} onChange={(e) => setForm({ ...form, sick_leave_balance: Number(e.target.value) })} /></div>
-                    <div className="md:col-span-2"><Label>Notes</Label><Textarea value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} /></div>
-                  </div>
-                ) : (
-                  <div className="grid gap-2 md:grid-cols-2 text-sm">
-                    <p><span className="text-muted-foreground">Position:</span> {employee.position || '—'}</p>
-                    <p><span className="text-muted-foreground">Department:</span> {employee.department || '—'}</p>
-                    <p><span className="text-muted-foreground">Employment type:</span> {employee.employment_type || '—'}</p>
-                    <p><span className="text-muted-foreground">Status:</span> {employee.employment_status || 'active'}</p>
-                    <p><span className="text-muted-foreground">Hire date:</span> {employee.hire_date ? new Date(employee.hire_date).toLocaleDateString() : '—'}</p>
-                    <p><span className="text-muted-foreground">Hourly rate:</span> {employee.hourly_rate ?? '—'}</p>
-                    <p><span className="text-muted-foreground">Salary:</span> {employee.salary ?? '—'}</p>
-                    <p><span className="text-muted-foreground">Pay frequency:</span> {employee.pay_frequency || '—'}</p>
-                    <p><span className="text-muted-foreground">Annual leave:</span> {employee.annual_leave_balance ?? '—'}</p>
-                    <p><span className="text-muted-foreground">Sick leave:</span> {employee.sick_leave_balance ?? '—'}</p>
-                    {employee.notes && <p className="md:col-span-2"><span className="text-muted-foreground">Notes:</span> {employee.notes}</p>}
-                  </div>
-                )}
+        <>
+          <StatCards cards={statCards} />
 
-                <Separator />
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-2xl">{displayName}</CardTitle>
+                      <p className="text-sm text-muted-foreground">{employee.user?.email} · {employee.employee_number || `EMP-${employee.id}`}</p>
+                    </div>
+                    <Badge variant={employee.employment_status === 'active' ? 'default' : 'secondary'}>{employee.employment_status || 'active'}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {isEditing ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div><Label>Position</Label><Input value={form.position || ''} onChange={(e) => setForm({ ...form, position: e.target.value })} /></div>
+                      <div><Label>Department</Label><Input value={form.department || ''} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
+                      <div><Label>Employee number</Label><Input value={form.employee_number || ''} onChange={(e) => setForm({ ...form, employee_number: e.target.value })} /></div>
+                      <div><Label>Employment type</Label>
+                        <select value={form.employment_type || ''} onChange={(e) => setForm({ ...form, employment_type: e.target.value })} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                          <option value="">Select...</option>
+                          {employmentTypes.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
+                        </select>
+                      </div>
+                      <div><Label>Employment status</Label>
+                        <select value={form.employment_status || ''} onChange={(e) => setForm({ ...form, employment_status: e.target.value })} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                          {employmentStatuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                        </select>
+                      </div>
+                      <div><Label>Hire date</Label><Input type="date" value={form.hire_date ? new Date(form.hire_date).toISOString().split('T')[0] : ''} onChange={(e) => setForm({ ...form, hire_date: e.target.value })} /></div>
+                      <div><Label>Hourly rate</Label><Input type="number" value={form.hourly_rate ?? ''} onChange={(e) => setForm({ ...form, hourly_rate: Number(e.target.value) })} /></div>
+                      <div><Label>Salary</Label><Input type="number" value={form.salary ?? ''} onChange={(e) => setForm({ ...form, salary: Number(e.target.value) })} /></div>
+                      <div><Label>Pay frequency</Label>
+                        <select value={form.pay_frequency || ''} onChange={(e) => setForm({ ...form, pay_frequency: e.target.value })} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                          <option value="">Select...</option>
+                          {payFrequencies.map((f) => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+                      <div><Label>Annual leave</Label><Input type="number" value={form.annual_leave_balance ?? ''} onChange={(e) => setForm({ ...form, annual_leave_balance: Number(e.target.value) })} /></div>
+                      <div><Label>Sick leave</Label><Input type="number" value={form.sick_leave_balance ?? ''} onChange={(e) => setForm({ ...form, sick_leave_balance: Number(e.target.value) })} /></div>
+                      <div className="md:col-span-2"><Label>Notes</Label><Textarea value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} /></div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2 md:grid-cols-2 text-sm">
+                      <p><span className="text-muted-foreground">Position:</span> {employee.position || '—'}</p>
+                      <p><span className="text-muted-foreground">Department:</span> {employee.department || '—'}</p>
+                      <p><span className="text-muted-foreground">Employment type:</span> {employee.employment_type || '—'}</p>
+                      <p><span className="text-muted-foreground">Status:</span> {employee.employment_status || 'active'}</p>
+                      <p><span className="text-muted-foreground">Hire date:</span> {formatDate(employee.hire_date)}</p>
+                      <p><span className="text-muted-foreground">Hourly rate:</span> {formatCurrency(employee.hourly_rate ?? undefined)}</p>
+                      <p><span className="text-muted-foreground">Salary:</span> {formatCurrency(employee.salary ?? undefined)}</p>
+                      <p><span className="text-muted-foreground">Pay frequency:</span> {employee.pay_frequency || '—'}</p>
+                      <p><span className="text-muted-foreground">Annual leave:</span> {employee.annual_leave_balance ?? '—'}</p>
+                      <p><span className="text-muted-foreground">Sick leave:</span> {employee.sick_leave_balance ?? '—'}</p>
+                      {employee.notes && <p className="md:col-span-2"><span className="text-muted-foreground">Notes:</span> {employee.notes}</p>}
+                    </div>
+                  )}
 
-                <div className="flex justify-end">
-                  <Button variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}><Trash className="mr-2 h-4 w-4" /> Delete employee</Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <Separator />
+
+                  <div className="flex justify-end">
+                    <Button variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}><Trash className="mr-2 h-4 w-4" /> Delete employee</Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><Clock className="h-5 w-5 text-primary" /><CardTitle>Time Clock</CardTitle></CardHeader>
+                <CardContent>
+                  <DataTable<Record<string, unknown>>
+                    headers={[{ key: 'in', label: 'Clock In' }, { key: 'out', label: 'Clock Out' }, { key: 'status', label: 'Status' }]}
+                    data={employee.timeEntries || []}
+                    keyExtractor={(row, i) => String((row as any).id ?? i)}
+                    loading={false}
+                    emptyText="No time clock entries."
+                    renderRow={(row) => [
+                      <span key="in">{formatDateTime((row as any).clock_in_time)}</span>,
+                      <span key="out">{formatDateTime((row as any).clock_out_time)}</span>,
+                      <Badge key="status" variant={(row as any).clock_out_time ? 'outline' : 'default'}>{(row as any).clock_out_time ? 'Closed' : 'Active'}</Badge>,
+                    ]}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><Briefcase className="h-5 w-5 text-primary" /><CardTitle>Contracts</CardTitle></CardHeader>
+                <CardContent>
+                  <DataTable<Record<string, unknown>>
+                    headers={[{ key: 'type', label: 'Type' }, { key: 'start', label: 'Start' }, { key: 'end', label: 'End' }, { key: 'status', label: 'Status' }]}
+                    data={employee.contracts || []}
+                    keyExtractor={(row, i) => String((row as any).id ?? i)}
+                    loading={false}
+                    emptyText="No contracts."
+                    renderRow={(row) => [
+                      <span key="type">{(row as any).contract_type || '—'}</span>,
+                      <span key="start">{formatDate((row as any).start_date)}</span>,
+                      <span key="end">{formatDate((row as any).end_date)}</span>,
+                      <Badge key="status" variant="outline">{(row as any).status || 'draft'}</Badge>,
+                    ]}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card>
+                <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <p><span className="text-muted-foreground">Email:</span> {employee.user?.email || '—'}</p>
+                  <p><span className="text-muted-foreground">Phone:</span> {employee.user?.phone || '—'}</p>
+                  <p><span className="text-muted-foreground">Address:</span> {employee.address || employee.user?.address || '—'}</p>
+                  <p><span className="text-muted-foreground">City:</span> {employee.city || '—'}</p>
+                  <p><span className="text-muted-foreground">State:</span> {employee.state || '—'}</p>
+                  <p><span className="text-muted-foreground">Country:</span> {employee.country || '—'}</p>
+                  <p><span className="text-muted-foreground">Postcode:</span> {employee.postcode || '—'}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>Banking</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <p><span className="text-muted-foreground">Account name:</span> {employee.bank_account_name || '—'}</p>
+                  <p><span className="text-muted-foreground">BSB:</span> {employee.bank_bsb || '—'}</p>
+                  <p><span className="text-muted-foreground">Account number:</span> {employee.bank_account_number || '—'}</p>
+                  <p><span className="text-muted-foreground">Super fund:</span> {employee.super_fund_name || '—'}</p>
+                  <p><span className="text-muted-foreground">Super member:</span> {employee.super_member_number || '—'}</p>
+                  <p><span className="text-muted-foreground">TFN:</span> {employee.tax_file_number || '—'}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><Calendar className="h-5 w-5 text-primary" /><CardTitle>Time Off</CardTitle></CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {(employee.timeOffRequests || []).length === 0 && <li className="text-muted-foreground">No time off requests.</li>}
+                    {(employee.timeOffRequests || []).slice(0, 5).map((row: any) => (
+                      <li key={row.id} className="flex items-center justify-between">
+                        <span>{row.leave_type}</span>
+                        <Badge variant="outline">{row.status}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><Banknote className="h-5 w-5 text-primary" /><CardTitle>Payslips</CardTitle></CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {(employee.payslips || []).length === 0 && <li className="text-muted-foreground">No payslips.</li>}
+                    {(employee.payslips || []).slice(0, 5).map((row: any) => (
+                      <li key={row.id} className="flex items-center justify-between">
+                        <span>{formatDate(row.payment_date)}</span>
+                        <span className="font-mono">{formatCurrency(row.net_pay ?? row.gross_pay ?? undefined)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>Manager</CardTitle></CardHeader>
+                <CardContent className="text-sm">
+                  {employee.manager ? (
+                    <p>{employee.manager.first_name} {employee.manager.last_name} · {employee.manager.email}</p>
+                  ) : (
+                    <p className="text-muted-foreground">No manager assigned.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p><span className="text-muted-foreground">Email:</span> {employee.user?.email || '—'}</p>
-                <p><span className="text-muted-foreground">Address:</span> {employee.address || '—'}</p>
-                <p><span className="text-muted-foreground">City:</span> {employee.city || '—'}</p>
-                <p><span className="text-muted-foreground">State:</span> {employee.state || '—'}</p>
-                <p><span className="text-muted-foreground">Country:</span> {employee.country || '—'}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>Banking</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p><span className="text-muted-foreground">Account name:</span> {employee.bank_account_name || '—'}</p>
-                <p><span className="text-muted-foreground">BSB:</span> {employee.bank_bsb || '—'}</p>
-                <p><span className="text-muted-foreground">Account number:</span> {employee.bank_account_number || '—'}</p>
-                <p><span className="text-muted-foreground">Super fund:</span> {employee.super_fund_name || '—'}</p>
-                <p><span className="text-muted-foreground">Super member:</span> {employee.super_member_number || '—'}</p>
-                <p><span className="text-muted-foreground">TFN:</span> {employee.tax_file_number || '—'}</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        </>
       )}
     </PageShell>
   );
