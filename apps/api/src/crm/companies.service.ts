@@ -958,6 +958,73 @@ export class CompaniesService {
     };
   }
 
+  async findContacts(id: number) {
+    await this.ensureCompanyExists(id);
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{
+        contact_id: number;
+        name: string;
+        email: string;
+        phone: string | null;
+        is_primary: boolean;
+        lifecycle_stage: string | null;
+        lead_score: number | null;
+      }>
+    >(
+      `
+      SELECT c.id AS contact_id, c.name, c.email, c.phone, ccc.is_primary, c.lifecycle_stage, c.lead_score
+      FROM crm_contact_companies ccc
+      JOIN contacts c ON c.id = ccc.contact_id
+      WHERE ccc.company_id = $1
+      ORDER BY ccc.is_primary DESC, c.name ASC
+      `,
+      id,
+    );
+    return {
+      contacts: rows.map((r) => ({
+        id: Number(r.contact_id),
+        name: r.name,
+        email: r.email,
+        phone: r.phone,
+        is_primary: r.is_primary,
+        lifecycle_stage: r.lifecycle_stage,
+        lead_score: r.lead_score,
+      })),
+    };
+  }
+
+  async findDeals(id: number) {
+    await this.ensureCompanyExists(id);
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{
+        id: number;
+        deal_number: string;
+        title: string;
+        value: unknown;
+        currency: string;
+        status: string;
+        stage: string | null;
+        actual_close_date: Date | null;
+        expected_close_date: Date | null;
+      }>
+    >(
+      `
+      SELECT id, deal_number, title, value, currency, status, stage, actual_close_date, expected_close_date
+      FROM deals
+      WHERE company_id = $1 AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      `,
+      id,
+    );
+    return {
+      deals: rows.map((r) => ({
+        ...r,
+        id: Number(r.id),
+        value: toNumber(r.value),
+      })),
+    };
+  }
+
   // Documents
 
   async getDocuments(id: number, category?: string, status?: string, page = 1, limit = 50) {

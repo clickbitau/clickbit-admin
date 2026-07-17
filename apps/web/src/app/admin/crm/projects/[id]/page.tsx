@@ -24,6 +24,7 @@ import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import {
   fetchProject,
+  fetchProjectRelated,
   fetchProjectTasks,
   fetchProjectSubprojects,
   fetchProjectDocuments,
@@ -96,6 +97,12 @@ export default function ProjectDetailPage() {
   const { data: meetingsData, isLoading: meetingsLoading } = useQuery({
     queryKey: ['project-meetings', id, meetingsPage],
     queryFn: () => fetchProjectMeetings(token!, id, { page: meetingsPage, limit: 25 }),
+    enabled: !!token && !!id,
+  });
+
+  const { data: relatedData, isLoading: relatedLoading } = useQuery({
+    queryKey: ['project-related', id],
+    queryFn: () => fetchProjectRelated(token!, id),
     enabled: !!token && !!id,
   });
 
@@ -211,6 +218,9 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="subprojects">Subprojects ({subprojectsData?.pagination?.totalItems ?? 0})</TabsTrigger>
           <TabsTrigger value="documents">Documents ({documentsData?.pagination?.totalItems ?? 0})</TabsTrigger>
           <TabsTrigger value="meetings">Meetings ({meetingsData?.pagination?.totalItems ?? 0})</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices ({relatedData?.invoices?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses ({relatedData?.expenses?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="tickets">Tickets ({relatedData?.tickets?.length ?? 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -351,6 +361,59 @@ export default function ProjectDetailPage() {
           {meetingsData?.pagination && (
             <Pagination currentPage={meetingsData.pagination.currentPage} totalPages={meetingsData.pagination.totalPages} totalItems={meetingsData.pagination.totalItems} onPageChange={setMeetingsPage} />
           )}
+        </TabsContent>
+
+        <TabsContent value="invoices" className="space-y-3">
+          <DataTable
+            headers={[{ key: 'ref', label: 'Ref' }, { key: 'title', label: 'Title' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Issue Date' }]}
+            data={relatedData?.invoices ?? []}
+            keyExtractor={(i) => i.id}
+            loading={relatedLoading}
+            emptyText="No project invoices."
+            onRowClick={(i) => router.push(`/admin/finance/invoices/${i.id}`)}
+            renderRow={(i) => [
+              <span key="ref">{i.package_code || `#${i.id}`}</span>,
+              <span key="title">{i.title || '-'}</span>,
+              <span key="amount">{formatCurrency(Number(i.total_amount ?? 0))}</span>,
+              <StatusBadge key="status" status={i.status} />,
+              <span key="date">{formatDate(i.issue_date)}</span>,
+            ]}
+          />
+        </TabsContent>
+
+        <TabsContent value="expenses" className="space-y-3">
+          <DataTable
+            headers={[{ key: 'ref', label: 'Ref' }, { key: 'title', label: 'Title' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Date' }]}
+            data={relatedData?.expenses ?? []}
+            keyExtractor={(e) => e.id}
+            loading={relatedLoading}
+            emptyText="No project expenses."
+            onRowClick={(e) => router.push(`/admin/finance/expenses/${e.id}`)}
+            renderRow={(e) => [
+              <span key="ref">{e.expense_number || `#${e.id}`}</span>,
+              <span key="title">{e.title || '-'}</span>,
+              <span key="amount">{formatCurrency(Number(e.total_amount ?? 0))}</span>,
+              <StatusBadge key="status" status={e.status} />,
+              <span key="date">{formatDate(e.expense_date)}</span>,
+            ]}
+          />
+        </TabsContent>
+
+        <TabsContent value="tickets" className="space-y-3">
+          <DataTable
+            headers={[{ key: 'ticket', label: 'Ticket' }, { key: 'subject', label: 'Subject' }, { key: 'priority', label: 'Priority' }, { key: 'status', label: 'Status' }]}
+            data={relatedData?.tickets ?? []}
+            keyExtractor={(t) => t.id}
+            loading={relatedLoading}
+            emptyText="No linked support tickets."
+            onRowClick={(t) => router.push(`/admin/support/${t.id}`)}
+            renderRow={(t) => [
+              <span key="ticket">{t.ticket_number || `#${t.id}`}</span>,
+              <span key="subject">{t.subject}</span>,
+              <PriorityBadge key="priority" priority={t.priority} />,
+              <StatusBadge key="status" status={t.status} />,
+            ]}
+          />
         </TabsContent>
       </Tabs>
     </PageShell>

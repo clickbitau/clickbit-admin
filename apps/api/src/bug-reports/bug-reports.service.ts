@@ -32,6 +32,16 @@ export class BugReportsService {
     if (typeof query.category === 'string') where.category = query.category;
     if (typeof query.target_repo === 'string') where.target_repo = query.target_repo;
 
+    const search = typeof query.search === 'string' ? query.search.trim() : '';
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { error_message: { contains: search, mode: 'insensitive' } },
+        { target_repo: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
     const limit = Math.min(Number(query.limit) || 50, 200);
     const offset = Number(query.offset) || 0;
 

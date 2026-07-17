@@ -73,7 +73,9 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('Project not found');
-    return { project: this.mapProject(project) };
+    const mapped = this.mapProject(project);
+    mapped.financials = await this.projectFinancials(id);
+    return { project: mapped };
   }
 
   async create(userId: number, dto: CreateProjectDto) {
@@ -105,13 +107,17 @@ export class ProjectsService {
   async getRelated(id: number) {
     const project = await this.ensureProjectExists(id);
 
-    const [tasks, subprojects, documents, meetings, contacts, companies] = await Promise.all([
+    const [tasks, subprojects, documents, meetings, contacts, companies, invoices, expenses, tickets, financials] = await Promise.all([
       this.prisma.project_tasks.findMany({ where: { crm_project_id: id, deleted_at: null } }),
       this.prisma.crm_subprojects.findMany({ where: { parent_project_id: id, deleted_at: null } }),
       this.prisma.crm_project_documents.findMany({ where: { project_id: id } }),
       this.prisma.crm_meetings.findMany({ where: { crm_project_id: id } }),
       this.prisma.contacts.findMany({ where: { company_id: project.company_id, deleted_at: null } }),
       project.company_id ? this.prisma.companies.findUnique({ where: { id: project.company_id } }) : Promise.resolve(null),
+      this.prisma.invoices.findMany({ where: { crm_project_id: id, deleted_at: null }, orderBy: { created_at: 'desc' } }),
+      this.prisma.expenses.findMany({ where: { crm_project_id: id }, orderBy: { created_at: 'desc' } }),
+      this.prisma.tickets.findMany({ where: { crm_project_id: id, deleted_at: null }, orderBy: { created_at: 'desc' } }),
+      this.projectFinancials(id),
     ]);
 
     return {
@@ -122,6 +128,10 @@ export class ProjectsService {
       meetings,
       contacts,
       companies,
+      invoices,
+      expenses,
+      tickets,
+      financials,
     };
   }
 
@@ -478,6 +488,61 @@ export class ProjectsService {
       if (key) stats[key] += count;
     }
     return stats as { total: number; notStarted: number; inProgress: number; completed: number; onHold: number; cancelled: number };
+  }
+
+  private async projectFinancials(id: number) {
+    try {
+      const invoiceRows = await this.prisma.invoices.findMany({
+        where: { crm_project_id: id, deleted_at: null, status: { notIn: ['void', 'cancelled', 'canceled'] } },
+        select: { total_amount: true, amount_paid: true, status: true },
+      });
+      const paymentRows = await this.prisma.payments.findMany({
+        where: { crm_project_id: id, deleted_at: null, status: { not: 'refunded' } },
+        select: { amount: true, gateway_fee: true },
+      });
+      const expenseRows = await this.prisma.expenses.findMany({
+        where: { crm_project_id: id },
+        select: { total_amount: true },
+      });
+
+      const totalValue = invoiceRows.reduce((sum, i) => sum + Number(i.total_amount || 0), 0);
+      const totalPaid = invoiceRows.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+      const totalPaymentsReceived = paymentRows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const totalExpenses = expenseRows.reduce((sum, e) => sum + Number(e.total_amount || 0), 0);
+      const totalFees = paymentRows.reduce((sum, p) => sum + Number(p.gateway_fee || 0), 0);
+      const totalCosts = totalExpenses + totalFees;
+      const netProfit = totalPaymentsReceived - totalCosts;
+
+      return {
+        totalValue,
+        totalPaid,
+        totalPaymentsReceived,
+        totalExpenses,
+        totalCosts,
+        netProfit,
+        labourCost: 0,
+        invoiceCount: invoiceRows.length,
+        estimateCount: 0,
+        expenseCount: expenseRows.length,
+        ticketCount: 0,
+        taskCount: 0,
+      };
+    } catch {
+      return {
+        totalValue: 0,
+        totalPaid: 0,
+        totalPaymentsReceived: 0,
+        totalExpenses: 0,
+        totalCosts: 0,
+        netProfit: 0,
+        labourCost: 0,
+        invoiceCount: 0,
+        estimateCount: 0,
+        expenseCount: 0,
+        ticketCount: 0,
+        taskCount: 0,
+      };
+    }
   }
 
   private async taskStats(where: { [key: string]: unknown }) {

@@ -45,6 +45,8 @@ import type {
   TicketStats,
   TicketQuota,
 } from '@/types/support';
+import type { MonitoredSite, MonitoredSitesResponse } from '@/types/notifications';
+import type { CreateStaffAdvanceInput, StaffAdvance, StaffAdvanceListResponse } from '@/types/staff-advances';
 import type {
   CachedEmail,
   Channel,
@@ -203,6 +205,20 @@ export async function fetchCompanyValueBreakdown(
     headers: authHeaders(token),
   });
   return response.data;
+}
+
+export async function fetchCompanyContacts(
+  token: string,
+  id: string | number,
+): Promise<{ contacts: { id: number; name: string; email: string; phone: string | null; is_primary: boolean; lifecycle_stage: string | null; lead_score: number | null }[] }> {
+  return (await api.get(`/api/crm/companies/${id}/contacts`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCompanyDeals(
+  token: string,
+  id: string | number,
+): Promise<{ deals: { id: number; deal_number: string; title: string; value: number; currency: string; status: string; stage: string | null; actual_close_date: string | null; expected_close_date: string | null }[] }> {
+  return (await api.get(`/api/crm/companies/${id}/deals`, { headers: authHeaders(token) })).data;
 }
 
 export async function fetchCompanyDocuments(
@@ -602,6 +618,14 @@ export async function fetchProjectMeetings(
     params,
     headers: authHeaders(token),
   });
+  return response.data;
+}
+
+export async function fetchProjectRelated(
+  token: string,
+  projectId: string | number,
+): Promise<{ project_id: number; tasks: ProjectTask[]; subprojects: CrmSubproject[]; documents: ProjectDocument[]; meetings: ProjectMeeting[]; contacts: { id: number; name: string }[]; companies: { id: number; name: string } | null; invoices: { id: number; package_code: string; title: string; total_amount: number; status: string; issue_date: string }[]; expenses: { id: number; expense_number: string; title: string; total_amount: number; status: string; expense_date: string }[]; tickets: { id: number; ticket_number: string; subject: string; status: string; priority: string }[]; financials: Record<string, number> }> {
+  const response = await api.get(`/api/crm/projects-new/${projectId}/related`, { headers: authHeaders(token) });
   return response.data;
 }
 
@@ -1092,6 +1116,24 @@ export async function fetchMyAssignedTickets(
   params?: Record<string, string | number | boolean>,
 ): Promise<StaffTicketListResponse> {
   return (await api.get<StaffTicketListResponse>('/api/tickets/my-assigned', { params, headers: authHeaders(token) })).data;
+}
+
+// ─── Notifications / Site Monitoring ───────────────────────────────────────
+
+export async function fetchMonitoredSites(token: string): Promise<MonitoredSitesResponse> {
+  return (await api.get<MonitoredSitesResponse>('/api/notifications/sites', { headers: authHeaders(token) })).data;
+}
+
+export async function updateMonitoredSiteStatus(token: string, id: number, status: string): Promise<{ success: boolean; message: string; site: MonitoredSite }> {
+  return (await api.put<{ success: boolean; message: string; site: MonitoredSite }>(`/api/notifications/sites/${id}/status`, { status }, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteMonitoredSite(token: string, id: number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete<{ success: boolean; message: string }>(`/api/notifications/sites/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function clearAllMonitoredSites(token: string): Promise<{ success: boolean; message: string }> {
+  return (await api.delete<{ success: boolean; message: string }>('/api/notifications/sites', { headers: authHeaders(token) })).data;
 }
 
 // ─── Communication ─────────────────────────────────────────────────────────
@@ -1879,6 +1921,35 @@ export async function approveBugReport(token: string, id: string | number): Prom
 
 export async function forceMergeBugReport(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   return (await api.post(`/api/bug-reports/${id}/force-merge`, {}, { headers: authHeaders(token) })).data;
+}
+
+// ─── Staff Advances ─────────────────────────────────────────────────────────
+
+export async function fetchStaffAdvances(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<StaffAdvanceListResponse> {
+  return (await api.get('/api/staff-advances', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchStaffAdvance(token: string, id: string | number): Promise<{ success: boolean; data: StaffAdvance }> {
+  return (await api.get(`/api/staff-advances/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function createStaffAdvance(token: string, data: CreateStaffAdvanceInput): Promise<{ success: boolean; data: StaffAdvance }> {
+  return (await api.post('/api/staff-advances', data, { headers: authHeaders(token) })).data;
+}
+
+export async function approveStaffAdvance(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/staff-advances/${id}/approve`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function rejectStaffAdvance(token: string, id: string | number, reason: string): Promise<{ success: boolean; message: string }> {
+  return (await api.post(`/api/staff-advances/${id}/reject`, { reason }, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteStaffAdvance(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/staff-advances/${id}`, { headers: authHeaders(token) })).data;
 }
 
 export default api;

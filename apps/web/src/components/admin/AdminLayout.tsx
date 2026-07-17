@@ -29,6 +29,7 @@ import {
   CreditCard,
   Receipt,
   ClipboardList,
+  HandCoins,
   Star,
   TrendingUp,
   BarChart3,
@@ -115,6 +116,7 @@ const sections: NavSection[] = [
       { href: '/admin/finance/invoices', label: 'Invoices', icon: Receipt },
       { href: '/admin/finance/payments', label: 'Payments', icon: CreditCard },
       { href: '/admin/finance/expenses', label: 'Expenses', icon: ClipboardList },
+      { href: '/admin/finance/staff-advances', label: 'Staff Advances', icon: HandCoins },
     ],
   },
   {

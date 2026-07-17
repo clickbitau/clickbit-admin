@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/design-system/DataTable';
-import { Pagination } from '@/components/design-system/Pagination';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import {
@@ -20,10 +19,12 @@ import {
   fetchCompanyPayments,
   fetchCompanyDocuments,
   fetchCompanyValueBreakdown,
+  fetchCompanyContacts,
+  fetchCompanyDeals,
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Company } from '@/types/crm';
-import { ArrowLeft, Building2, Mail, Phone, MapPin, Globe } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, MapPin, Globe, User, Target } from 'lucide-react';
 
 export default function CompanyDetailPage() {
   const { token } = useAuth();
@@ -59,51 +60,33 @@ export default function CompanyDetailPage() {
       <CompanyHeader company={company} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Total Revenue</p>
-            <p className="text-xl font-bold">{formatCurrency(Number(company.total_revenue ?? 0))}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Projects</p>
-            <p className="text-xl font-bold">{company.total_projects ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Tasks</p>
-            <p className="text-xl font-bold">{company.total_tasks ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Deals</p>
-            <p className="text-xl font-bold">{(company.deals as unknown[] | undefined)?.length ?? 0}</p>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Total Revenue</p><p className="text-xl font-bold">{formatCurrency(Number(company.total_revenue ?? 0))}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Projects</p><p className="text-xl font-bold">{company.total_projects ?? 0}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Tasks</p><p className="text-xl font-bold">{company.total_tasks ?? 0}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Deals</p><p className="text-xl font-bold">{company.total_deals ?? 0}</p></CardContent></Card>
       </div>
 
-        <Tabs defaultValue="overview">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-            <TabsTrigger value="value">Value Breakdown</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="deals">Deals</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="value">Value Breakdown</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="overview" className="space-y-4">
-            <CompanyOverview company={company} />
-          </TabsContent>
-          <TabsContent value="users"><CompanyUsers companyId={id} /></TabsContent>
-          <TabsContent value="invoices"><CompanyInvoices companyId={id} /></TabsContent>
-          <TabsContent value="payments"><CompanyPayments companyId={id} /></TabsContent>
-          <TabsContent value="documents"><CompanyDocuments companyId={id} /></TabsContent>
-          <TabsContent value="value"><CompanyValue companyId={id} /></TabsContent>
-        </Tabs>
+        <TabsContent value="overview" className="space-y-4"><CompanyOverview company={company} /></TabsContent>
+        <TabsContent value="contacts"><CompanyContacts companyId={id} /></TabsContent>
+        <TabsContent value="users"><CompanyUsers companyId={id} /></TabsContent>
+        <TabsContent value="invoices"><CompanyInvoices companyId={id} /></TabsContent>
+        <TabsContent value="payments"><CompanyPayments companyId={id} /></TabsContent>
+        <TabsContent value="deals"><CompanyDeals companyId={id} /></TabsContent>
+        <TabsContent value="documents"><CompanyDocuments companyId={id} /></TabsContent>
+        <TabsContent value="value"><CompanyValue companyId={id} /></TabsContent>
+      </Tabs>
     </PageShell>
   );
 }
@@ -152,62 +135,76 @@ function CompanyOverview({ company }: { company: Company }) {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Activity</CardTitle></CardHeader>
-        <CardContent>
-          {company.activities && company.activities.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {(company.activities as { id: number; activity_type: string; subject: string; due_date?: string }[]).slice(0, 5).map((a) => (
-                <li key={a.id} className="flex items-center justify-between border-b py-2 last:border-0">
-                  <span>{a.subject} <Badge variant="secondary">{a.activity_type}</Badge></span>
-                  <span className="text-muted-foreground">{formatDate(a.due_date)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">No recent activities.</p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>Deals</CardTitle></CardHeader>
-        <CardContent>
-          {company.deals && (company.deals as { id: number; title: string; value?: number; status: string }[]).length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {(company.deals as { id: number; title: string; value?: number; status: string }[]).slice(0, 5).map((d) => (
-                <li key={d.id} className="flex items-center justify-between border-b py-2 last:border-0">
-                  <Link href={`/admin/crm/deals/${d.id}`} className="hover:underline">{d.title}</Link>
-                  <span className="font-medium">{formatCurrency(d.value ?? 0)} <StatusBadge status={d.status} /></span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">No deals.</p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>Contacts</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Primary Contact</CardTitle></CardHeader>
         <CardContent>
           {company.primary_contact ? (
-            <div className="text-sm">
-              <p className="font-medium">{company.primary_contact.name}</p>
+            <div className="space-y-1 text-sm">
+              <p className="font-medium flex items-center gap-2"><User className="h-3.5 w-3.5" /> {company.primary_contact.name}</p>
               <p className="text-muted-foreground">{company.primary_contact.email}</p>
+              {company.primary_contact.phone && <p className="text-muted-foreground">{company.primary_contact.phone}</p>}
             </div>
-          ) : company.contactAssociations && (company.contactAssociations as { contact: { id: number; name: string; email?: string; phone?: string } }[]).length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {(company.contactAssociations as { contact: { id: number; name: string; email?: string; phone?: string } }[]).slice(0, 5).map(({ contact }) => (
-                <li key={contact.id} className="border-b py-2 last:border-0">
-                  <Link href={`/admin/crm/contacts/${contact.id}`} className="font-medium hover:underline">{contact.name}</Link>
-                  <p className="text-muted-foreground">{contact.email || contact.phone || '-'}</p>
-                </li>
-              ))}
-            </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">No contacts.</p>
+            <p className="text-sm text-muted-foreground">No primary contact.</p>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function CompanyContacts({ companyId }: { companyId: string }) {
+  const { token } = useAuth();
+  const { data, isLoading } = useQuery({
+    queryKey: ['company-contacts', companyId],
+    queryFn: () => fetchCompanyContacts(token!, companyId),
+    enabled: !!token,
+  });
+
+  const contacts = data?.contacts ?? [];
+  return (
+    <DataTable
+      headers={[{ key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' }, { key: 'stage', label: 'Stage' }, { key: 'primary', label: 'Primary' }]}
+      data={contacts}
+      loading={isLoading}
+      keyExtractor={(c) => c.id}
+      onRowClick={(c) => {}}
+      emptyText="No contacts."
+      renderRow={(c) => [
+        <Link key="name" href={`/admin/crm/contacts/${c.id}`} className="font-medium hover:underline">{c.name}</Link>,
+        <span key="email" className="text-muted-foreground">{c.email}</span>,
+        <span key="phone" className="text-muted-foreground">{c.phone || '-'}</span>,
+        <Badge key="stage" variant="outline">{c.lifecycle_stage || '-'}</Badge>,
+        <span key="primary">{c.is_primary ? 'Yes' : 'No'}</span>,
+      ]}
+    />
+  );
+}
+
+function CompanyDeals({ companyId }: { companyId: string }) {
+  const { token } = useAuth();
+  const { data, isLoading } = useQuery({
+    queryKey: ['company-deals', companyId],
+    queryFn: () => fetchCompanyDeals(token!, companyId),
+    enabled: !!token,
+  });
+
+  const deals = data?.deals ?? [];
+  return (
+    <DataTable
+      headers={[{ key: 'ref', label: 'Ref' }, { key: 'title', label: 'Title' }, { key: 'stage', label: 'Stage' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'close', label: 'Close Date' }]}
+      data={deals}
+      loading={isLoading}
+      keyExtractor={(d) => d.id}
+      emptyText="No deals."
+      renderRow={(d) => [
+        <span key="ref">{d.deal_number || `#${d.id}`}</span>,
+        <Link key="title" href={`/admin/crm/deals/${d.id}`} className="font-medium hover:underline">{d.title}</Link>,
+        <span key="stage" className="text-muted-foreground">{d.stage || '-'}</span>,
+        <span key="amount">{formatCurrency(Number(d.value ?? 0))}</span>,
+        <StatusBadge key="status" status={d.status} />,
+        <span key="close" className="text-muted-foreground">{formatDate(d.actual_close_date || d.expected_close_date)}</span>,
+      ]}
+    />
   );
 }
 
@@ -303,9 +300,9 @@ function CompanyDocuments({ companyId }: { companyId: string }) {
       loading={isLoading}
       keyExtractor={(d) => d.id}
       renderRow={(d) => [
-        <a key="name" href={d.file_url} target="_blank" rel="noreferrer" className="hover:underline">{d.title || d.original_filename || d.file_name}</a>,
-        <Badge key="source" variant="outline">{d.source || 'company'}</Badge>,
-        <span key="size">{d.file_size ? `${Math.round(d.file_size / 1024)} KB` : '-'}</span>,
+        <span key="name">{d.file_name}</span>,
+        <Badge key="source" variant="outline">{d.source || d.category || 'document'}</Badge>,
+        <span key="size">{d.file_size}</span>,
         <span key="date">{formatDate(d.created_at)}</span>,
       ]}
     />
@@ -320,26 +317,20 @@ function CompanyValue({ companyId }: { companyId: string }) {
     enabled: !!token,
   });
 
+  const rows = data?.breakdown ?? [];
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Value Breakdown</CardTitle>
-        <p className="text-2xl font-semibold">{formatCurrency(data?.total ?? 0)}</p>
-      </CardHeader>
-      <CardContent>
-        <DataTable
-          headers={[{ key: 'type', label: 'Type' }, { key: 'description', label: 'Description' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }]}
-          data={data?.breakdown ?? []}
-          loading={isLoading}
-          keyExtractor={(v, i) => `${v.type}-${v.id}-${i}`}
-          renderRow={(v) => [
-            <Badge key="type" variant="outline">{v.type}</Badge>,
-            <span key="desc">{v.description}</span>,
-            <span key="amount">{formatCurrency(v.amount, v.currency)}</span>,
-            <StatusBadge key="status" status={v.status} />,
-          ]}
-        />
-      </CardContent>
-    </Card>
+    <DataTable
+      headers={[{ key: 'type', label: 'Type' }, { key: 'reference', label: 'Reference' }, { key: 'description', label: 'Description' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }]}
+      data={rows}
+      loading={isLoading}
+      keyExtractor={(r, i) => `${r.type}-${r.id}-${i}`}
+      renderRow={(r) => [
+        <Badge key="type" variant="outline" className="capitalize">{r.type}</Badge>,
+        <span key="ref">{r.reference}</span>,
+        <span key="desc">{r.description}</span>,
+        <span key="amount">{formatCurrency(Number(r.amount ?? 0))}</span>,
+        <StatusBadge key="status" status={r.status} />,
+      ]}
+    />
   );
 }
