@@ -1092,6 +1092,10 @@ export async function deleteMailTemplate(token: string, id: string): Promise<Com
   return (await api.delete(`/api/mail/templates/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function sendMail(token: string, accountId: string, data: { to_email: string; to_name?: string; subject: string; body_text?: string; body_html?: string; template?: string }) {
+  return (await api.post(`/api/mail/accounts/${accountId}/send`, data, { headers: authHeaders(token) })).data;
+}
+
 // ─── Content / Marketing ───────────────────────────────────────────────────
 
 export async function fetchServices(params?: Record<string, string | number | boolean>): Promise<Service[]> {
