@@ -112,7 +112,9 @@ export interface CrmLead {
   phone?: string | null;
   lead_number?: string;
   company_id?: number | null;
+  company_name?: string | null;
   company?: Company | null;
+  job_title?: string | null;
   pipeline_id?: number | null;
   pipeline?: Pipeline | null;
   stage_id?: number | null;
@@ -121,9 +123,12 @@ export interface CrmLead {
   owner?: User | null;
   status?: 'open' | 'won' | 'lost' | string;
   estimated_value?: number | string;
+  currency?: string;
   lead_score?: number;
   lead_source?: string;
   priority?: string;
+  expected_close_date?: string | null;
+  description?: string | null;
   position?: number;
   created_at?: string;
   updated_at?: string;
