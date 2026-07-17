@@ -35,7 +35,7 @@ export class AuthService {
 
   private sanitizeProfile(profile: any) {
     if (!profile) return profile;
-    const { password, email_verification_token, password_reset_token, ...safe } = profile;
+    const { password: _password, email_verification_token: _emailVerificationToken, password_reset_token: _passwordResetToken, ...safe } = profile;
     return safe;
   }
 
