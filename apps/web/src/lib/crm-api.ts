@@ -77,6 +77,14 @@ export async function fetchContacts(token: string, params?: ApiParams) {
   return data;
 }
 
+export async function fetchContactStats(token: string, ownerId?: number | string) {
+  const { data } = await api.get('/api/crm/contacts/stats', {
+    headers: { Authorization: `Bearer ${token}` },
+    params: ownerId ? { owner_id: ownerId } : undefined,
+  });
+  return data as { total: number; customerCount: number; leadCount: number; mql: number; sql: number; subscriber: number; avgLeadScore: number };
+}
+
 export async function fetchContact(token: string, id: number | string) {
   const { data } = await api.get<{ data: Contact }>(`/api/crm/contacts/${id}`, {
     headers: { Authorization: `Bearer ${token}` },
