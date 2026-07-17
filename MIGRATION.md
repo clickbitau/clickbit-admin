@@ -62,35 +62,16 @@ Use this exact sequence for each module. CRM has proved the flow and the contrac
 
 The new porting order is:
 
-1. **auth / users**
-   - `SupabaseAuthGuard` and `@Roles()` decorator (done).
-   - Port `/api/auth/me`, `/api/auth/login`, logout/session routes.
-   - Service tokens (`cb_*`) can be migrated later.
-   - `users` (profiles, roles, settings) is co-ported with auth.
-
-2. **crm** *(in progress)*
-   - `GET /api/crm/companies` is done.
-   - `/api/crm/companies/:id`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/pipelines`, `/api/crm/leads`, `/api/crm/projects`, `/api/crm/subprojects`, `/api/crm/activities`, `/api/crm/notes`, `/api/crm/meetings`, `/api/crm/automations` remain.
-   - Preserve computed fields (`total_revenue`, `total_deals`, `total_projects`, `total_tasks`) and `aggregatedStats`.
-
-3. **finance** (invoices / payments / expenses)
-   - `/api/invoices/*`, `/api/payments/*`, `/api/expenses/*`.
-   - These feed the CRM totals, so ensure the value aggregation logic stays consistent with `crm/companies`.
-
-4. **hr**
-   - `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, courses, announcements).
-
-5. **support / tickets**
-   - `/api/tickets/*`, `/api/ticket-automation/*`, `/api/bug-reports/*`.
-
-6. **communication** (mail / messages / chat)
-   - `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
-
-7. **content / marketing**
-   - `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/public-content/*`.
-
-8. **settings / admin**
-   - `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*`.
+1. ✅ **auth / users** — `SupabaseAuthGuard`, `@Roles()`, OAuth callbacks, profile/settings, user management.
+2. ✅ **crm** — `/api/crm/companies`, `/api/crm/contacts`, `/api/crm/deals`, `/api/crm/leads`, `/api/crm/pipelines`, `/api/crm/projects`, `/api/crm/activities`, `/api/crm/notes`, `/api/crm/automations`.
+3. ✅ **finance** — `/api/invoices/*`, `/api/payments/*`, `/api/expenses/*`, `/api/staff-advances/*`, public pay-by-code.
+4. ✅ **hr** — `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, timesheets, forms, public holidays, announcements, reminders, KPI).
+5. ✅ **support / tickets** — `/api/tickets/*`, `/api/ticket-automation/*`, `/api/bug-reports/*`.
+6. ✅ **communication** — `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
+7. ✅ **content / marketing** — `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/team/*`, `/api/services/*`, `/api/public/*`.
+8. ✅ **settings / admin** — `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*`, `/api/credentials/*`, `/api/verify/*`, `/api/clickdeploy/*`.
+9. ✅ **portals** — `/api/customer/*`, `/api/agent/*`.
+10. ✅ **workers** — NestJS `@Cron` schedulers for blog, reminders, recurring tasks, shifts, analytics, announcements, session cleanup.
 
 ## Background-worker services
 
@@ -109,10 +90,12 @@ The legacy clickbit server runs several background services and cron-like schedu
 
 Inside `apps/web`:
 
-1. Auth gate / token entry.
-2. Admin CRM pages starting with the Companies list (done).
-3. Admin CRM detail/edit pages.
-4. Dashboard and remaining admin modules in the same order as the API.
+1. ✅ Auth gate / token entry.
+2. ✅ Admin CRM pages (list, detail, create).
+3. ✅ Admin dashboard and stat-card pages for finance, HR, support, content, communication, and settings.
+4. ✅ Public auth pages (login, register, forgot-password, OAuth callback).
+5. ✅ Customer and agent portal pages.
+6. Remaining runtime polish: live SMTP/IMAP, Stripe, and payroll integrations.
 
 The public/marketing site and any Three.js pages stay in the legacy `clickbit/client` during the transition.
 
@@ -155,15 +138,12 @@ All required variables are documented in `.env.example`. Key values are the same
 
 ## Remaining module order
 
-The recommended migration order after auth/CRM is:
+All module ports are complete. The remaining work is:
 
-1. **auth/users** — port `/api/auth/me`, login/logout/session routes, user management.
-2. **finance (invoices / payments / expenses)** — `/api/invoices/*`, `/api/payments/*`, `/api/expenses/*`, `/api/staff-advances/*`.
-3. **hr** — `/api/hr/*` (employees, time-clock, time-off, payslips, contracts, shifts, courses, announcements).
-4. **support / tickets** — `/api/tickets/*`, `/api/ticket-automation/*`.
-5. **communication (mail / messages / chat)** — `/api/mail/*`, `/api/messages/*`, `/api/chat/*`.
-6. **content / marketing** — `/api/blog/*`, `/api/marketing-posts/*`, `/api/portfolio/*`, `/api/reviews/*`, `/api/team/*`, `/api/public/*`.
-7. ✅ **settings / admin** — `/api/settings/*`, `/api/admin/*`, `/api/admin/audit-logs/*` (see PR #12). `/api/credentials/*` deferred to gap-filling pass.
+1. Run `prisma db pull` against the live Supabase database and reconcile any schema drift.
+2. Smoke-test the Nest API end-to-end against real data and fix any envelope/status mismatches.
+3. Wire real integrations: SMTP/IMAP mail sync, live Stripe checkout/webhooks, and payroll calculation.
+4. Update `click-deploy` router rules to point `/api/*` at the new Nest API and verify legacy clients.
 
 ## Background-worker services to migrate ✅
 

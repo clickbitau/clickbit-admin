@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { fetchCustomerTickets } from '@/lib/api';
 import type { Ticket } from '@/types/support';
 import { formatDate } from '@/lib/format';
-import { Ticket as TicketIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Plus, Ticket as TicketIcon } from 'lucide-react';
 
 export default function CustomerTicketsPage() {
   const router = useRouter();
@@ -17,6 +19,7 @@ export default function CustomerTicketsPage() {
       resourceKey="tickets"
       fetcher={fetchCustomerTickets}
       getRowId={(row) => row.id}
+      actions={<Button asChild><Link href="/customer/tickets/new"><Plus className="mr-1 h-4 w-4" /> New Ticket</Link></Button>}
       columns={[
         { key: 'ticket_number', header: 'Ticket #', accessor: 'ticket_number' },
         { key: 'subject', header: 'Subject', accessor: 'subject' },

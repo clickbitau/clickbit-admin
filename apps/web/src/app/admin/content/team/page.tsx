@@ -1,28 +1,19 @@
 'use client';
 import Link from 'next/link';
-import { Users as UsersIcon } from 'lucide-react';
+import { Plus, Users as UsersIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchAdminTeamMembers, createTeamMember, deleteTeamMember } from '@/lib/api';
+import { fetchAdminTeamMembers, deleteTeamMember } from '@/lib/api';
 import type { TeamMember } from '@/types/content';
 
 export default function AdminContentTeamPage() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ name: '', role: '', email: '' });
   const { data, isLoading } = useQuery({ queryKey: ['admin-team', token], queryFn: () => { if (!token) throw new Error('No token'); return fetchAdminTeamMembers(token); }, enabled: !!token });
-
-  const add = useMutation({
-    mutationFn: () => createTeamMember(token!, form),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-team', token] }); setForm({ name: '', role: '', email: '' }); },
-  });
 
   const remove = useMutation({
     mutationFn: (id: number) => deleteTeamMember(token!, id),
@@ -33,16 +24,8 @@ export default function AdminContentTeamPage() {
     <PageShell
       title="Team"
       icon={UsersIcon}
+      actions={<Button asChild><Link href="/admin/content/team/new"><Plus className="mr-1 h-4 w-4" /> New Member</Link></Button>}
     >
-      <Card>
-        <CardHeader><CardTitle>New Team Member</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="max-w-xs" />
-          <Input placeholder="Role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="max-w-xs" />
-          <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="max-w-xs" />
-          <Button onClick={() => form.name && form.role && add.mutate()} disabled={add.isPending}>Add</Button>
-        </CardContent>
-      </Card>
       {isLoading ? <Skeleton className="h-40 w-full" /> : (
         <div className="divide-y">
           {data?.map((m: TeamMember) => (
