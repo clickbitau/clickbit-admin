@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, FileText, Plus, Power, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle, FileText, Plus, Power, XCircle } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { activateContract, createContract, fetchContracts, terminateContract, updateContract } from '@/lib/api';
+import { activateContract, fetchContracts, terminateContract } from '@/lib/api';
 
 const statusColor: Record<string, string> = {
   active: 'default',
@@ -23,12 +24,7 @@ const statusColor: Record<string, string> = {
 export default function AdminHrContractsPage() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
-  const [employeeId, setEmployeeId] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [employmentType, setEmploymentType] = useState('full_time');
-  const [position, setPosition] = useState('');
-  const [salary, setSalary] = useState('');
-  const [payFrequency, setPayFrequency] = useState('fortnightly');
+
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['contracts', token],
@@ -51,27 +47,6 @@ export default function AdminHrContractsPage() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['contracts', token] });
 
-  const create = useMutation({
-    mutationFn: () => {
-      if (!token) throw new Error('No token');
-      return createContract(token, {
-        employee_id: employeeId,
-        start_date: startDate,
-        employment_type: employmentType,
-        position,
-        salary,
-        pay_frequency: payFrequency,
-      });
-    },
-    onSuccess: () => {
-      refresh();
-      setEmployeeId('');
-      setStartDate('');
-      setPosition('');
-      setSalary('');
-    },
-  });
-
   const activate = useMutation({
     mutationFn: (id: number) => {
       if (!token) throw new Error('No token');
@@ -88,14 +63,6 @@ export default function AdminHrContractsPage() {
     onSuccess: refresh,
   });
 
-  const update = useMutation({
-    mutationFn: ({ id, field, value }: { id: number; field: string; value: any }) => {
-      if (!token) throw new Error('No token');
-      return updateContract(token, id, { [field]: value });
-    },
-    onSuccess: refresh,
-  });
-
   const statCards = [
     { label: 'Total Contracts', value: stats.total, icon: FileText },
     { label: 'Active', value: stats.active, icon: CheckCircle, accent: 'success' as const },
@@ -104,30 +71,8 @@ export default function AdminHrContractsPage() {
   ];
 
   return (
-    <PageShell title="Contracts" icon={FileText} description="Manage employee contracts, activations, and terminations.">
+    <PageShell title="Contracts" icon={FileText} description="Manage employee contracts, activations, and terminations." actions={<Button asChild><Link href="/admin/hr/contracts/new"><Plus className="mr-1 h-4 w-4" /> New Contract</Link></Button>}>
       <StatCards cards={statCards} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>New Contract</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-6 gap-2">
-          <Input placeholder="Employee ID" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} />
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <Input placeholder="Position" value={position} onChange={(e) => setPosition(e.target.value)} />
-          <Input placeholder="Salary" value={salary} onChange={(e) => setSalary(e.target.value)} />
-          <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="full_time">Full Time</option>
-            <option value="part_time">Part Time</option>
-            <option value="casual">Casual</option>
-            <option value="contractor">Contractor</option>
-            <option value="intern">Intern</option>
-          </select>
-          <Button onClick={() => create.mutate()} disabled={create.isPending}>
-            <Plus className="mr-2 h-4 w-4" /> Create
-          </Button>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
