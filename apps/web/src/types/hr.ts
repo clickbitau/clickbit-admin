@@ -65,3 +65,79 @@ export interface Shift {
   notes?: string | null;
   employee?: { name?: string; email?: string };
 }
+
+export interface Payslip {
+  id: number;
+  employee_id: number;
+  pay_period_start: string;
+  pay_period_end: string;
+  payment_date: string;
+  pay_frequency: string;
+  currency: string;
+  gross_pay: number | string;
+  tax_withheld: number | string;
+  superannuation: number | string;
+  net_pay: number | string;
+  ytd_gross: number | string;
+  ytd_tax: number | string;
+  ytd_super: number | string;
+  status?: string;
+  pdf_url?: string | null;
+  line_items?: unknown[];
+  leave_data?: Record<string, unknown>;
+  notes?: string | null;
+  employee?: { name?: string; email?: string };
+}
+
+export interface PayslipCalcResult extends Payslip {
+  employee_name?: string;
+  timesheet_hours?: number;
+  is_overdue?: boolean;
+}
+
+export interface Contract {
+  id: number;
+  employee_id: number;
+  contract_number?: string | null;
+  employment_type?: string;
+  position?: string | null;
+  department?: string | null;
+  manager_id?: number | null;
+  hourly_rate?: number | string | null;
+  salary?: number | string | null;
+  pay_frequency?: string;
+  currency?: string | null;
+  default_weekly_hours?: number | string | null;
+  work_schedule?: Record<string, unknown>;
+  start_date: string;
+  end_date?: string | null;
+  status?: string;
+  renewal_date?: string | null;
+  terms_summary?: string | null;
+  change_reason?: string | null;
+  notes?: string | null;
+  responsibilities?: string | null;
+  work_address?: string | null;
+  work_city?: string | null;
+  work_state?: string | null;
+  work_country?: string | null;
+  work_postcode?: string | null;
+  work_timezone?: string | null;
+  employee?: { name?: string; email?: string };
+  manager?: { name?: string; email?: string };
+  creator?: { name?: string; email?: string };
+}
+
+export interface KpiScore {
+  employee_id: number;
+  period: string;
+  total_score: number;
+  punctuality_score: number;
+  task_efficiency_score: number;
+  task_timeliness_score: number;
+  support_resolution_score: number;
+  leadership_score: number;
+  documentation_score: number;
+  metadata?: Record<string, unknown>;
+  employee?: { name?: string; email?: string };
+}
