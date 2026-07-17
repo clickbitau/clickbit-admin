@@ -166,6 +166,13 @@ const sections: NavSection[] = [
     links: [],
   },
   {
+    id: 'bug-reports',
+    label: 'Bug Reports',
+    icon: Bug,
+    href: '/admin/bug-reports',
+    links: [],
+  },
+  {
     id: 'settings',
     label: 'Admin',
     icon: Settings,
