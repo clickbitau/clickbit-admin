@@ -44,7 +44,7 @@ export default function AdminBillingSettingsPage() {
   });
 
   useEffect(() => {
-    if (data) setForm({ ...form, ...data });
+    if (data) setForm((f) => ({ ...f, ...data }));
   }, [data]);
 
   const save = useMutation({
