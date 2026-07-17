@@ -1631,6 +1631,12 @@ export async function deleteDocument(token: string, id: string | number) {
   return (await api.delete(`/api/documents/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function uploadDocument(token: string, formData: FormData): Promise<{ success: boolean; document: AppDocument }> {
+  return (await api.post('/api/documents/upload', formData, {
+    headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' },
+  })).data;
+}
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 export async function fetchAnalyticsDashboard(token: string, period?: number): Promise<{ success: boolean; data: AnalyticsDashboard }> {

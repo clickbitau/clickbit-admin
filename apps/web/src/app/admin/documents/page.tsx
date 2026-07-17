@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, FileText, Search, Trash2, Upload } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
@@ -79,8 +80,8 @@ export default function AdminDocumentsPage() {
             className="pl-8"
           />
         </div>
-        <Button variant="outline" asChild>
-          <a href="/api/documents/upload" target="_blank" rel="noreferrer"><Upload className="mr-2 h-4 w-4" /> Upload</a>
+        <Button asChild>
+          <Link href="/admin/documents/new"><Upload className="mr-2 h-4 w-4" /> Upload Document</Link>
         </Button>
       </div>
 
