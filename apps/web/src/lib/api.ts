@@ -1242,6 +1242,18 @@ export async function deleteBlogPost(token: string, id: number): Promise<Content
   return (await api.delete(`/api/blog/admin/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function fetchMarketingPosts(token: string, params?: Record<string, string | number | boolean>): Promise<{ posts: BlogPost[]; pagination: { total: number; limit: number; offset: number; hasMore: boolean } }> {
+  return (await api.get('/api/marketing-posts/admin', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createMarketingPost(token: string, data: Partial<BlogPost>): Promise<{ post: BlogPost }> {
+  return (await api.post('/api/marketing-posts/admin', data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteMarketingPost(token: string, id: number): Promise<ContentLegacyMessageResponse> {
+  return (await api.delete(`/api/marketing-posts/admin/${id}`, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchPublicContent(key: string): Promise<unknown> {
   return (await api.get(`/api/public/${key}`)).data;
 }
