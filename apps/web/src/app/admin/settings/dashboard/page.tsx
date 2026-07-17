@@ -14,16 +14,16 @@ export default function AdminSettingsDashboardPage() {
 
   if (isLoading) return <div className="min-h-screen bg-background p-6"><Skeleton className="h-40 w-full" /></div>;
 
-  const stats = data || {};
+  const stats = data?.data;
   const cards = [
-    { label: 'Users', value: stats.totalUsers ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Blog Posts', value: stats.totalBlogPosts ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Portfolio Items', value: stats.totalPortfolioItems ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Contacts', value: stats.totalContacts ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Services', value: stats.totalServices ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Orders', value: stats.totalOrders ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Revenue', value: stats.totalRevenue ?? 0, icon: LayoutDashboardIcon },
-    { label: 'Monthly Revenue', value: stats.monthlyRevenue ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Users', value: stats?.totalUsers ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Blog Posts', value: stats?.totalBlogPosts ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Portfolio Items', value: stats?.totalPortfolioItems ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Contacts', value: stats?.totalContacts ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Services', value: stats?.totalServices ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Orders', value: stats?.totalOrders ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Revenue', value: stats?.totalRevenue ?? 0, icon: LayoutDashboardIcon },
+    { label: 'Monthly Revenue', value: stats?.monthlyRevenue ?? 0, icon: LayoutDashboardIcon },
   ];
 
   return (

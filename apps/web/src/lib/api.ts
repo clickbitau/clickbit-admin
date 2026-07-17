@@ -23,6 +23,7 @@ import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListRespons
 import type { AnalyticsDashboard } from '@/types/analytics';
 import type { AppDocument } from '@/types/documents';
 import type { BillingSettings, PdfTemplate, SettingRow } from '@/types/settings';
+import type { DashboardStats, FinanceDashboardData } from '@/types/dashboard';
 import type { Announcement, Contract, Employee, HrDashboardData, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,
@@ -781,6 +782,10 @@ export async function deleteEmployee(token: string, id: string | number): Promis
   return (await api.delete(`/api/hr/employees/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function syncEmployees(token: string): Promise<{ success: boolean; data: { created: number; skipped: number } }> {
+  return (await api.post('/api/hr/employees/sync', {}, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchTimeOff(
   token: string,
   params?: Record<string, string | number | boolean>,
@@ -1340,8 +1345,15 @@ export async function changePassword(token: string, data: { current_password: st
   return (await api.put('/api/profile/password', data, { headers: authHeaders(token) })).data;
 }
 
-export async function fetchDashboardStats(token: string) {
+export async function fetchDashboardStats(token: string): Promise<{ success: boolean; data: DashboardStats }> {
   return (await api.get('/api/admin/dashboard/stats', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchFinanceDashboard(
+  token: string,
+  period = 30,
+): Promise<{ success: boolean; data: FinanceDashboardData }> {
+  return (await api.get('/api/admin/finance/dashboard', { params: { period }, headers: authHeaders(token) })).data;
 }
 
 export async function fetchAuditLogs(token: string, params?: Record<string, string | number | boolean>) {
