@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, CheckCircle, Clock, Coffee, FileClock, Plus, XCircle } from 'lucide-react';
@@ -23,6 +24,7 @@ function formatDuration(minutes?: number | null) {
 
 export default function AdminHrTimesheetsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -120,7 +122,11 @@ export default function AdminHrTimesheetsPage() {
                   </TableRow>
                 )}
                 {entries.map((entry: any) => (
-                  <TableRow key={entry.id}>
+                  <TableRow
+                    key={entry.id}
+                    className="cursor-pointer hover:bg-primary/5"
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/timesheets/${entry.id}`); }}
+                  >
                     <TableCell>{entry.employee?.name || entry.employee?.email || `Employee ${entry.employee_id}`}</TableCell>
                     <TableCell>{entry.clock_in_time ? new Date(entry.clock_in_time).toLocaleString() : '-'}</TableCell>
                     <TableCell>{entry.clock_out_time ? new Date(entry.clock_out_time).toLocaleString() : '-'}</TableCell>

@@ -1582,6 +1582,11 @@ export async function fetchTimesheets(
   return (await api.get('/api/hr/timesheets', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchTimesheet(token: string, id: string | number): Promise<TimeEntry> {
+  const response = await api.get<{ success: boolean; data: TimeEntry }>(`/api/hr/timesheets/${id}`, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
 export async function fetchTimesheetSummary(token: string, employeeId: string | number, params?: { start_date?: string; end_date?: string }) {
   return (await api.get<{ success: boolean; data: TimesheetSummary }>(`/api/hr/timesheets/summary/${employeeId}`, { params, headers: authHeaders(token) })).data;
 }

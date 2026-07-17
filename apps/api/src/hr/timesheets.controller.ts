@@ -26,6 +26,12 @@ export class TimesheetsController {
     return res.json(await this.timesheetsService.summary(Number(employeeId), query));
   }
 
+  @Get(':id')
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.timesheetsService.findOne(Number(id), req.user));
+  }
+
   @Put(':id/edit')
   async edit(@Param('id') id: string, @Body() dto: TimesheetEditDto, @Req() req: RequestWithUser, @Res() res: Response) {
     setNoCache(res);
