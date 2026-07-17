@@ -151,6 +151,11 @@ export async function deleteCompany(token: string, id: string | number): Promise
   await api.delete(`/api/crm/companies/${id}`, { headers: authHeaders(token) });
 }
 
+export async function createCompany(token: string, data: Partial<Company>): Promise<Company> {
+  const response = await api.post<Company>('/api/crm/companies', data, { headers: authHeaders(token) });
+  return response.data;
+}
+
 export async function fetchCompanyUsers(token: string, id: string | number): Promise<User[]> {
   const response = await api.get<{ users: User[] }>(`/api/crm/companies/${id}/users`, {
     headers: authHeaders(token),
@@ -432,6 +437,11 @@ export async function updateContact(token: string, id: string | number, data: Pa
 
 export async function deleteContact(token: string, id: string | number): Promise<void> {
   await api.delete(`/api/crm/contacts/${id}`, { headers: authHeaders(token) });
+}
+
+export async function createContact(token: string, data: Partial<CrmContact>): Promise<CrmContact> {
+  const response = await api.post<CrmContact>('/api/crm/contacts', data, { headers: authHeaders(token) });
+  return response.data;
 }
 
 export async function fetchCustomerStats(token: string): Promise<ContactStats> {

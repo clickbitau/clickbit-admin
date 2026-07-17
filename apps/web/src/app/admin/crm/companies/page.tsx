@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -68,7 +69,7 @@ export default function AdminCrmCompaniesPage() {
   };
 
   return (
-    <PageShell title="Companies" icon={Building2} description="Manage business accounts and organization relationships" actions={<Button onClick={() => {}}>New Company</Button>}>
+    <PageShell title="Companies" icon={Building2} description="Manage business accounts and organization relationships" actions={<Button asChild><Link href="/admin/crm/companies/new">New Company</Link></Button>}>
       <CompanyStats
           totalCompanies={pagination.totalItems}
           aggregatedStats={data?.aggregatedStats}
