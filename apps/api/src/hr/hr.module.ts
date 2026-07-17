@@ -10,6 +10,8 @@ import { PublicHolidaysController } from './public-holidays.controller';
 import { PayslipsController } from './payslips.controller';
 import { KpiController } from './kpi.controller';
 import { TimeClockController } from './time-clock.controller';
+import { TimesheetsController } from './timesheets.controller';
+import { ShiftsController } from './shifts.controller';
 import { EmployeesService } from './employees.service';
 import { TimeOffService } from './time-off.service';
 import { AnnouncementsService } from './announcements.service';
@@ -18,6 +20,8 @@ import { PublicHolidaysService } from './public-holidays.service';
 import { PayslipsService } from './payslips.service';
 import { KpiService } from './kpi.service';
 import { TimeClockService } from './time-clock.service';
+import { TimesheetsService } from './timesheets.service';
+import { ShiftsService } from './shifts.service';
 
 @Module({
   imports: [AuthModule, StorageModule],
@@ -31,7 +35,9 @@ import { TimeClockService } from './time-clock.service';
     PayslipsController,
     KpiController,
     TimeClockController,
+    TimesheetsController,
+    ShiftsController,
   ],
-  providers: [EmployeesService, TimeOffService, AnnouncementsService, RemindersService, PublicHolidaysService, PayslipsService, KpiService, TimeClockService],
+  providers: [EmployeesService, TimeOffService, AnnouncementsService, RemindersService, PublicHolidaysService, PayslipsService, KpiService, TimeClockService, TimesheetsService, ShiftsService],
 })
 export class HrModule {}
