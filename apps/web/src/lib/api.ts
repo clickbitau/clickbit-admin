@@ -22,7 +22,7 @@ import type {
 import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
 import type { AnalyticsDashboard } from '@/types/analytics';
 import type { AppDocument } from '@/types/documents';
-import type { PdfTemplate } from '@/types/settings';
+import type { BillingSettings, PdfTemplate, SettingRow } from '@/types/settings';
 import type { Announcement, Contract, Employee, HrDashboardData, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,

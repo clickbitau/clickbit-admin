@@ -13,3 +13,24 @@ export interface PdfTemplate {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface BillingSettings {
+  stripePublishableKey: string;
+  enableStripe: boolean;
+  currencyCode: string;
+  taxRate: number;
+  taxType: string;
+  googleMapsApiKey: string;
+}
+
+export interface SettingRow {
+  id?: number;
+  setting_key: string;
+  setting_value?: string | null;
+  setting_type?: string;
+  description?: string | null;
+  is_public?: boolean;
+  auto_load?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
