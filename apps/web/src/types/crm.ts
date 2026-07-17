@@ -72,6 +72,14 @@ export interface CrmContact {
   updated_at?: string;
   effective_email?: string | null;
   effective_phone?: string | null;
+  job_title?: string | null;
+  department?: string | null;
+  website?: string | null;
+  location?: string | null;
+  linkedin_url?: string | null;
+  twitter_url?: string | null;
+  preferred_contact_method?: string | null;
+  date_of_birth?: string | null;
 }
 
 export interface PipelineStage {
