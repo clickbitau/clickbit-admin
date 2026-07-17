@@ -731,6 +731,10 @@ export async function updateExpense(token: string, id: string | number, data: Pa
   return (await api.put<{ success: boolean; data: Expense }>(`/api/expenses/${id}`, data, { headers: authHeaders(token) })).data;
 }
 
+export async function createExpense(token: string, data: Partial<Expense>): Promise<{ success: boolean; data: Expense }> {
+  return (await api.post<{ success: boolean; data: Expense }>('/api/expenses', data, { headers: authHeaders(token) })).data;
+}
+
 export async function deleteExpense(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   return (await api.delete<{ success: boolean; message: string }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
 }

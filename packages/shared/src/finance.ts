@@ -124,6 +124,7 @@ export interface Expense {
   reimbursedToUser?: { id: number; first_name?: string; last_name?: string } | null;
   is_billable?: boolean;
   is_reimbursable?: boolean;
+  notes?: string | null;
   invoice_id?: number | null;
   invoice?: { id: number; package_code?: string; title?: string } | null;
   crm_project_id?: number | null;
