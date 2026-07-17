@@ -126,6 +126,8 @@ export function mapExpense(expense: ExpenseWithRelations) {
     employee: e.employees
       ? { ...e.employees, user: (e.employees as { profiles?: unknown }).profiles }
       : undefined,
+    invoice: e.invoices,
+    deal: e.deals,
     crmProject: e.crm_projects,
     crmSubproject: e.crm_subprojects,
     linkedReceipts: e.receipt_records,
@@ -140,6 +142,8 @@ export function mapExpense(expense: ExpenseWithRelations) {
     profiles_expenses_approved_byToprofiles: undefined,
     profiles_expenses_reimbursed_toToprofiles: undefined,
     receipt_records: undefined,
+    invoices: undefined,
+    deals: undefined,
   };
 }
 

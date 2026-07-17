@@ -138,12 +138,14 @@ export interface Expense {
   notes?: string | null;
   invoice_id?: number | null;
   invoice?: { id: number; package_code?: string; title?: string } | null;
+  deal?: { id: number; title: string } | null;
   crm_project_id?: number | null;
   crmProject?: { id: number; name: string; project_number?: string } | null;
   crm_subproject_id?: number | null;
   crmSubproject?: { id: number; name: string } | null;
   receipt_ids?: number[];
   linkedReceipts?: Record<string, unknown>[];
+  receipts?: { id: number; file_name: string; file_url?: string | null; total_amount?: number }[];
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,6 +41,11 @@ import {
   CheckCircle,
   Plus,
   Save,
+  Building2,
+  User,
+  Folder,
+  FileText,
+  CreditCard,
 } from 'lucide-react';
 
 const statuses = ['draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'cancelled'];
@@ -222,8 +228,17 @@ export default function AdminInvoiceDetailPage() {
       {isLoading || !invoice ? (
         <Skeleton className="h-40 w-full" />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
+        <>
+          <StatCards
+            cards={[
+              { label: 'Total', value: formatCurrency(totals.total), icon: DollarSign, accent: 'primary' },
+              { label: 'Paid', value: formatCurrency(totals.paid), icon: CheckCircle, accent: 'success' },
+              { label: 'Due', value: formatCurrency(totals.due), icon: DollarSign, accent: totals.due > 0 ? 'destructive' : 'success' },
+              { label: 'Payments', value: (invoice.payments || []).length, icon: CreditCard, accent: 'secondary' },
+            ]}
+          />
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -346,7 +361,9 @@ export default function AdminInvoiceDetailPage() {
                   <ul className="space-y-2 text-sm">
                     {(invoice.payments || []).map((p: any) => (
                       <li key={p.id} className="flex justify-between border-b pb-2">
-                        <span>{p.payment_method} · {p.transaction_id || 'manual'}</span>
+                        <Link href={`/admin/finance/payments/${p.transaction_id || p.id}`} className="hover:underline">
+                          {p.payment_method} · {p.transaction_id || 'manual'}
+                        </Link>
                         <span className="font-medium">{formatCurrency(p.amount)}</span>
                       </li>
                     ))}
@@ -370,6 +387,38 @@ export default function AdminInvoiceDetailPage() {
             </Card>
 
             <Card>
+              <CardHeader><CardTitle>Related</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {invoice.company ? (
+                  <Link href={`/admin/crm/companies/${invoice.company.id}`} className="flex items-center gap-3 hover:underline">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center"><Building2 className="w-4 h-4 text-gray-600 dark:text-gray-300" /></div>
+                    <div className="min-w-0"><p className="font-medium truncate">{invoice.company.name}</p><p className="text-xs text-muted-foreground">Company</p></div>
+                  </Link>
+                ) : (
+                  <p className="text-muted-foreground">No linked company.</p>
+                )}
+                {invoice.contact && (
+                  <Link href={`/admin/crm/contacts/${invoice.contact.id}`} className="flex items-center gap-3 hover:underline">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center"><User className="w-4 h-4 text-gray-600 dark:text-gray-300" /></div>
+                    <div className="min-w-0"><p className="font-medium truncate">{invoice.contact.name}</p><p className="text-xs text-muted-foreground">{invoice.contact.email || 'Contact'}</p></div>
+                  </Link>
+                )}
+                {invoice.crmProject && (
+                  <Link href={`/admin/crm/projects/${invoice.crmProject.id}`} className="flex items-center gap-3 hover:underline">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center"><Folder className="w-4 h-4 text-gray-600 dark:text-gray-300" /></div>
+                    <div className="min-w-0"><p className="font-medium truncate">{invoice.crmProject.name}</p><p className="text-xs text-muted-foreground">{invoice.crmProject.project_number || 'Project'}</p></div>
+                  </Link>
+                )}
+                {invoice.crmSubproject && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center"><FileText className="w-4 h-4 text-gray-600 dark:text-gray-300" /></div>
+                    <div className="min-w-0"><p className="font-medium truncate">{invoice.crmSubproject.name}</p><p className="text-xs text-muted-foreground">Subproject</p></div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
               <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <Button className="w-full" onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending || invoice.status === 'paid'}><Mail className="mr-2 h-4 w-4" /> Send invoice</Button>
@@ -388,6 +437,7 @@ export default function AdminInvoiceDetailPage() {
             </Card>
           </div>
         </div>
+        </>
       )}
     </PageShell>
   );
