@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Globe as GlobeIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -35,6 +36,7 @@ export default function AdminHrPublicHolidaysPage() {
       title="Public Holidays"
       icon={GlobeIcon}
       description="Manage public holidays and regional calendars."
+      actions={<Button asChild><Link href="/admin/hr/public-holidays/new">New Public Holiday</Link></Button>}
     >
 
       <Input

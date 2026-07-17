@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Megaphone as MegaphoneIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -35,6 +36,7 @@ export default function AdminHrAnnouncementsPage() {
       title="Announcements"
       icon={MegaphoneIcon}
       description="Company-wide announcements and updates."
+      actions={<Button asChild><Link href="/admin/hr/announcements/new">New Announcement</Link></Button>}
     >
 
       <Input
