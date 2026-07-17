@@ -63,6 +63,8 @@ export interface Shift {
   open_shift_limit?: number | null;
   color?: string;
   notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
   employee?: { name?: string; email?: string };
 }
 

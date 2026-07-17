@@ -83,6 +83,12 @@ export class ShiftsController {
     return res.json(await this.shiftsService.openShifts(query));
   }
 
+  @Get(':id')
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.shiftsService.findOne(Number(id), req.user));
+  }
+
   @Post(':id/claim')
   async claim(@Param('id') id: string, @Req() req: RequestWithUser, @Res() res: Response) {
     setNoCache(res);

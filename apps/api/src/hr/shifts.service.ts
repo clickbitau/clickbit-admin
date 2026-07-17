@@ -93,6 +93,30 @@ export class ShiftsService {
     return buildLegacyDataEnvelope(shifts.map(mapShift));
   }
 
+  async findOne(id: number, user: Profile) {
+    const shift = await this.prisma.hr_shifts.findUnique({
+      where: { id },
+      include: {
+        employees_hr_shifts_employee_idToemployees: {
+          include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
+        },
+        employees_hr_shifts_swap_requested_withToemployees: {
+          include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true } } },
+        },
+      },
+    });
+    if (!shift) throw new NotFoundException({ success: false, message: 'Shift not found' });
+
+    if (user.role !== 'admin' && user.role !== 'manager') {
+      const employee = await this.findEmployee(user.id);
+      if (!employee || shift.employee_id !== employee.id) {
+        throw new ForbiddenException({ success: false, message: 'Not authorized to view this shift' });
+      }
+    }
+
+    return buildLegacyDataEnvelope(mapShift(shift));
+  }
+
   async create(dto: any, user: Profile, req?: any) {
     const { start_datetime, end_datetime } = this.computeDatetimes(dto.shift_date, dto.start_time, dto.end_time);
 
