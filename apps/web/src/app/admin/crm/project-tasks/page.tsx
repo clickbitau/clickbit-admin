@@ -6,7 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -19,7 +18,6 @@ import { Pagination } from '@/components/design-system/Pagination';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
-import { FormDialog } from '@/components/design-system/FormDialog';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchTasks, fetchAssignees, updateTaskStatus } from '@/lib/api';
@@ -37,7 +35,6 @@ export default function ProjectTasksPage() {
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
-  const [formOpen, setFormOpen] = useState(false);
 
   const queryParams = useMemo(() => {
     const params: Record<string, string | number> = { page, limit: 25 };
@@ -83,7 +80,7 @@ export default function ProjectTasksPage() {
       title="Project Tasks"
       icon={FolderKanbanIcon}
       description="Cross-project task management"
-      actions={<Button onClick={() => setFormOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Task</Button>}
+      actions={<Button asChild><Link href="/admin/crm/project-tasks/new"><Plus className="mr-1 h-4 w-4" /> New Task</Link></Button>}
     >
       <StatCards cards={statCards} />
 
@@ -143,40 +140,6 @@ export default function ProjectTasksPage() {
       />
 
       <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
-
-      <TaskFormDialog open={formOpen} onOpenChange={setFormOpen} assignees={assignees ?? []} onSubmit={(values) => { toast.info('Create task endpoint not wired to this view'); setFormOpen(false); }} />
     </PageShell>
-  );
-}
-
-function TaskFormDialog({ open, onOpenChange, assignees, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; assignees: User[]; onSubmit: (v: Partial<ProjectTask>) => void }) {
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    onSubmit({
-      title: String(data.get('title') ?? ''),
-      description: String(data.get('description') ?? ''),
-      status: String(data.get('status') ?? 'todo'),
-      priority: String(data.get('priority') ?? 'medium'),
-      assigned_to: data.get('assigned_to') ? Number(data.get('assigned_to')) : undefined,
-      due_date: String(data.get('due_date') ?? '') || undefined,
-      estimated_hours: data.get('estimated_hours') ? Number(data.get('estimated_hours')) : undefined,
-    });
-  }
-
-  return (
-    <FormDialog open={open} onOpenChange={onOpenChange} title="New Task" onSubmit={handleSubmit}>
-      <div className="grid gap-2"><Label htmlFor="title">Title</Label><Input id="title" name="title" required /></div>
-      <div className="grid gap-2"><Label htmlFor="description">Description</Label><textarea id="description" name="description" className="min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2"><Label htmlFor="status">Status</Label><Select name="status" defaultValue="todo"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todo">To Do</SelectItem><SelectItem value="in_progress">In Progress</SelectItem><SelectItem value="review">Review</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="blocked">Blocked</SelectItem></SelectContent></Select></div>
-        <div className="grid gap-2"><Label htmlFor="priority">Priority</Label><Select name="priority" defaultValue="medium"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="urgent">Urgent</SelectItem></SelectContent></Select></div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2"><Label htmlFor="assigned_to">Assignee</Label><Select name="assigned_to" defaultValue=""><SelectTrigger><SelectValue placeholder="Assignee" /></SelectTrigger><SelectContent><SelectItem value="">Unassigned</SelectItem>{assignees.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="grid gap-2"><Label htmlFor="due_date">Due Date</Label><Input id="due_date" name="due_date" type="date" /></div>
-      </div>
-      <div className="grid gap-2"><Label htmlFor="estimated_hours">Estimated Hours</Label><Input id="estimated_hours" name="estimated_hours" type="number" /></div>
-    </FormDialog>
   );
 }

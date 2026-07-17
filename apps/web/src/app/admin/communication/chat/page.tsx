@@ -1,8 +1,9 @@
 'use client';
-import { MessageSquare as MessageSquareIcon } from 'lucide-react';
+import { MessageSquare as MessageSquareIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -74,6 +75,7 @@ export default function AdminCommunicationChatPage() {
     <PageShell
       title="Chat"
       icon={MessageSquareIcon}
+      actions={<Button asChild><Link href="/admin/communication/chat/new"><Plus className="mr-1 h-4 w-4" /> New</Link></Button>}
     >
       <div className="grid gap-4 md:grid-cols-[300px_1fr]">
         <Card className="h-[calc(100vh-12rem)]">

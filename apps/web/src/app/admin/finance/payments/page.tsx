@@ -1,5 +1,6 @@
 'use client';
-import { CreditCard as CreditCardIcon } from 'lucide-react';
+import Link from 'next/link';
+import { CreditCard as CreditCardIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
@@ -44,6 +45,7 @@ export default function AdminFinancePaymentsPage() {
       title="Payments"
       icon={CreditCardIcon}
       description="Recorded and gateway payments"
+      actions={<Button asChild><Link href="/admin/finance/payments/new"><Plus className="mr-2 h-4 w-4" /> Record Payment</Link></Button>}
     >
       <StatCards cards={statCards} />
 

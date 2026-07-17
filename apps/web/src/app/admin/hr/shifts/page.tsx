@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, CheckCircle, Clock, Copy, Plus, Trash2 } from 'lucide-react';
@@ -85,7 +86,7 @@ export default function AdminHrShiftsPage() {
   ];
 
   return (
-    <PageShell title="Shifts" icon={Calendar} description="Manage employee shift rosters and open shift claims.">
+    <PageShell title="Shifts" icon={Calendar} description="Manage employee shift rosters and open shift claims." actions={<Button asChild><Link href="/admin/hr/shifts/new"><Plus className="mr-2 h-4 w-4" /> New Shift</Link></Button>}>
       <StatCards cards={statCards} />
 
       <div className="flex flex-wrap gap-2">
