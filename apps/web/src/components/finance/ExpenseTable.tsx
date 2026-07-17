@@ -15,9 +15,10 @@ import type { Expense } from '@/types/finance';
 interface ExpenseTableProps {
   expenses: Expense[];
   loading: boolean;
+  onRowClick?: (expense: Expense) => void;
 }
 
-export function ExpenseTable({ expenses, loading }: ExpenseTableProps) {
+export function ExpenseTable({ expenses, loading, onRowClick }: ExpenseTableProps) {
   if (loading) {
     return (
       <div className="space-y-2">
@@ -70,7 +71,7 @@ export function ExpenseTable({ expenses, loading }: ExpenseTableProps) {
         </TableHeader>
         <TableBody>
           {expenses.map((expense) => (
-            <TableRow key={expense.id}>
+            <TableRow key={expense.id} className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''} onClick={() => onRowClick?.(expense)}>
               <TableCell className="font-medium">{expense.expense_number || `#${expense.id}`}</TableCell>
               <TableCell>{expense.description || '-'}</TableCell>
               <TableCell className="capitalize">{expense.category || '-'}</TableCell>

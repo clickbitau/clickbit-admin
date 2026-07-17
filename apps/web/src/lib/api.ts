@@ -25,7 +25,7 @@ import type {
   User,
   ValueBreakdownResponse,
 } from '@/types/crm';
-import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
+import type { Expense, ExpenseStats, Invoice, InvoiceListResponse, InvoiceStats, Payment, PaymentListResponse, PaymentStats } from '@/types/finance';
 import type { AnalyticsDashboard } from '@/types/analytics';
 import type { AppDocument } from '@/types/documents';
 import type { BillingSettings, PdfTemplate, SettingRow } from '@/types/settings';
@@ -823,6 +823,18 @@ export async function createExpense(token: string, data: Partial<Expense>): Prom
 
 export async function deleteExpense(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   return (await api.delete<{ success: boolean; message: string }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchInvoiceStats(token: string): Promise<{ success: boolean; data: InvoiceStats }> {
+  return (await api.get<{ success: boolean; data: InvoiceStats }>('/api/invoices/stats', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchPaymentStats(token: string, params?: { dateFrom?: string; dateTo?: string }): Promise<{ success: boolean; data: PaymentStats }> {
+  return (await api.get<{ success: boolean; data: PaymentStats }>('/api/payments/stats', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchExpenseStats(token: string, params?: { start_date?: string; end_date?: string }): Promise<{ success: boolean; data: ExpenseStats }> {
+  return (await api.get<{ success: boolean; data: ExpenseStats }>('/api/expenses/stats', { params, headers: authHeaders(token) })).data;
 }
 
 // ─── HR ────────────────────────────────────────────────────────────────────

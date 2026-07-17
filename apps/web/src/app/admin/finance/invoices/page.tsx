@@ -1,20 +1,26 @@
 'use client';
-import { DollarSign as DollarSignIcon } from 'lucide-react';
+import { DollarSign as DollarSignIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InvoiceTable } from '@/components/finance/InvoiceTable';
 import { StatCards } from '@/components/design-system/StatCards';
-import { fetchInvoices } from '@/lib/api';
+import { fetchInvoices, fetchInvoiceStats } from '@/lib/api';
 import Link from 'next/link';
+
+const statusOptions = ['', 'draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'cancelled'];
+
+interface StatItem { label: string; value: number | string; icon: typeof DollarSignIcon; accent?: 'success' | 'warning' | 'destructive'; filter?: string; }
 
 export default function AdminFinanceInvoicesPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -23,7 +29,7 @@ export default function AdminFinanceInvoicesPage() {
     queryKey: ['invoices', token, page, search, status],
     queryFn: async () => {
       if (!token) throw new Error('No token');
-      const params: Record<string, string | number> = { page, limit: 12 };
+      const params: Record<string, string | number> = { page, limit: 12, sort_by: 'created_at', sort_order: 'DESC' };
       if (search) params.search = search;
       if (status) params.status = status;
       return fetchInvoices(token, params);
@@ -31,25 +37,68 @@ export default function AdminFinanceInvoicesPage() {
     enabled: !!token,
   });
 
-  const invoices = data?.invoices ?? data?.data ?? data?.packages ?? [];
-  const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 12 };
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['invoice-stats', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchInvoiceStats(token); },
+    enabled: !!token,
+  });
 
-  const statCards = [
-    { label: 'Total Invoices', value: pagination.total ?? invoices.length, icon: DollarSignIcon },
-    { label: 'Paid', value: invoices.filter((i: any) => i.status === 'paid').length, icon: DollarSignIcon, accent: 'success' as const },
-    { label: 'Outstanding', value: invoices.filter((i: any) => ['sent', 'viewed', 'partial'].includes(i.status)).length, icon: DollarSignIcon, accent: 'warning' as const },
-    { label: 'Overdue', value: invoices.filter((i: any) => i.status === 'overdue').length, icon: DollarSignIcon, accent: 'destructive' as const },
-  ];
+  const invoices = data?.invoices ?? data?.data ?? [];
+  const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 12 };
+  const stats = statsData?.data;
+
+  const totalUnpaid = useMemo(() => {
+    if (!stats) return 0;
+    return stats.sent + stats.viewed + stats.partial + stats.overdue;
+  }, [stats]);
+
+  const statItems: StatItem[] = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { label: 'Total', value: stats.total, icon: DollarSignIcon, filter: '' },
+      { label: 'Paid', value: stats.paid, icon: DollarSignIcon, accent: 'success', filter: 'paid' },
+      { label: 'Outstanding', value: totalUnpaid, icon: DollarSignIcon, accent: 'warning', filter: 'outstanding' },
+      { label: 'Overdue', value: stats.overdue, icon: DollarSignIcon, accent: 'destructive', filter: 'overdue' },
+    ];
+  }, [stats, totalUnpaid]);
+
+  const handleStatClick = (filter?: string) => {
+    if (filter === 'outstanding') {
+      // outstanding is a virtual filter; show sent+viewed+partial+overdue via status sent (closest)
+      setStatus('sent');
+    } else if (filter !== undefined) {
+      setStatus(filter);
+    }
+    setPage(1);
+  };
+
+  const statCards = statItems.map((s) => ({
+    label: s.label,
+    value: statsLoading ? '...' : s.value,
+    icon: s.icon,
+    accent: s.accent,
+    onClick: s.filter !== undefined ? () => handleStatClick(s.filter) : undefined,
+  }));
 
   return (
     <PageShell
-      title="Finance"
+      title="Invoices"
       icon={DollarSignIcon}
       description="Invoices, estimates and quotes"
+      actions={<Button asChild><Link href="/admin/finance/invoices/new"><Plus className="mr-2 h-4 w-4" /> New Invoice</Link></Button>}
     >
       <StatCards cards={statCards} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm">
+          <SummaryCard label="Draft" value={stats.draft} />
+          <SummaryCard label="Sent" value={stats.sent} />
+          <SummaryCard label="Viewed" value={stats.viewed} />
+          <SummaryCard label="Partial" value={stats.partial} />
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3">
         <Input
           placeholder="Search invoices..."
           value={search}
@@ -57,27 +106,17 @@ export default function AdminFinanceInvoicesPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
+          className="max-w-sm"
         />
         <select
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
           className="h-10 rounded-md border bg-background px-3 text-sm"
         >
-          <option value="">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="viewed">Viewed</option>
-          <option value="partial">Partial</option>
-          <option value="paid">Paid</option>
-          <option value="overdue">Overdue</option>
-          <option value="cancelled">Cancelled</option>
+          {statusOptions.map((s) => (
+            <option key={s} value={s}>{s ? s.replace('_', ' ').replace(/^\w/, (c) => c.toUpperCase()) : 'All statuses'}</option>
+          ))}
         </select>
-        <Button asChild className="w-full">
-          <Link href="/admin/finance/invoices/new">New Invoice</Link>
-        </Button>
       </div>
 
       <Card>
@@ -88,7 +127,7 @@ export default function AdminFinanceInvoicesPage() {
           {error ? (
             <div className="text-destructive">Failed to load invoices.</div>
           ) : (
-            <InvoiceTable invoices={invoices} loading={isLoading} />
+            <InvoiceTable invoices={invoices} loading={isLoading} onRowClick={(i) => router.push(`/admin/finance/invoices/${i.id}`)} />
           )}
         </CardContent>
       </Card>
@@ -107,5 +146,16 @@ export default function AdminFinanceInvoicesPage() {
         </div>
       </div>
     </PageShell>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <Card>
+      <CardContent className="py-4">
+        <p className="text-muted-foreground text-xs">{label}</p>
+        <p className="text-2xl font-bold">{value}</p>
+      </CardContent>
+    </Card>
   );
 }

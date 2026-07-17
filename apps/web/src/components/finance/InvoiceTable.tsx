@@ -16,9 +16,10 @@ import type { Invoice } from '@/types/finance';
 interface InvoiceTableProps {
   invoices: Invoice[];
   loading: boolean;
+  onRowClick?: (invoice: Invoice) => void;
 }
 
-export function InvoiceTable({ invoices, loading }: InvoiceTableProps) {
+export function InvoiceTable({ invoices, loading, onRowClick }: InvoiceTableProps) {
   if (loading) {
     return (
       <div className="space-y-2">
@@ -72,11 +73,15 @@ export function InvoiceTable({ invoices, loading }: InvoiceTableProps) {
         </TableHeader>
         <TableBody>
           {invoices.map((invoice) => (
-            <TableRow key={invoice.id}>
+            <TableRow key={invoice.id} className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''} onClick={() => onRowClick?.(invoice)}>
               <TableCell className="font-medium">
-                <Link href={`/admin/finance/invoices/${invoice.id}`} className="hover:underline">
-                  {invoice.invoice_number || invoice.package_code}
-                </Link>
+                {onRowClick ? (
+                  <span className="hover:underline">{invoice.invoice_number || invoice.package_code}</span>
+                ) : (
+                  <Link href={`/admin/finance/invoices/${invoice.id}`} className="hover:underline">
+                    {invoice.invoice_number || invoice.package_code}
+                  </Link>
+                )}
               </TableCell>
               <TableCell>
                 <div className="flex flex-col">

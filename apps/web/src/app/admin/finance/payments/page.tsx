@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { CreditCard as CreditCardIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -12,35 +12,56 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PaymentTable } from '@/components/finance/PaymentTable';
 import { StatCards } from '@/components/design-system/StatCards';
-import { fetchPayments } from '@/lib/api';
+import { fetchPayments, fetchPaymentStats } from '@/lib/api';
+import { formatCurrency } from '@/lib/format';
+
+const statusOptions = ['', 'completed', 'pending', 'processing', 'failed', 'cancelled', 'refunded'];
 
 export default function AdminFinancePaymentsPage() {
   const { token } = useAuth();
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['payments', token, page, search],
+    queryKey: ['payments', token, page, search, status],
     queryFn: async () => {
       if (!token) throw new Error('No token');
       const params: Record<string, string | number> = { page, limit: 12 };
       if (search) params.search = search;
+      if (status) params.status = status;
       return fetchPayments(token, params);
     },
     enabled: !!token,
   });
 
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['payment-stats', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchPaymentStats(token); },
+    enabled: !!token,
+  });
+
   const payments = data?.payments ?? [];
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 12 };
+  const stats = statsData?.data;
 
-  const totalAmount = payments.reduce((sum: number, p: any) => sum + (p.amount ?? 0), 0);
-  const statCards = [
-    { label: 'Total Payments', value: pagination.totalItems ?? payments.length, icon: CreditCardIcon },
-    { label: 'Amount', value: `$${totalAmount.toLocaleString()}`, icon: CreditCardIcon },
-    { label: 'Completed', value: payments.filter((p: any) => p.status === 'completed').length, icon: CreditCardIcon, accent: 'success' as const },
-    { label: 'Pending', value: payments.filter((p: any) => p.status === 'pending').length, icon: CreditCardIcon, accent: 'warning' as const },
-  ];
+  const statItems = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { label: 'Total Payments', value: stats.totalCount, icon: CreditCardIcon },
+      { label: 'Total Value', value: formatCurrency(stats.totalValue), icon: CreditCardIcon },
+      { label: 'Completed', value: `${stats.completedCount} · ${formatCurrency(stats.completedTotal)}`, icon: CreditCardIcon, accent: 'success' as const },
+      { label: 'Pending', value: stats.pendingCount, icon: CreditCardIcon, accent: 'warning' as const },
+    ];
+  }, [stats]);
+
+  const statCards = statItems.map((s) => ({
+    label: s.label,
+    value: statsLoading ? '...' : s.value,
+    icon: s.icon,
+    accent: s.accent,
+  }));
 
   return (
     <PageShell
@@ -51,15 +72,26 @@ export default function AdminFinancePaymentsPage() {
     >
       <StatCards cards={statCards} />
 
-      <Input
-        placeholder="Search payments..."
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap gap-3">
+        <Input
+          placeholder="Search payments..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          className="max-w-sm"
+        />
+        <select
+          value={status}
+          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        >
+          {statusOptions.map((s) => (
+            <option key={s} value={s}>{s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All statuses'}</option>
+          ))}
+        </select>
+      </div>
 
       <Card>
         <CardHeader>
