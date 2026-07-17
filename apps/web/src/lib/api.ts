@@ -1527,6 +1527,22 @@ export async function deleteUserAvatar(token: string, id: string | number) {
   return (await api.delete(`/api/users/${id}/avatar`, { headers: authHeaders(token) })).data;
 }
 
+export async function fetchCredentials(token: string): Promise<{ categories: Record<string, { label: string; icon?: string; description: string; credentials: { id: number; key: string; value: string; is_secret: boolean; label: string; description: string; category: string; sort_order: number; has_value: boolean }[] }> }> {
+  return (await api.get('/api/credentials', { headers: authHeaders(token) })).data;
+}
+
+export async function bulkUpdateCredentials(token: string, updates: { key: string; value: string }[]) {
+  return (await api.put('/api/credentials', { updates }, { headers: authHeaders(token) })).data;
+}
+
+export async function seedCredentials(token: string): Promise<{ count: number }> {
+  return (await api.post('/api/credentials/seed', {}, { headers: authHeaders(token) })).data;
+}
+
+export async function testSmtpCredentials(token: string): Promise<{ success: boolean; message: string }> {
+  return (await api.post('/api/credentials/test/smtp', {}, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchProfile(token: string) {
   return (await api.get('/api/profile', { headers: authHeaders(token) })).data;
 }
