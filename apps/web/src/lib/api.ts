@@ -795,6 +795,10 @@ export async function fetchAnnouncements(
   return (await api.get('/api/hr/announcements', { params, headers: authHeaders(token) })).data;
 }
 
+export async function createAnnouncement(token: string, data: Partial<Announcement>): Promise<Announcement> {
+  return (await api.post('/api/hr/announcements', data, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchReminders(
   token: string,
   params?: Record<string, string | number | boolean>,
@@ -802,11 +806,19 @@ export async function fetchReminders(
   return (await api.get('/api/hr/reminders', { params, headers: authHeaders(token) })).data;
 }
 
+export async function createReminder(token: string, data: Partial<Reminder>): Promise<Reminder> {
+  return (await api.post('/api/hr/reminders', data, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchPublicHolidays(
   token: string,
   params?: Record<string, string | number | boolean>,
 ): Promise<{ success: boolean; data: PublicHoliday[]; count: number }> {
   return (await api.get('/api/hr/public-holidays', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createPublicHoliday(token: string, data: Partial<PublicHoliday>): Promise<PublicHoliday> {
+  return (await api.post('/api/hr/public-holidays', data, { headers: authHeaders(token) })).data;
 }
 
 export async function fetchTimeOffRequest(token: string, id: string | number): Promise<{ success: boolean; data: TimeOffRequest }> {

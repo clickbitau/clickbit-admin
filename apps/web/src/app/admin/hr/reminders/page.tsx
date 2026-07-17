@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Bell as BellIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
@@ -35,6 +36,7 @@ export default function AdminHrRemindersPage() {
       title="Reminders"
       icon={BellIcon}
       description="HR reminders and scheduled follow-ups."
+      actions={<Button asChild><Link href="/admin/hr/reminders/new">New Reminder</Link></Button>}
     >
 
       <Input
