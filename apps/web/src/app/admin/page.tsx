@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { SiteMonitoringCards } from '@/components/dashboard/SiteMonitoringCards';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
@@ -279,6 +280,8 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
           </div>
         </div>
       )}
+
+      <SiteMonitoringCards />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {cards.map((c) => (

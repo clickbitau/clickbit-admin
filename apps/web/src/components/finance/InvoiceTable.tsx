@@ -12,14 +12,18 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Invoice } from '@/types/finance';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface InvoiceTableProps {
   invoices: Invoice[];
   loading: boolean;
   onRowClick?: (invoice: Invoice) => void;
+  sortField?: string;
+  sortOrder?: 'ASC' | 'DESC';
+  onSort?: (field: string) => void;
 }
 
-export function InvoiceTable({ invoices, loading, onRowClick }: InvoiceTableProps) {
+export function InvoiceTable({ invoices, loading, onRowClick, sortField, sortOrder, onSort }: InvoiceTableProps) {
   if (loading) {
     return (
       <div className="space-y-2">
@@ -31,11 +35,7 @@ export function InvoiceTable({ invoices, loading, onRowClick }: InvoiceTableProp
   }
 
   if (invoices.length === 0) {
-    return (
-      <div className="rounded-lg border p-8 text-center text-muted-foreground">
-        No invoices found.
-      </div>
-    );
+    return <div className="rounded-lg border p-8 text-center text-muted-foreground">No invoices found.</div>;
   }
 
   const formatCurrency = (value: number | string | undefined) =>
@@ -57,16 +57,33 @@ export function InvoiceTable({ invoices, loading, onRowClick }: InvoiceTableProp
     }
   };
 
+  const sortable = (label: string, field: string) => {
+    if (!onSort) return <TableHead>{label}</TableHead>;
+    const active = sortField === field;
+    return (
+      <TableHead className="cursor-pointer" onClick={() => onSort(field)}>
+        <div className="flex items-center gap-1">
+          {label}
+          {active ? (
+            sortOrder === 'ASC' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+          ) : (
+            <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+          )}
+        </div>
+      </TableHead>
+    );
+  };
+
   return (
     <div className="rounded-lg border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Number</TableHead>
-            <TableHead>Client</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Type</TableHead>
+            {sortable('Number', 'invoice_number')}
+            {sortable('Client', 'client_name')}
+            {sortable('Title', 'title')}
+            {sortable('Status', 'status')}
+            {sortable('Type', 'document_type')}
             <TableHead className="text-right">Total</TableHead>
             <TableHead className="text-right">Due</TableHead>
           </TableRow>

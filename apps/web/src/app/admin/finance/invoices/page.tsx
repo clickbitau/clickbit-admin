@@ -11,27 +11,47 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InvoiceTable } from '@/components/finance/InvoiceTable';
 import { StatCards } from '@/components/design-system/StatCards';
-import { fetchInvoices, fetchInvoiceStats } from '@/lib/api';
+import { fetchInvoices, fetchInvoiceStats, fetchContacts } from '@/lib/api';
 import Link from 'next/link';
+import { useDebounce } from '@/lib/useDebounce';
 
 const statusOptions = ['', 'draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'cancelled'];
-
-interface StatItem { label: string; value: number | string; icon: typeof DollarSignIcon; accent?: 'success' | 'warning' | 'destructive'; filter?: string; }
+const documentTypeOptions = ['', 'invoice', 'estimate', 'quote'];
+const sortFields = [
+  { key: 'created_at', label: 'Created' },
+  { key: 'issue_date', label: 'Issue Date' },
+  { key: 'title', label: 'Title' },
+  { key: 'client_name', label: 'Client' },
+  { key: 'total_amount', label: 'Total' },
+  { key: 'status', label: 'Status' },
+];
 
 export default function AdminFinanceInvoicesPage() {
   const { token } = useAuth();
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [documentType, setDocumentType] = useState('');
+  const [customer, setCustomer] = useState('');
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['invoices', token, page, search, status],
+    queryKey: ['invoices', token, page, debouncedSearch, status, documentType, customer, sortBy, sortOrder],
     queryFn: async () => {
       if (!token) throw new Error('No token');
-      const params: Record<string, string | number> = { page, limit: 12, sort_by: 'created_at', sort_order: 'DESC' };
-      if (search) params.search = search;
+      const params: Record<string, string | number> = {
+        page,
+        limit: 12,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+      };
+      if (debouncedSearch) params.search = debouncedSearch;
       if (status) params.status = status;
+      if (documentType) params.document_type = documentType;
+      if (customer) params.customer = customer;
       return fetchInvoices(token, params);
     },
     enabled: !!token,
@@ -40,6 +60,12 @@ export default function AdminFinanceInvoicesPage() {
   const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: ['invoice-stats', token],
     queryFn: async () => { if (!token) throw new Error('No token'); return fetchInvoiceStats(token); },
+    enabled: !!token,
+  });
+
+  const { data: contactsData } = useQuery({
+    queryKey: ['contacts', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchContacts(token, { limit: 250 }); },
     enabled: !!token,
   });
 
@@ -52,22 +78,35 @@ export default function AdminFinanceInvoicesPage() {
     return stats.sent + stats.viewed + stats.partial + stats.overdue;
   }, [stats]);
 
-  const statItems: StatItem[] = useMemo(() => {
+  const statItems = useMemo(() => {
     if (!stats) return [];
     return [
       { label: 'Total', value: stats.total, icon: DollarSignIcon, filter: '' },
-      { label: 'Paid', value: stats.paid, icon: DollarSignIcon, accent: 'success', filter: 'paid' },
-      { label: 'Outstanding', value: totalUnpaid, icon: DollarSignIcon, accent: 'warning', filter: 'outstanding' },
-      { label: 'Overdue', value: stats.overdue, icon: DollarSignIcon, accent: 'destructive', filter: 'overdue' },
+      { label: 'Paid', value: stats.paid, icon: DollarSignIcon, accent: 'success' as const, filter: 'paid' },
+      { label: 'Outstanding', value: totalUnpaid, icon: DollarSignIcon, accent: 'warning' as const, filter: 'outstanding' },
+      { label: 'Overdue', value: stats.overdue, icon: DollarSignIcon, accent: 'destructive' as const, filter: 'overdue' },
+      { label: 'Draft', value: stats.draft, icon: DollarSignIcon, filter: 'draft' },
+      { label: 'Sent', value: stats.sent, icon: DollarSignIcon, filter: 'sent' },
+      { label: 'Viewed', value: stats.viewed, icon: DollarSignIcon, filter: 'viewed' },
+      { label: 'Partial', value: stats.partial, icon: DollarSignIcon, filter: 'partial' },
     ];
   }, [stats, totalUnpaid]);
 
   const handleStatClick = (filter?: string) => {
     if (filter === 'outstanding') {
-      // outstanding is a virtual filter; show sent+viewed+partial+overdue via status sent (closest)
       setStatus('sent');
     } else if (filter !== undefined) {
       setStatus(filter);
+    }
+    setPage(1);
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'));
+    } else {
+      setSortBy(field);
+      setSortOrder('ASC');
     }
     setPage(1);
   };
@@ -80,6 +119,8 @@ export default function AdminFinanceInvoicesPage() {
     onClick: s.filter !== undefined ? () => handleStatClick(s.filter) : undefined,
   }));
 
+  const contacts = contactsData?.contacts ?? [];
+
   return (
     <PageShell
       title="Invoices"
@@ -89,23 +130,11 @@ export default function AdminFinanceInvoicesPage() {
     >
       <StatCards cards={statCards} />
 
-      {stats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm">
-          <SummaryCard label="Draft" value={stats.draft} />
-          <SummaryCard label="Sent" value={stats.sent} />
-          <SummaryCard label="Viewed" value={stats.viewed} />
-          <SummaryCard label="Partial" value={stats.partial} />
-        </div>
-      )}
-
       <div className="flex flex-wrap gap-3">
         <Input
           placeholder="Search invoices..."
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="max-w-sm"
         />
         <select
@@ -117,6 +146,35 @@ export default function AdminFinanceInvoicesPage() {
             <option key={s} value={s}>{s ? s.replace('_', ' ').replace(/^\w/, (c) => c.toUpperCase()) : 'All statuses'}</option>
           ))}
         </select>
+        <select
+          value={documentType}
+          onChange={(e) => { setDocumentType(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        >
+          {documentTypeOptions.map((t) => (
+            <option key={t} value={t}>{t ? t.charAt(0).toUpperCase() + t.slice(1) : 'All types'}</option>
+          ))}
+        </select>
+        <select
+          value={customer}
+          onChange={(e) => { setCustomer(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm min-w-[160px]"
+        >
+          <option value="">All customers</option>
+          {contacts.map((c: any) => (
+            <option key={c.id} value={c.id}>{`${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email}</option>
+          ))}
+        </select>
+        <select
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        >
+          {sortFields.map((s) => <option key={s.key} value={s.key}>Sort by {s.label}</option>)}
+        </select>
+        <Button variant="outline" size="sm" onClick={() => setSortOrder((prev) => prev === 'ASC' ? 'DESC' : 'ASC')} className="h-10">
+          {sortOrder === 'ASC' ? 'Ascending' : 'Descending'}
+        </Button>
       </div>
 
       <Card>
@@ -127,7 +185,14 @@ export default function AdminFinanceInvoicesPage() {
           {error ? (
             <div className="text-destructive">Failed to load invoices.</div>
           ) : (
-            <InvoiceTable invoices={invoices} loading={isLoading} onRowClick={(i) => router.push(`/admin/finance/invoices/${i.id}`)} />
+            <InvoiceTable
+              invoices={invoices}
+              loading={isLoading}
+              onRowClick={(i) => router.push(`/admin/finance/invoices/${i.id}`)}
+              sortField={sortBy}
+              sortOrder={sortOrder}
+              onSort={handleSort}
+            />
           )}
         </CardContent>
       </Card>
@@ -146,16 +211,5 @@ export default function AdminFinanceInvoicesPage() {
         </div>
       </div>
     </PageShell>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="py-4">
-        <p className="text-muted-foreground text-xs">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
   );
 }

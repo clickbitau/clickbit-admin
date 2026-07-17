@@ -135,6 +135,24 @@ export class CompaniesController {
     return this.companiesService.getValueBreakdown(id);
   }
 
+  @Get(':id/contacts')
+  async findContacts(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.companiesService.findContacts(id);
+  }
+
+  @Get(':id/deals')
+  async findDeals(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.companiesService.findDeals(id);
+  }
+
   @Get(':id/documents')
   async getDocuments(
     @Param('id', ParseIntPipe) id: number,
