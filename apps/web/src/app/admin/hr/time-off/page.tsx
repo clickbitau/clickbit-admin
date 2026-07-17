@@ -1,5 +1,6 @@
 'use client';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import Link from 'next/link';
+import { Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
@@ -35,6 +36,7 @@ export default function AdminHrTimeOffPage() {
       title="Time Off"
       icon={CalendarIcon}
       description="Review and manage leave requests."
+      actions={<Button asChild><Link href="/admin/hr/time-off/new"><Plus className="mr-1 h-4 w-4" /> New Request</Link></Button>}
     >
 
       <Input

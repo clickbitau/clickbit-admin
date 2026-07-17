@@ -825,6 +825,10 @@ export async function fetchTimeOffRequest(token: string, id: string | number): P
   return (await api.get(`/api/hr/time-off/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function createTimeOff(token: string, data: Record<string, unknown>): Promise<{ success: boolean; data: TimeOffRequest; message?: string }> {
+  return (await api.post('/api/hr/time-off', data, { headers: authHeaders(token) })).data;
+}
+
 export async function approveTimeOff(token: string, id: string | number, notes?: string): Promise<{ success: boolean; message: string; data?: TimeOffRequest }> {
   return (await api.post(`/api/hr/time-off/${id}/approve`, { notes }, { headers: authHeaders(token) })).data;
 }

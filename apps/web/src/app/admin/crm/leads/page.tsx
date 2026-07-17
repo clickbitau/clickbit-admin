@@ -162,7 +162,7 @@ export default function LeadsPage() {
             <Button variant="outline" onClick={() => recalculateLeadScores(token!).then(() => { toast.success('Scores recalculated'); queryClient.invalidateQueries({ queryKey: ['leads'] }); }).catch((err: Error) => toast.error(err.message || 'Failed'))}>
               <RefreshCw className="mr-1 h-4 w-4" /> Recalculate
             </Button>
-            <Button onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="mr-1 h-4 w-4" /> New Lead</Button>
+            <Button asChild><Link href="/admin/crm/leads/new"><Plus className="mr-1 h-4 w-4" /> New Lead</Link></Button>
         </div>}>
       <StatCards cards={stats} />
 
