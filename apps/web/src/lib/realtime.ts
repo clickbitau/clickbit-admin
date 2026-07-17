@@ -9,6 +9,19 @@ interface UseRealtimeRefreshOptions {
   debounceMs?: number;
 }
 
+function shouldSkipRealtime(): boolean {
+  if (typeof window === 'undefined') return true;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return true;
+  if (window.location.protocol === 'https:' && url.startsWith('http://') && !/localhost|127\.0\.0\.1/.test(url)) {
+    console.warn(
+      'Realtime skipped: NEXT_PUBLIC_SUPABASE_URL is http:// but the page is served over https. Set NEXT_PUBLIC_SUPABASE_URL to a public https:// endpoint.',
+    );
+    return true;
+  }
+  return false;
+}
+
 export function useRealtimeRefresh(
   tables: string[],
   queryKey: string[],
@@ -19,7 +32,9 @@ export function useRealtimeRefresh(
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!enabled || !supabase || tables.length === 0 || queryKey.length === 0) return;
+    if (!enabled || tables.length === 0 || queryKey.length === 0) return;
+    if (!supabase) return;
+    if (shouldSkipRealtime()) return;
 
     const channel = supabase.channel('crm-realtime');
 
