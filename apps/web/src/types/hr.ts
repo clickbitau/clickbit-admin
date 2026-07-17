@@ -10,6 +10,7 @@ export type {
   LegacyDataResponse,
   LegacyMessageResponse,
   HrDashboardData,
+  HrStats,
 } from '@clickbit/shared';
 
 export interface TimeClockStatus {

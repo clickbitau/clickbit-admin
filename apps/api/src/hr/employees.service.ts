@@ -152,6 +152,119 @@ export class EmployeesService {
     };
   }
 
+  async getStats(_user: Profile) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const in30Days = new Date(today);
+    in30Days.setDate(in30Days.getDate() + 30);
+
+    const [
+      totalEmployees,
+      activeEmployees,
+      onLeaveEmployees,
+      terminatedEmployees,
+      departmentStats,
+      totalContracts,
+      activeContracts,
+      expiredContracts,
+      expiringSoonContracts,
+      totalTimeOff,
+      pendingTimeOff,
+      approvedTimeOff,
+      rejectedTimeOff,
+      totalTimeEntries,
+      activeTimeEntries,
+      completedTimeEntries,
+      approvedTimeEntries,
+      rejectedTimeEntries,
+      totalShifts,
+      todayShifts,
+      upcomingShifts,
+      completedShifts,
+      cancelledShifts,
+      totalPayslips,
+      draftPayslips,
+      generatedPayslips,
+      paidPayslips,
+      sentPayslips,
+      activeClockIn,
+      completedClockInToday,
+      totalAnnouncements,
+      publishedAnnouncements,
+      scheduledAnnouncements,
+      draftAnnouncements,
+      totalReminders,
+      pendingReminders,
+      completeReminders,
+      totalPublicHolidays,
+      upcomingPublicHolidays,
+    ] = await Promise.all([
+      this.prisma.employees.count({ where: { deleted_at: null } }),
+      this.prisma.employees.count({ where: { employment_status: 'active', deleted_at: null } }),
+      this.prisma.employees.count({ where: { employment_status: 'on_leave', deleted_at: null } }),
+      this.prisma.employees.count({ where: { employment_status: 'terminated', deleted_at: null } }),
+      this.prisma.employees.groupBy({ by: ['department'], where: { employment_status: 'active', deleted_at: null }, _count: { id: true } }),
+      this.prisma.hr_contracts.count(),
+      this.prisma.hr_contracts.count({ where: { status: 'active' } }),
+      this.prisma.hr_contracts.count({ where: { status: 'expired' } }),
+      this.prisma.hr_contracts.count({ where: { status: 'active', end_date: { gte: today, lt: in30Days } } }),
+      this.prisma.hr_time_off_requests.count(),
+      this.prisma.hr_time_off_requests.count({ where: { status: 'pending' } }),
+      this.prisma.hr_time_off_requests.count({ where: { status: 'approved' } }),
+      this.prisma.hr_time_off_requests.count({ where: { status: 'rejected' } }),
+      this.prisma.hr_time_entries.count(),
+      this.prisma.hr_time_entries.count({ where: { status: 'active' } }),
+      this.prisma.hr_time_entries.count({ where: { status: 'completed' } }),
+      this.prisma.hr_time_entries.count({ where: { status: 'approved' } }),
+      this.prisma.hr_time_entries.count({ where: { status: 'rejected' } }),
+      this.prisma.hr_shifts.count(),
+      this.prisma.hr_shifts.count({ where: { shift_date: { gte: today, lt: tomorrow }, status: { not: 'cancelled' } } }),
+      this.prisma.hr_shifts.count({ where: { shift_date: { gte: tomorrow }, status: { not: 'cancelled' } } }),
+      this.prisma.hr_shifts.count({ where: { status: 'completed' } }),
+      this.prisma.hr_shifts.count({ where: { status: 'cancelled' } }),
+      this.prisma.payslips.count(),
+      this.prisma.payslips.count({ where: { status: 'draft' } }),
+      this.prisma.payslips.count({ where: { status: 'generated' } }),
+      this.prisma.payslips.count({ where: { status: 'paid' } }),
+      this.prisma.payslips.count({ where: { status: 'sent' } }),
+      this.prisma.hr_time_entries.count({ where: { clock_out_time: null } }),
+      this.prisma.hr_time_entries.count({ where: { clock_out_time: { not: null }, clock_in_time: { gte: today, lt: tomorrow } } }),
+      this.prisma.hr_announcements.count(),
+      this.prisma.hr_announcements.count({ where: { status: 'published' } }),
+      this.prisma.hr_announcements.count({ where: { status: 'scheduled' } }),
+      this.prisma.hr_announcements.count({ where: { status: 'draft' } }),
+      this.prisma.hr_reminders.count(),
+      this.prisma.hr_reminders.count({ where: { status: 'pending' } }),
+      this.prisma.hr_reminders.count({ where: { status: 'complete' } }),
+      this.prisma.hr_public_holidays.count(),
+      this.prisma.hr_public_holidays.count({ where: { holiday_date: { gte: today } } }),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        employees: {
+          total: totalEmployees,
+          active: activeEmployees,
+          onLeave: onLeaveEmployees,
+          terminated: terminatedEmployees,
+          byDepartment: departmentStats.map((d) => ({ department: d.department || 'Unassigned', count: d._count.id })),
+        },
+        contracts: { total: totalContracts, active: activeContracts, expired: expiredContracts, expiringSoon: expiringSoonContracts },
+        timeOff: { total: totalTimeOff, pending: pendingTimeOff, approved: approvedTimeOff, rejected: rejectedTimeOff },
+        timesheets: { total: totalTimeEntries, active: activeTimeEntries, completed: completedTimeEntries, approved: approvedTimeEntries, rejected: rejectedTimeEntries },
+        shifts: { total: totalShifts, today: todayShifts, upcoming: upcomingShifts, completed: completedShifts, cancelled: cancelledShifts },
+        payslips: { total: totalPayslips, draft: draftPayslips, generated: generatedPayslips, paid: paidPayslips, sent: sentPayslips },
+        timeClock: { active: activeClockIn, completedToday: completedClockInToday },
+        announcements: { total: totalAnnouncements, published: publishedAnnouncements, scheduled: scheduledAnnouncements, draft: draftAnnouncements },
+        reminders: { total: totalReminders, pending: pendingReminders, complete: completeReminders },
+        publicHolidays: { total: totalPublicHolidays, upcoming: upcomingPublicHolidays },
+      },
+    };
+  }
+
   async getEmployeeDashboard(user: Profile) {
     const employee = await this.prisma.employees.findFirst({
       where: { user_id: user.id, deleted_at: null },

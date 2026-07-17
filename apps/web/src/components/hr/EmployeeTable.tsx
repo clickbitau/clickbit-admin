@@ -9,9 +9,10 @@ import type { Employee } from '@/types/hr';
 interface EmployeeTableProps {
   employees: Employee[];
   loading: boolean;
+  onRowClick?: (employee: Employee) => void;
 }
 
-export function EmployeeTable({ employees, loading }: EmployeeTableProps) {
+export function EmployeeTable({ employees, loading, onRowClick }: EmployeeTableProps) {
   if (loading) {
     return (
       <div className="space-y-2">
@@ -58,9 +59,13 @@ export function EmployeeTable({ employees, loading }: EmployeeTableProps) {
             const user = employee.user;
             const name = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : `Employee #${employee.id}`;
             return (
-              <TableRow key={employee.id}>
+              <TableRow key={employee.id} className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''} onClick={() => onRowClick?.(employee)}>
                 <TableCell className="font-medium">
-                  <Link href={`/admin/hr/employees/${employee.id}`} className="hover:underline">{name}</Link>
+                  {onRowClick ? (
+                    <span className="hover:underline">{name}</span>
+                  ) : (
+                    <Link href={`/admin/hr/employees/${employee.id}`} className="hover:underline">{name}</Link>
+                  )}
                 </TableCell>
                 <TableCell>{employee.employee_number || `#${employee.id}`}</TableCell>
                 <TableCell>{employee.department || '-'}</TableCell>

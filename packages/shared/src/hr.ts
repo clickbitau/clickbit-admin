@@ -237,3 +237,22 @@ export interface HrDashboardData {
     department?: string;
   }>;
 }
+
+export interface HrStats {
+  employees: {
+    total: number;
+    active: number;
+    onLeave: number;
+    terminated: number;
+    byDepartment: Array<{ department: string; count: number }>;
+  };
+  contracts: { total: number; active: number; expired: number; expiringSoon: number };
+  timeOff: { total: number; pending: number; approved: number; rejected: number };
+  timesheets: { total: number; active: number; completed: number; approved: number; rejected: number };
+  shifts: { total: number; today: number; upcoming: number; completed: number; cancelled: number };
+  payslips: { total: number; draft: number; generated: number; paid: number; sent: number };
+  timeClock: { active: number; completedToday: number };
+  announcements: { total: number; published: number; scheduled: number; draft: number };
+  reminders: { total: number; pending: number; complete: number };
+  publicHolidays: { total: number; upcoming: number };
+}

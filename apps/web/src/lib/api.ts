@@ -31,7 +31,7 @@ import type { AppDocument } from '@/types/documents';
 import type { BillingSettings, PdfTemplate, SettingRow } from '@/types/settings';
 import type { DashboardStats, FinanceDashboardData } from '@/types/dashboard';
 import type { BugReport, BugReportConfig, BugReportListResponse, BugReportStats, CreateBugReportInput } from '@/types/bug-reports';
-import type { Announcement, Contract, Employee, HrDashboardData, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
+import type { Announcement, Contract, Employee, HrDashboardData, HrStats, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,
   CannedResponse,
@@ -841,6 +841,10 @@ export async function fetchExpenseStats(token: string, params?: { start_date?: s
 
 export async function fetchHrDashboard(token: string): Promise<{ success: boolean; data: HrDashboardData }> {
   return (await api.get<{ success: boolean; data: HrDashboardData }>('/api/hr/dashboard', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchHrStats(token: string): Promise<{ success: boolean; data: HrStats }> {
+  return (await api.get<{ success: boolean; data: HrStats }>('/api/hr/stats', { headers: authHeaders(token) })).data;
 }
 
 export async function fetchEmployees(
