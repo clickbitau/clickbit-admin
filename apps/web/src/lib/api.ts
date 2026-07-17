@@ -1391,6 +1391,10 @@ export async function fetchAdminBlogPost(token: string, id: string | number): Pr
   return (await api.get<{ post: BlogPost }>(`/api/blog/admin/${id}`, { headers: authHeaders(token) })).data.post;
 }
 
+export async function fetchAdminBlogStats(token: string): Promise<{ total: number; published: number; draft: number; featured: number }> {
+  return (await api.get('/api/blog/admin/stats', { headers: authHeaders(token) })).data;
+}
+
 export async function createBlogPost(token: string, data: Partial<BlogPost>): Promise<{ message: string; post: BlogPost }> {
   return (await api.post('/api/blog/admin', data, { headers: authHeaders(token) })).data;
 }
@@ -1483,6 +1487,44 @@ export async function fetchUserTeam(token: string): Promise<{ id: number; first_
 
 export async function fetchManagers(token: string) {
   return (await api.get('/api/users/managers', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAvailablePermissions(token: string): Promise<{ availablePermissions: Record<string, { key: string; label: string; description: string }[]>; defaultManagerPermissions: string[] }> {
+  return (await api.get('/api/users/permissions/available', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchUserAccountStatus(token: string, id: string | number) {
+  return (await api.get(`/api/users/${id}/account-status`, { headers: authHeaders(token) })).data;
+}
+
+export async function resendUserWelcome(token: string, id: string | number) {
+  return (await api.post(`/api/users/${id}/resend-welcome`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function resetUser2fa(token: string, id: string | number) {
+  return (await api.post(`/api/users/${id}/reset-2fa`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchUserPermissions(token: string, id: string | number) {
+  return (await api.get(`/api/users/${id}/permissions`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateUserPermissions(token: string, id: string | number, permissions: string[]) {
+  return (await api.put(`/api/users/${id}/permissions`, { permissions }, { headers: authHeaders(token) })).data;
+}
+
+export async function resetUserPermissions(token: string, id: string | number) {
+  return (await api.delete(`/api/users/${id}/permissions`, { headers: authHeaders(token) })).data;
+}
+
+export async function uploadUserAvatar(token: string, id: string | number, file: File) {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  return (await api.post(`/api/users/${id}/avatar`, formData, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } })).data;
+}
+
+export async function deleteUserAvatar(token: string, id: string | number) {
+  return (await api.delete(`/api/users/${id}/avatar`, { headers: authHeaders(token) })).data;
 }
 
 export async function fetchProfile(token: string) {
