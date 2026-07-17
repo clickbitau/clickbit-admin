@@ -33,6 +33,12 @@ export class AuthService {
     return this.publicClient;
   }
 
+  private sanitizeProfile(profile: any) {
+    if (!profile) return profile;
+    const { password, email_verification_token, password_reset_token, ...safe } = profile;
+    return safe;
+  }
+
   async register(dto: { email: string; password: string; first_name: string; last_name: string; phone?: string }) {
     const { email, password, first_name, last_name, phone } = dto;
     if (!email || !password || !first_name || !last_name) {
@@ -84,7 +90,7 @@ export class AuthService {
     return {
       success: true,
       data: {
-        user,
+        user: this.sanitizeProfile(user),
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
         expiresAt: data.session.expires_at,
@@ -101,7 +107,7 @@ export class AuthService {
   async me(user: any) {
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new BadRequestException('Profile not found');
-    return { success: true, data: { user: profile } };
+    return { success: true, data: { user: this.sanitizeProfile(profile) } };
   }
 
   async refresh(dto: { refreshToken: string }) {
@@ -177,7 +183,7 @@ export class AuthService {
         }
       }
     }
-    return profile;
+    return this.sanitizeProfile(profile);
   }
 
   trustedDevices() { return { devices: [] }; }
@@ -245,7 +251,7 @@ export class AuthService {
       profile = await this.prisma.profiles.findFirst({ where: { email } });
       if (profile) {
         profile = await this.prisma.profiles.update({ where: { id: profile.id }, data: { auth_uid: supabaseUser.id } });
-        return profile;
+        return this.sanitizeProfile(profile);
       }
     }
 
@@ -260,7 +266,7 @@ export class AuthService {
         email_verified: !!supabaseUser.email_confirmed_at,
       } as any,
     });
-    return profile;
+    return this.sanitizeProfile(profile);
   }
 
   async linkedAccounts(user: any) {
