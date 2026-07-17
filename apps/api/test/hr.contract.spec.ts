@@ -4,6 +4,7 @@ import { TimeOffController } from '../src/hr/time-off.controller';
 import { AnnouncementsController } from '../src/hr/announcements.controller';
 import { RemindersController } from '../src/hr/reminders.controller';
 import { PublicHolidaysController } from '../src/hr/public-holidays.controller';
+import { TimeClockController } from '../src/hr/time-clock.controller';
 
 describe('HR legacy contract tests', () => {
   const buildRes = () => ({ set: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as any);
@@ -179,6 +180,38 @@ describe('HR legacy contract tests', () => {
       await controller.create({ name: 'Holiday', holiday_date: '2026-01-01' }, req, res);
       expect(service.create).toHaveBeenCalledWith(expect.anything(), req.user);
       expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+  });
+
+  describe('TimeClockController', () => {
+    it('GET /api/hr/time-clock/status returns { success, data }', async () => {
+      const service = { status: jest.fn().mockResolvedValue({ success: true, data: {} }) } as any;
+      const controller = new TimeClockController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'employee' } } as any;
+      await controller.status(req, res);
+      expect(service.status).toHaveBeenCalledWith(req.user);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('GET /api/hr/time-clock/active returns { success, data }', async () => {
+      const service = { activeEntries: jest.fn().mockResolvedValue({ success: true, data: [] }) } as any;
+      const controller = new TimeClockController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'admin' } } as any;
+      await controller.active(req, res);
+      expect(service.activeEntries).toHaveBeenCalledWith(req.user);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('POST /api/hr/time-clock/clock-in returns { success, message, data }', async () => {
+      const service = { clockIn: jest.fn().mockResolvedValue({ success: true, message: 'Clocked in', data: { id: 1 } }) } as any;
+      const controller = new TimeClockController(service);
+      const res = buildRes();
+      const req = { user: { id: 1, role: 'employee' }, headers: {}, ip: '127.0.0.1' } as any;
+      await controller.clockIn({}, req, res);
+      expect(service.clockIn).toHaveBeenCalledWith(req.user, {}, req);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
