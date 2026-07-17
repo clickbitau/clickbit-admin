@@ -280,3 +280,10 @@ export async function fetchAutomations(token: string, params?: ApiParams) {
   });
   return data;
 }
+
+export async function createAutomation(token: string, payload: Partial<CrmAutomation>) {
+  const { data } = await api.post<CrmAutomation>('/api/crm/automations', payload, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}
