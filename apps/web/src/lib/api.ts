@@ -1642,6 +1642,15 @@ export async function fetchPayslips(
   return (await api.get('/api/hr/payslips', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchPayslip(token: string, id: string | number): Promise<Payslip> {
+  const response = await api.get<{ success: boolean; data: Payslip }>(`/api/hr/payslips/${id}`, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
+export async function fetchPayslipPdf(token: string, id: string | number): Promise<Blob> {
+  return (await api.get(`/api/hr/payslips/${id}/pdf`, { headers: authHeaders(token), responseType: 'blob' })).data;
+}
+
 export async function calculatePayslip(token: string, dto: Record<string, unknown>): Promise<{ success: boolean; data: PayslipCalcResult }> {
   return (await api.post('/api/hr/payslips/calculate-single', dto, { headers: authHeaders(token) })).data;
 }
