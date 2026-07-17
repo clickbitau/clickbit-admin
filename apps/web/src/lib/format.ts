@@ -44,3 +44,12 @@ export function daysUntil(value: string | Date | undefined | null): string {
   if (diff < 0) return `${Math.abs(diff)}d overdue`;
   return `${diff}d`;
 }
+
+export function formatDuration(totalSeconds?: number | null): string {
+  if (totalSeconds === undefined || totalSeconds === null || Number.isNaN(totalSeconds) || totalSeconds <= 0) return '';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+}

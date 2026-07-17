@@ -2,6 +2,7 @@ export interface TicketProfile {
   id: number;
   first_name: string;
   last_name: string;
+  name?: string;
   email?: string;
   phone?: string;
   avatar?: string | null;
@@ -56,6 +57,14 @@ export interface Ticket {
   user?: TicketProfile | null;
   assignee?: TicketProfile | null;
   messages?: TicketMessage[];
+  watchers?: TicketProfile[];
+  time_logs?: any[];
+  time_spent_minutes?: number | null;
+  crm_project?: { id: number; name?: string | null } | null;
+  deal?: { id: number; title?: string | null; status?: string | null } | null;
+  bug_report?: { id: number; title?: string | null; status?: string | null } | null;
+  parent_ticket?: { id: number; ticket_number: string; subject: string; status: string } | null;
+  child_tickets?: { id: number; ticket_number: string; subject: string; status: string }[];
 }
 
 export interface TicketListResponse {
