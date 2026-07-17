@@ -462,7 +462,19 @@ export class PortalsService {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
-    const where = this.invoiceScope(contactIds, companyIds);
+    const filters: any[] = [this.invoiceScope(contactIds, companyIds)];
+    if (query.status && query.status !== 'all') filters.push({ status: query.status });
+    if (query.document_type && query.document_type !== 'all') filters.push({ document_type: query.document_type });
+    if (query.search) {
+      filters.push({
+        OR: [
+          { invoice_number: { contains: query.search, mode: 'insensitive' } },
+          { title: { contains: query.search, mode: 'insensitive' } },
+          { client_name: { contains: query.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+    const where = filters.length === 1 ? filters[0] : { AND: filters };
     const [rows, total] = await Promise.all([
       this.prisma.invoices.findMany({ where, orderBy: { created_at: 'desc' }, take: limit, skip: (page - 1) * limit }),
       this.prisma.invoices.count({ where }),
@@ -481,7 +493,18 @@ export class PortalsService {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
-    const where = this.projectScope(contactIds, companyIds);
+    const filters: any[] = [this.projectScope(contactIds, companyIds)];
+    if (query.status && query.status !== 'all') filters.push({ status: query.status });
+    if (query.search) {
+      filters.push({
+        OR: [
+          { name: { contains: query.search, mode: 'insensitive' } },
+          { description: { contains: query.search, mode: 'insensitive' } },
+          { project_number: { contains: query.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+    const where = filters.length === 1 ? filters[0] : { AND: filters };
     const [rows, total] = await Promise.all([
       this.prisma.crm_projects.findMany({ where, orderBy: { created_at: 'desc' }, take: limit, skip: (page - 1) * limit }),
       this.prisma.crm_projects.count({ where }),
@@ -579,7 +602,18 @@ export class PortalsService {
 
   async customerTaskDetail(user: UserLike, id: number) {
     const { contactIds } = await this.resolveCustomer(user);
-    const task = await this.prisma.project_tasks.findFirst({ where: { id, deleted_at: null, customer_id: { in: contactIds } } as any });
+    const task = await this.prisma.project_tasks.findFirst({
+      where: { id, deleted_at: null, customer_id: { in: contactIds } } as any,
+      include: {
+        crm_projects: { select: { id: true, name: true, project_number: true } },
+        profiles_project_tasks_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
+        task_comments: {
+          where: { is_internal: false },
+          orderBy: { created_at: 'asc' as const },
+          include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
+        },
+      },
+    });
     if (!task) throw new NotFoundException('Task not found');
     return { success: true, data: task };
   }
@@ -593,6 +627,7 @@ export class PortalsService {
         content: body.content,
         is_internal: false,
       } as any,
+      include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
     });
     return { success: true, data: comment };
   }

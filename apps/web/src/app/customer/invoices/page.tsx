@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation';
 import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { fetchCustomerInvoices } from '@/lib/api';
 import type { Invoice } from '@/types/finance';
-import { formatCurrency } from '@/lib/format';
-import { formatDate } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
+import { Badge } from '@/components/ui/badge';
 import { Receipt } from 'lucide-react';
 
 export default function CustomerInvoicesPage() {
@@ -22,6 +23,16 @@ export default function CustomerInvoicesPage() {
         { key: 'invoice_number', header: 'Invoice #', accessor: 'invoice_number' },
         { key: 'title', header: 'Title', accessor: 'title' },
         {
+          key: 'document_type',
+          header: 'Type',
+          cell: (row) => <Badge variant="outline" className="capitalize">{row.document_type || 'invoice'}</Badge>,
+        },
+        {
+          key: 'status',
+          header: 'Status',
+          cell: (row) => <StatusBadge status={row.status} />,
+        },
+        {
           key: 'total_amount',
           header: 'Total',
           cell: (row) => formatCurrency(row.total_amount),
@@ -31,7 +42,11 @@ export default function CustomerInvoicesPage() {
           header: 'Paid',
           cell: (row) => formatCurrency(row.amount_paid),
         },
-        { key: 'status', header: 'Status', accessor: 'status' },
+        {
+          key: 'amount_due',
+          header: 'Due',
+          cell: (row) => formatCurrency(row.amount_due),
+        },
         {
           key: 'due_date',
           header: 'Due',

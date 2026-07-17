@@ -1632,7 +1632,7 @@ export async function customerVerifyInvoicePayment(token: string, id: string | n
 
 export async function fetchCustomerProjects(
   token: string,
-  params?: { page?: number; limit?: number; search?: string }
+  params?: { page?: number; limit?: number; search?: string; status?: string }
 ) {
   return (await api.get('/api/customer/projects', { params, headers: authHeaders(token) })).data;
 }
