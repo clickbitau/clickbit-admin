@@ -172,6 +172,15 @@ export class PaymentsService {
     };
   }
 
+  async findOne(id: string | number) {
+    const payment = await this.payments.findUnique({
+      where: { transaction_id: String(id), deleted_at: null },
+      include: paymentInclude,
+    });
+    if (!payment) throw new NotFoundException({ success: false, message: 'Payment not found' });
+    return { success: true, data: mapPayment(payment) };
+  }
+
   async getStats(query: { dateFrom?: string; dateTo?: string }): Promise<PaymentStats> {
     const where: Prisma.paymentsWhereInput = { deleted_at: null };
 

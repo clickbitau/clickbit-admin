@@ -5,6 +5,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,7 @@ import { fetchPayments } from '@/lib/api';
 
 export default function AdminFinancePaymentsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
@@ -67,7 +69,7 @@ export default function AdminFinancePaymentsPage() {
           {error ? (
             <div className="text-destructive">Failed to load payments.</div>
           ) : (
-            <PaymentTable payments={payments} loading={isLoading} />
+            <PaymentTable payments={payments} loading={isLoading} onRowClick={(p) => router.push(`/admin/finance/payments/${p.transaction_id || p.id}`)} />
           )}
         </CardContent>
       </Card>

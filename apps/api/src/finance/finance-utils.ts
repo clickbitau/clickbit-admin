@@ -173,7 +173,7 @@ export function mapReceipt(receipt: ReceiptWithRelations) {
   };
 }
 
-export function mapPayment(payment: Record<string, unknown> & { invoices?: Record<string, unknown> | null }) {
+export function mapPayment(payment: Record<string, unknown> & { invoices?: Record<string, unknown> | null; crm_projects?: Record<string, unknown> | null }) {
   const formatted: Record<string, unknown> = { ...payment };
   formatted.amount = parseNumber(payment.amount);
   formatted.gateway_fee = parseNumber(payment.gateway_fee);
@@ -190,6 +190,9 @@ export function mapPayment(payment: Record<string, unknown> & { invoices?: Recor
       total: parseNumber(inv.total_amount),
       currency: inv.currency || 'AUD',
     };
+  }
+  if (payment.crm_projects) {
+    formatted.project = payment.crm_projects;
   }
   return formatted;
 }

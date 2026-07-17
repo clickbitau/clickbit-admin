@@ -764,6 +764,11 @@ export async function createPayment(token: string, data: Partial<Payment>): Prom
   return response.data;
 }
 
+export async function fetchPayment(token: string, id: string | number): Promise<Payment> {
+  const response = await api.get<{ success: boolean; data: Payment }>(`/api/payments/${id}`, { headers: authHeaders(token) });
+  return extractSingle<Payment>(response, 'data');
+}
+
 export async function deletePayment(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   const response = await api.delete<{ success: boolean; message: string }>(`/api/payments/${id}`, { headers: authHeaders(token) });
   return response.data;

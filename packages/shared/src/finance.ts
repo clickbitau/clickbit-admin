@@ -86,8 +86,19 @@ export interface Payment {
   deleted_at?: string | null;
   notes?: string | null;
   gateway_fee?: number;
+  gateway_response?: string | null;
+  gateway_error?: string | null;
   refunded_amount?: number;
+  refunded_at?: string | null;
+  refunded_reason?: string | null;
+  billing_address?: string | null;
+  payment_details?: string | null;
+  processed_at?: string | null;
+  failed_at?: string | null;
+  retry_count?: number;
+  next_retry_at?: string | null;
   invoice?: Invoice | null;
+  project?: { id: number; name: string; project_number?: string } | null;
 }
 
 export interface PaymentListResponse {
