@@ -19,6 +19,13 @@ export class HrController {
     return res.json(await this.employeesService.getDashboardStats(req.user));
   }
 
+  @Get('stats')
+  @Roles('admin', 'manager', 'hr')
+  async stats(@Req() req: RequestWithUser, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.employeesService.getStats(req.user));
+  }
+
   @Get('employee-dashboard')
   async employeeDashboard(@Req() req: RequestWithUser, @Res() res: Response) {
     setNoCache(res);

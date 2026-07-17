@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { calculatePayslip, deletePayslip, fetchPayslips, nextPayRun, resendPayslipEmail } from '@/lib/api';
+import { calculatePayslip, deletePayslip, fetchHrStats, fetchPayslips, nextPayRun, resendPayslipEmail } from '@/lib/api';
 
 function formatCurrency(value: number | string | undefined, currency?: string) {
   const n = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : 0;
@@ -45,8 +45,15 @@ export default function AdminHrPayslipsPage() {
     enabled: !!token,
   });
 
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['hr-stats', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchHrStats(token); },
+    enabled: !!token,
+  });
+
   const payslips = useMemo(() => data?.data ?? [], [data?.data]);
   const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 20 };
+  const stats = statsData?.data;
 
   const totalGross = useMemo(() => payslips.reduce((sum, p) => sum + (parseFloat(String(p.gross_pay)) || 0), 0), [payslips]);
   const totalNet = useMemo(() => payslips.reduce((sum, p) => sum + (parseFloat(String(p.net_pay)) || 0), 0), [payslips]);
@@ -84,7 +91,12 @@ export default function AdminHrPayslipsPage() {
     onSuccess: refresh,
   });
 
-  const statCards = [
+  const statCards = stats ? [
+    { label: 'Total', value: stats.payslips.total, icon: FileText, onClick: () => { setStatus(''); setPage(1); } },
+    { label: 'Generated', value: stats.payslips.generated, icon: FileText, accent: 'warning' as const, onClick: () => { setStatus('generated'); setPage(1); } },
+    { label: 'Paid', value: stats.payslips.paid, icon: Banknote, accent: 'success' as const, onClick: () => { setStatus('paid'); setPage(1); } },
+    { label: 'Sent', value: stats.payslips.sent, icon: Banknote, onClick: () => { setStatus('sent'); setPage(1); } },
+  ] : [
     { label: 'Total Payslips', value: pagination.total, icon: FileText },
     { label: 'Total Gross', value: formatCurrency(totalGross), icon: Banknote },
     { label: 'Total Net', value: formatCurrency(totalNet), icon: Banknote, accent: 'success' as const },
