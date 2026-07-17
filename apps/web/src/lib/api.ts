@@ -1690,6 +1690,11 @@ export async function fetchContracts(
   return (await api.get('/api/hr/contracts', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchContract(token: string, id: string | number): Promise<Contract> {
+  const response = await api.get<{ success: boolean; data: Contract }>(`/api/hr/contracts/${id}`, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
 export async function fetchContractBlockedEmployees(token: string): Promise<{ blockedEmployeeIds: number[] }> {
   return (await api.get('/api/hr/contracts/coi-blocked', { headers: authHeaders(token) })).data;
 }

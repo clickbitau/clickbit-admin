@@ -24,11 +24,29 @@ const contractInclude = {
 };
 
 function normalizeContract(c: any) {
+  const emp = c.employees_hr_contracts_employee_idToemployees;
+  const mgr = c.employees_hr_contracts_manager_idToemployees;
+  const empProfile = emp?.profiles;
+  const mgrProfile = mgr?.profiles;
   return {
     ...c,
-    employee: c.employees_hr_contracts_employee_idToemployees,
-    manager: c.employees_hr_contracts_manager_idToemployees,
-    creator: c.profiles,
+    employee: emp
+      ? {
+          ...emp,
+          name: empProfile ? `${empProfile.first_name || ''} ${empProfile.last_name || ''}`.trim() : `Employee ${emp.id}`,
+          email: empProfile?.email,
+        }
+      : undefined,
+    manager: mgr
+      ? {
+          ...mgr,
+          name: mgrProfile ? `${mgrProfile.first_name || ''} ${mgrProfile.last_name || ''}`.trim() : `Manager ${mgr.id}`,
+          email: mgrProfile?.email,
+        }
+      : undefined,
+    creator: c.profiles
+      ? { ...c.profiles, name: `${c.profiles.first_name || ''} ${c.profiles.last_name || ''}`.trim() }
+      : undefined,
   };
 }
 
@@ -58,6 +76,21 @@ export class HrContractsService {
     });
 
     return { success: true, data: contracts.map(normalizeContract) };
+  }
+
+  async findOne(user: UserLike, id: number) {
+    const contract = await this.prisma.hr_contracts.findUnique({ where: { id }, include: contractInclude });
+    if (!contract) throw new NotFoundException('Contract not found');
+
+    const isPrivileged = ['admin', 'manager'].includes(user.role.toLowerCase());
+    if (!isPrivileged) {
+      const self = await this.prisma.employees.findUnique({ where: { user_id: user.id } });
+      if (!self || self.id !== contract.employee_id) {
+        throw new ForbiddenException('Not authorized to view this contract');
+      }
+    }
+
+    return { success: true, data: normalizeContract(contract) };
   }
 
   async findBlockedEmployeeIds(user: UserLike) {
