@@ -9,6 +9,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Button } from '@/components/ui/button';
 import {
   Home,
+  Banknote,
   Users,
   DollarSign,
   FileText,
@@ -22,7 +23,9 @@ import {
   Briefcase,
   Megaphone,
   Bell,
+  Calendar,
   Clock,
+  FileClock,
   CreditCard,
   Receipt,
   ClipboardList,
@@ -92,6 +95,12 @@ const sections: NavSection[] = [
     icon: Users,
     links: [
       { href: '/admin/hr/employees', label: 'Employees', icon: Users },
+      { href: '/admin/hr/time-clock', label: 'Time Clock', icon: Clock },
+      { href: '/admin/hr/timesheets', label: 'Timesheets', icon: FileClock },
+      { href: '/admin/hr/shifts', label: 'Shifts', icon: Calendar },
+      { href: '/admin/hr/payslips', label: 'Payslips', icon: Banknote },
+      { href: '/admin/hr/contracts', label: 'Contracts', icon: FileText },
+      { href: '/admin/hr/kpi', label: 'KPI', icon: BarChart3 },
       { href: '/admin/hr/time-off', label: 'Time Off', icon: Megaphone },
       { href: '/admin/hr/announcements', label: 'Announcements', icon: Megaphone },
       { href: '/admin/hr/reminders', label: 'Reminders', icon: Bell },
