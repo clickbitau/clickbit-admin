@@ -20,6 +20,9 @@ import type {
   ValueBreakdownResponse,
 } from '@/types/crm';
 import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
+import type { AnalyticsDashboard } from '@/types/analytics';
+import type { AppDocument } from '@/types/documents';
+import type { PdfTemplate } from '@/types/settings';
 import type { Announcement, Contract, Employee, HrDashboardData, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,
@@ -1579,6 +1582,67 @@ export async function snapshotKpi(token: string, period: string, employeeIds?: n
 
 export async function fetchLiveKpi(token: string, employeeId: string | number, period?: string) {
   return (await api.get(`/api/hr/kpi/live/${employeeId}`, { params: period ? { period } : undefined, headers: authHeaders(token) })).data;
+}
+
+// ─── Documents ──────────────────────────────────────────────────────────────
+
+export async function fetchDocuments(
+  token: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<{ documents: AppDocument[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
+  return (await api.get('/api/documents', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchDocument(token: string, id: string | number): Promise<{ document: AppDocument }> {
+  return (await api.get(`/api/documents/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchDocumentSignedUrl(token: string, id: string | number): Promise<{ url: string }> {
+  return (await api.get(`/api/documents/${id}/signed-url`, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteDocument(token: string, id: string | number) {
+  return (await api.delete(`/api/documents/${id}`, { headers: authHeaders(token) })).data;
+}
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+export async function fetchAnalyticsDashboard(token: string, period?: number): Promise<{ success: boolean; data: AnalyticsDashboard }> {
+  return (await api.get('/api/analytics/dashboard', { params: period ? { period } : undefined, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAnalyticsEvents(token: string, type: string, period?: number) {
+  return (await api.get(`/api/analytics/events/${type}`, { params: period ? { period } : undefined, headers: authHeaders(token) })).data;
+}
+
+// ─── PDF Templates ───────────────────────────────────────────────────────────
+
+export async function fetchPdfTemplates(token: string, type?: string): Promise<PdfTemplate[]> {
+  return (await api.get('/api/settings/pdf-templates', { params: type ? { type } : undefined, headers: authHeaders(token) })).data;
+}
+
+export async function createPdfTemplate(token: string, data: Partial<PdfTemplate>) {
+  return (await api.post('/api/settings/pdf-templates', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updatePdfTemplate(token: string, id: string | number, data: Partial<PdfTemplate>) {
+  return (await api.put(`/api/settings/pdf-templates/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deletePdfTemplate(token: string, id: string | number) {
+  return (await api.delete(`/api/settings/pdf-templates/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function setDefaultPdfTemplate(token: string, id: string | number) {
+  return (await api.post(`/api/settings/pdf-templates/${id}/set-default`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function clonePdfTemplate(token: string, id: string | number) {
+  return (await api.post(`/api/settings/pdf-templates/${id}/clone`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function previewPdfTemplate(token: string, id: string | number): Promise<Blob> {
+  return (await api.post(`/api/settings/pdf-templates/${id}/preview`, {}, { headers: authHeaders(token), responseType: 'blob' })).data;
 }
 
 export default api;
