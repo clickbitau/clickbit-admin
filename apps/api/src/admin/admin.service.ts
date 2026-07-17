@@ -7,6 +7,14 @@ function toDec(value: unknown): Decimal | null {
   return new Decimal(value as any);
 }
 
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return parseFloat(value) || 0;
+  if (typeof value === 'object' && 'toNumber' in (value as any)) return (value as any).toNumber() as number;
+  return Number(value) || 0;
+}
+
 function paginate(query: any) {
   const page = Math.max(1, Number(query.page || 1));
   const limit = Math.max(1, Math.min(100, Number(query.limit || 20)));
@@ -40,32 +48,169 @@ export class AdminService {
     };
   }
 
-  async getDashboardStats() {
-    const [contacts, companies, leads, deals, projects, tickets, invoices, orders] = await Promise.all([
+  async getDashboardStats(user?: any) {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const lastMonthStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalContacts,
+      totalLeads,
+      contactsThisWeek,
+      contactsThisMonth,
+      contactsLastMonth,
+      totalUsers,
+      usersThisMonth,
+      usersLastMonth,
+      totalCompanies,
+      totalDeals,
+      totalProjects,
+      totalTickets,
+      totalInvoices,
+      totalOrders,
+      totalServices,
+      totalPortfolioItems,
+      totalBlogPosts,
+      publishedPosts,
+      pendingComments,
+      totalAnalyticsEvents,
+      revenueResult,
+      monthlyRevenueResult,
+      outstandingResult,
+      recentContacts,
+      topBlogPosts,
+    ] = await Promise.all([
       this.prisma.contacts.count({ where: { deleted_at: null } }),
+      this.prisma.contacts.count({
+        where: { deleted_at: null, lifecycle_stage: { notIn: ['customer', 'evangelist'] } },
+      }),
+      this.prisma.contacts.count({ where: { deleted_at: null, created_at: { gte: sevenDaysAgo } } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, created_at: { gte: thirtyDaysAgo } } }),
+      this.prisma.contacts.count({
+        where: { deleted_at: null, created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } },
+      }),
+      this.prisma.profiles.count(),
+      this.prisma.profiles.count({ where: { created_at: { gte: thirtyDaysAgo } } }),
+      this.prisma.profiles.count({ where: { created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } } }),
       this.prisma.companies.count({ where: { deleted_at: null } }),
-      this.prisma.crm_leads.count(),
       this.prisma.deals.count(),
       this.prisma.crm_projects.count({ where: { deleted_at: null } }),
       this.prisma.tickets.count(),
       this.prisma.invoices.count({ where: { deleted_at: null } }),
       this.prisma.orders.count(),
+      this.prisma.services.count(),
+      this.prisma.portfolio_items.count(),
+      this.prisma.blog_posts.count(),
+      this.prisma.blog_posts.count({ where: { status: 'published' } }),
+      this.prisma.comments.count({ where: { status: 'pending' } }),
+      this.prisma.analytics.count({ where: { event_type: 'page_view', created_at: { gte: thirtyDaysAgo } } }),
+      this.prisma.payments.aggregate({
+        _sum: { amount: true },
+        where: {
+          status: { in: ['completed', 'partially_refunded', 'refunded'] },
+          deleted_at: null,
+        },
+      }),
+      this.prisma.payments.aggregate({
+        _sum: { amount: true },
+        where: {
+          status: { in: ['completed', 'partially_refunded', 'refunded'] },
+          deleted_at: null,
+          OR: [{ payment_date: { gte: thirtyDaysAgo } }, { payment_date: null, created_at: { gte: thirtyDaysAgo } }],
+        },
+      }),
+      this.prisma.invoices.aggregate({
+        _sum: { total_amount: true, amount_paid: true },
+        where: {
+          status: { in: ['pending', 'partial', 'sent', 'overdue'] },
+          deleted_at: null,
+        },
+      }),
+      this.prisma.contacts.findMany({
+        where: { deleted_at: null },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+        select: { id: true, name: true, email: true, contact_type: true, created_at: true },
+      }),
+      this.prisma.blog_posts.findMany({
+        where: { status: 'published' },
+        orderBy: { view_count: 'desc' },
+        take: 5,
+        select: { id: true, title: true, slug: true, view_count: true, created_at: true },
+      }),
     ]);
-    const revenue = await this.prisma.payments.aggregate({ _sum: { amount: true } });
+
+    const totalRevenue = toNumber(revenueResult._sum.amount ?? 0);
+    const monthlyRevenue = toNumber(monthlyRevenueResult._sum.amount ?? 0);
+    const totalDue =
+      toNumber(outstandingResult._sum.total_amount ?? 0) - toNumber(outstandingResult._sum.amount_paid ?? 0);
+
+    const contactGrowth = contactsLastMonth > 0
+      ? Number((((contactsThisMonth - contactsLastMonth) / contactsLastMonth) * 100).toFixed(1))
+      : 0;
+    const userGrowth = usersLastMonth > 0
+      ? Number((((usersThisMonth - usersLastMonth) / usersLastMonth) * 100).toFixed(1))
+      : 0;
+
+    const myTaskStats = user?.id
+      ? await this.getMyTaskStats(Number(user.id))
+      : { total: 0, todo: 0, inProgress: 0, overdue: 0 };
+
     return {
       success: true,
       data: {
-        contacts,
-        companies,
-        leads,
-        deals,
-        projects,
-        tickets,
-        invoices,
-        orders,
-        totalRevenue: revenue._sum?.amount ?? 0,
+        totalContacts,
+        totalLeads,
+        newContactsThisWeek: contactsThisWeek,
+        newContactsThisMonth: contactsThisMonth,
+        contactGrowth,
+        totalUsers,
+        newUsersThisMonth: usersThisMonth,
+        userGrowth,
+        totalCompanies,
+        totalDeals,
+        totalProjects,
+        totalTickets,
+        totalInvoices,
+        totalOrders,
+        totalServices,
+        totalPortfolioItems,
+        totalBlogPosts,
+        publishedPosts,
+        pendingComments,
+        totalAnalyticsEvents,
+        totalRevenue,
+        monthlyRevenue,
+        totalDue,
+        recentContacts,
+        topBlogPosts,
+        myTaskStats,
       },
     };
+  }
+
+  private async getMyTaskStats(userId: number) {
+    const [total, todo, inProgress, overdue] = await Promise.all([
+      this.prisma.project_tasks.count({
+        where: { assigned_to: userId, deleted_at: null, status: { notIn: ['completed'] } },
+      }),
+      this.prisma.project_tasks.count({
+        where: { assigned_to: userId, deleted_at: null, status: 'todo' },
+      }),
+      this.prisma.project_tasks.count({
+        where: { assigned_to: userId, deleted_at: null, status: 'in_progress' },
+      }),
+      this.prisma.project_tasks.count({
+        where: {
+          assigned_to: userId,
+          deleted_at: null,
+          status: { notIn: ['completed'] },
+          due_date: { lt: new Date() },
+        },
+      }),
+    ]);
+    return { total, todo, inProgress, overdue };
   }
 
   // -------------------------------------------------------------------------
@@ -528,20 +673,227 @@ export class AdminService {
     return { success: true, data: { analytics, notifications } };
   }
 
-  async financeDashboard() {
-    const [revenue, expenses, pending, paid] = await Promise.all([
-      this.prisma.payments.aggregate({ _sum: { amount: true } }),
-      this.prisma.expenses.aggregate({ _sum: { amount: true } }),
-      this.prisma.invoices.count({ where: { status: { not: 'paid' } } }),
-      this.prisma.invoices.count({ where: { status: 'paid' } }),
+  async financeDashboard(period = 0) {
+    const days = Number(period) || 0;
+    const now = new Date();
+    const startDate = days > 0 ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000) : new Date('2020-01-01');
+    const prevStartDate = days > 0 ? new Date(startDate.getTime() - days * 24 * 60 * 60 * 1000) : null;
+    const chartStartDate = days > 0 ? startDate : new Date(now.getTime() - 24 * 30 * 24 * 60 * 60 * 1000);
+    const isDaily = days > 0 && days <= 90;
+
+    const paymentStatuses = ['completed', 'partially_refunded', 'refunded'];
+    const expenseStatuses = ['approved', 'paid'] as const;
+
+    const [
+      paymentTotalAgg,
+      paymentPeriodAgg,
+      paymentPrevAgg,
+      expenseTotalAgg,
+      expensePeriodAgg,
+      expensePrevAgg,
+      outstandingAgg,
+      expensesByCategory,
+    ] = await Promise.all([
+      this.prisma.payments.aggregate({
+        _sum: { amount: true, refunded_amount: true },
+        where: { status: { in: paymentStatuses }, deleted_at: null },
+      }),
+      this.prisma.payments.aggregate({
+        _sum: { amount: true, refunded_amount: true },
+        where: {
+          status: { in: paymentStatuses },
+          deleted_at: null,
+          OR: [{ payment_date: { gte: startDate } }, { payment_date: null, created_at: { gte: startDate } }],
+        },
+      }),
+      prevStartDate
+        ? this.prisma.payments.aggregate({
+            _sum: { amount: true, refunded_amount: true },
+            where: {
+              status: { in: paymentStatuses },
+              deleted_at: null,
+              OR: [
+                { payment_date: { gte: prevStartDate, lt: startDate } },
+                { payment_date: null, created_at: { gte: prevStartDate, lt: startDate } },
+              ],
+            },
+          })
+        : Promise.resolve(null),
+      this.prisma.expenses.aggregate({
+        _sum: { total_amount: true },
+        where: { status: { in: expenseStatuses as any } },
+      }),
+      this.prisma.expenses.aggregate({
+        _sum: { total_amount: true },
+        where: { status: { in: expenseStatuses as any }, expense_date: { gte: startDate } },
+      }),
+      prevStartDate
+        ? this.prisma.expenses.aggregate({
+            _sum: { total_amount: true },
+            where: { status: { in: expenseStatuses as any }, expense_date: { gte: prevStartDate, lt: startDate } },
+          })
+        : Promise.resolve(null),
+      this.prisma.invoices.aggregate({
+        _sum: { total_amount: true, amount_paid: true },
+        where: { status: { in: ['pending', 'partial', 'sent', 'overdue'] }, deleted_at: null },
+      }),
+      this.prisma.expenses.groupBy({
+        by: ['category'],
+        where: { status: { in: expenseStatuses as any } },
+        _sum: { total_amount: true },
+      }),
     ]);
+
+    const netRevenue = (agg: any) =>
+      toNumber(agg?._sum?.amount ?? 0) - toNumber(agg?._sum?.refunded_amount ?? 0);
+
+    const totalRevenue = netRevenue(paymentTotalAgg);
+    const periodRevenue = netRevenue(paymentPeriodAgg);
+    const totalExpenses = toNumber(expenseTotalAgg._sum?.total_amount ?? 0);
+    const periodExpenses = toNumber(expensePeriodAgg._sum?.total_amount ?? 0);
+    const totalProfit = totalRevenue - totalExpenses;
+    const periodProfit = periodRevenue - periodExpenses;
+    const outstandingAmount =
+      toNumber(outstandingAgg._sum.total_amount ?? 0) - toNumber(outstandingAgg._sum.amount_paid ?? 0);
+
+    const previousPeriodRevenue = paymentPrevAgg ? netRevenue(paymentPrevAgg) : undefined;
+    const previousPeriodExpenses = expensePrevAgg ? toNumber(expensePrevAgg._sum?.total_amount ?? 0) : undefined;
+    const previousPeriodProfit =
+      previousPeriodRevenue !== undefined && previousPeriodExpenses !== undefined
+        ? previousPeriodRevenue - previousPeriodExpenses
+        : undefined;
+
+    const [paymentTrendRows, expenseTrendRows, recentOrders, recentExpenses, recentPayments] = await Promise.all([
+      this.prisma.payments.findMany({
+        where: {
+          status: { in: paymentStatuses },
+          deleted_at: null,
+          OR: [{ payment_date: { gte: chartStartDate } }, { payment_date: null, created_at: { gte: chartStartDate } }],
+        },
+        select: { amount: true, refunded_amount: true, payment_date: true, created_at: true },
+        orderBy: { payment_date: 'asc' },
+      }),
+      this.prisma.expenses.findMany({
+        where: { status: { in: expenseStatuses as any }, expense_date: { gte: chartStartDate } },
+        select: { total_amount: true, expense_date: true },
+        orderBy: { expense_date: 'asc' },
+      }),
+      this.prisma.orders.findMany({
+        where: { payment_status: 'paid' },
+        orderBy: { created_at: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          order_number: true,
+          total_amount: true,
+          created_at: true,
+          order_date: true,
+          status: true,
+          payment_status: true,
+          profiles: { select: { first_name: true, last_name: true, email: true } },
+        },
+      }),
+      this.prisma.expenses.findMany({
+        orderBy: { expense_date: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          expense_number: true,
+          description: true,
+          total_amount: true,
+          expense_date: true,
+          category: true,
+          status: true,
+          profiles_expenses_created_byToprofiles: { select: { first_name: true, last_name: true, email: true } },
+        },
+      }),
+      this.prisma.payments.findMany({
+        where: { deleted_at: null, status: 'completed' },
+        orderBy: { created_at: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          transaction_id: true,
+          amount: true,
+          payment_method: true,
+          created_at: true,
+          payment_date: true,
+          status: true,
+          invoices: { select: { client_name: true, title: true } },
+        },
+      }),
+    ]);
+
+    const dateKey = (date?: Date | null) => {
+      if (!date) return '';
+      const d = new Date(date);
+      if (isDaily) {
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      }
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    };
+
+    const monthMap = new Map<string, { month: string; revenue: number; expenses: number }>();
+    for (const p of paymentTrendRows) {
+      const key = dateKey(p.payment_date ?? p.created_at);
+      if (!key) continue;
+      const entry = monthMap.get(key) || { month: key, revenue: 0, expenses: 0 };
+      entry.revenue += toNumber(p.amount) - toNumber(p.refunded_amount);
+      monthMap.set(key, entry);
+    }
+    for (const e of expenseTrendRows) {
+      const key = dateKey(e.expense_date);
+      if (!key) continue;
+      const entry = monthMap.get(key) || { month: key, revenue: 0, expenses: 0 };
+      entry.expenses += toNumber(e.total_amount);
+      monthMap.set(key, entry);
+    }
+
+    const intervalCount = isDaily ? days : days > 0 ? Math.ceil(days / 30) : 24;
+    const fillDate = new Date();
+    if (isDaily) {
+      fillDate.setDate(fillDate.getDate() - (days - 1));
+    } else {
+      fillDate.setMonth(fillDate.getMonth() - (intervalCount - 1));
+      fillDate.setDate(1);
+    }
+    for (let i = 0; i < intervalCount; i++) {
+      const key = dateKey(fillDate);
+      if (!monthMap.has(key)) {
+        monthMap.set(key, { month: key, revenue: 0, expenses: 0 });
+      }
+      if (isDaily) fillDate.setDate(fillDate.getDate() + 1);
+      else fillDate.setMonth(fillDate.getMonth() + 1);
+    }
+
+    const monthly = Array.from(monthMap.values())
+      .map((m) => ({ ...m, profit: m.revenue - m.expenses }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
     return {
       success: true,
       data: {
-        revenue: revenue._sum?.amount ?? 0,
-        expenses: expenses._sum?.amount ?? 0,
-        pendingInvoices: pending,
-        paidInvoices: paid,
+        overview: {
+          totalRevenue,
+          periodRevenue,
+          totalExpenses,
+          periodExpenses,
+          totalProfit,
+          periodProfit,
+          profitMargin: totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(2) : '0.00',
+          outstandingAmount,
+          previousPeriodRevenue,
+          previousPeriodExpenses,
+          previousPeriodProfit,
+        },
+        trends: { monthly },
+        breakdown: {
+          expensesByCategory: expensesByCategory.map((c) => ({
+            category: (c.category || 'other').toString(),
+            amount: toNumber(c._sum.total_amount ?? 0),
+          })),
+        },
+        recent: { orders: recentOrders, expenses: recentExpenses, payments: recentPayments },
       },
     };
   }

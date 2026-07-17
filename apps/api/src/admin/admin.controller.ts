@@ -30,8 +30,8 @@ export class AdminController {
   }
 
   @Get('dashboard/stats')
-  async dashboardStats() {
-    return this.adminService.getDashboardStats();
+  async dashboardStats(@Req() req?: RequestWithUser) {
+    return this.adminService.getDashboardStats(req?.user);
   }
 
   // -------------------------------------------------------------------------
@@ -453,8 +453,8 @@ export class AdminController {
   }
 
   @Get('finance/dashboard')
-  async financeDashboard() {
-    return this.adminService.financeDashboard();
+  async financeDashboard(@Query('period') period?: string) {
+    return this.adminService.financeDashboard(period ? Number(period) : 0);
   }
 
   @Get('agent-requests')
