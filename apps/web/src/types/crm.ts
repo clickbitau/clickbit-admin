@@ -324,12 +324,74 @@ export interface CrmProject {
   subproject_count?: number;
   task_count?: number;
   tasks?: ProjectTask[];
+  subprojects?: CrmSubproject[];
   invoices?: unknown[];
   expenses?: unknown[];
   tickets?: unknown[];
   payments?: unknown[];
-  documents?: unknown[];
+  documents?: ProjectDocument[];
+  meetings?: ProjectMeeting[];
   financials?: CrmProjectFinancials;
+  created_at?: string;
+}
+
+export interface CrmSubproject {
+  id: number;
+  parent_project_id?: number;
+  name: string;
+  description?: string | null;
+  status?: 'not_started' | 'in_progress' | 'on_hold' | 'completed' | 'cancelled' | string;
+  progress_percentage?: number;
+  priority?: string;
+  budget?: number | string;
+  actual_cost?: number | string;
+  currency?: string;
+  start_date?: string | null;
+  due_date?: string | null;
+  completed_date?: string | null;
+  estimated_hours?: number | string;
+  actual_hours?: number | string;
+  hourly_rate?: number | string;
+  manager_id?: number | null;
+  manager?: User | null;
+  created_by?: number | null;
+  creator?: User | null;
+  support_period_type?: string | null;
+  support_start_date?: string | null;
+  support_end_date?: string | null;
+  support_price?: number | string;
+  support_currency?: string;
+  support_notes?: string | null;
+  task_count?: number;
+  completed_task_count?: number;
+  documents?: ProjectDocument[];
+  invoices?: unknown[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProjectDocument {
+  id: number;
+  file_name: string;
+  file_url?: string | null;
+  file_size?: number;
+  file_type?: string | null;
+  uploaded_by?: number | null;
+  uploader?: User | null;
+  created_at?: string;
+}
+
+export interface ProjectMeeting {
+  id: number;
+  crm_project_id?: number;
+  title: string;
+  meeting_date?: string;
+  duration_minutes?: number;
+  participants?: string | null;
+  notes?: string | null;
+  status?: string;
+  created_by?: number | null;
+  creator?: User | null;
   created_at?: string;
 }
 

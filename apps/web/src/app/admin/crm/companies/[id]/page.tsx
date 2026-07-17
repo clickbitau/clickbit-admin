@@ -58,6 +58,33 @@ export default function CompanyDetailPage() {
     >
       <CompanyHeader company={company} />
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Total Revenue</p>
+            <p className="text-xl font-bold">{formatCurrency(Number(company.total_revenue ?? 0))}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Projects</p>
+            <p className="text-xl font-bold">{company.total_projects ?? 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Tasks</p>
+            <p className="text-xl font-bold">{company.total_tasks ?? 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Deals</p>
+            <p className="text-xl font-bold">{(company.deals as unknown[] | undefined)?.length ?? 0}</p>
+          </CardContent>
+        </Card>
+      </div>
+
         <Tabs defaultValue="overview">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -148,7 +175,7 @@ function CompanyOverview({ company }: { company: Company }) {
             <ul className="space-y-2 text-sm">
               {(company.deals as { id: number; title: string; value?: number; status: string }[]).slice(0, 5).map((d) => (
                 <li key={d.id} className="flex items-center justify-between border-b py-2 last:border-0">
-                  <span>{d.title}</span>
+                  <Link href={`/admin/crm/deals/${d.id}`} className="hover:underline">{d.title}</Link>
                   <span className="font-medium">{formatCurrency(d.value ?? 0)} <StatusBadge status={d.status} /></span>
                 </li>
               ))}
@@ -170,7 +197,7 @@ function CompanyOverview({ company }: { company: Company }) {
             <ul className="space-y-2 text-sm">
               {(company.contactAssociations as { contact: { id: number; name: string; email?: string; phone?: string } }[]).slice(0, 5).map(({ contact }) => (
                 <li key={contact.id} className="border-b py-2 last:border-0">
-                  <p className="font-medium">{contact.name}</p>
+                  <Link href={`/admin/crm/contacts/${contact.id}`} className="font-medium hover:underline">{contact.name}</Link>
                   <p className="text-muted-foreground">{contact.email || contact.phone || '-'}</p>
                 </li>
               ))}

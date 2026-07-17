@@ -7,12 +7,15 @@ import type {
   CrmContact,
   CrmLead,
   CrmProject,
+  CrmSubproject,
   Deal,
   DealDetail,
   Document,
   Order,
   Pipeline,
   PipelineStage,
+  ProjectDocument,
+  ProjectMeeting,
   ProjectTask,
   ProjectStats,
   TaskStats,
@@ -418,7 +421,7 @@ export async function fetchContacts(
   token: string,
   params?: Record<string, string | number | boolean>,
 ): Promise<{ contacts: CrmContact[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
-  const response = await api.get('/api/admin/contacts', { params, headers: authHeaders(token) });
+  const response = await api.get('/api/crm/contacts', { params, headers: authHeaders(token) });
   return response.data;
 }
 
@@ -527,8 +530,51 @@ export async function fetchProjectTasks(
   token: string,
   projectId: string | number,
   params?: Record<string, string | number | boolean>,
-): Promise<{ tasks: ProjectTask[]; stats: { total: number; todo: number; in_progress: number; review: number; completed: number; blocked: number; totalEstimatedHours?: number; totalActualHours?: number } }> {
+): Promise<{ tasks: ProjectTask[]; stats: { total: number; todo: number; in_progress: number; review: number; completed: number; blocked: number; totalEstimatedHours?: number; totalActualHours?: number }; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
   const response = await api.get(`/api/crm/projects-new/${projectId}/tasks`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchProjectSubprojects(
+  token: string,
+  projectId: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ subprojects: CrmSubproject[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
+  const response = await api.get(`/api/crm/projects-new/${projectId}/subprojects`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchSubproject(token: string, id: string | number): Promise<CrmSubproject> {
+  const response = await api.get<{ data: CrmSubproject }>(`/api/crm/projects-new/0/subprojects/${id}`, {
+    headers: authHeaders(token),
+  });
+  return extractSingle<CrmSubproject>(response, 'data');
+}
+
+export async function fetchProjectDocuments(
+  token: string,
+  projectId: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ documents: ProjectDocument[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
+  const response = await api.get(`/api/crm/projects-new/${projectId}/documents`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchProjectMeetings(
+  token: string,
+  projectId: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ meetings: ProjectMeeting[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
+  const response = await api.get(`/api/crm/projects-new/${projectId}/meetings`, {
     params,
     headers: authHeaders(token),
   });
