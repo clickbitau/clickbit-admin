@@ -295,22 +295,41 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
           return (
             <div key={section.id} className="mb-1">
-              <button
-                onClick={() => toggleSection(section.id)}
+              <div
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                   hasActive
                     ? 'nm-inset-sm text-primary'
                     : 'text-foreground/80 hover:nm-raised-sm hover:text-foreground'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <SectionIcon className="h-4 w-4" />
-                  <span>{section.label}</span>
-                </div>
-                {section.links.length > 0 && (
-                  isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+                {section.href ? (
+                  <Link
+                    href={section.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2.5 flex-1 min-w-0"
+                  >
+                    <SectionIcon className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{section.label}</span>
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => toggleSection(section.id)}
+                    className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+                  >
+                    <SectionIcon className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{section.label}</span>
+                  </button>
                 )}
-              </button>
+                {section.links.length > 0 && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); toggleSection(section.id); }}
+                    className="ml-1 p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                    aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
+                  >
+                    {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+              </div>
               <AnimatePresence>
                 {isExpanded && section.links.length > 0 && (
                   <motion.div

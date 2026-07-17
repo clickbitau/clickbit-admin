@@ -274,13 +274,16 @@ export interface ProjectTask {
   parent_task_id?: number | null;
   crm_project_id?: number | null;
   crmProject?: { id: number; name?: string; project_number?: string } | null;
+  crm_projects?: { id: number; name?: string | null; project_number?: string | null } | null;
   subproject_id?: number | null;
   subproject?: { id: number; name: string } | null;
   project?: { id: number; title?: string; deal_number?: string } | null;
   customer?: CrmContact | null;
+  customer_visible?: boolean;
   tags?: string[];
   subtasks?: ProjectTask[];
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface TaskStats {

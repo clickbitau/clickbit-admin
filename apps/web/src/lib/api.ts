@@ -2091,4 +2091,80 @@ export async function deleteStaffAdvance(token: string, id: string | number): Pr
   return (await api.delete(`/api/staff-advances/${id}`, { headers: authHeaders(token) })).data;
 }
 
+// ─── Employee Portal ────────────────────────────────────────────────────────
+
+export interface EmployeeDashboardData {
+  employee: Employee;
+  stats: {
+    openTasks: number;
+    pendingTimeOff: number;
+    upcomingShifts: number;
+    contracts: number;
+    payslips: number;
+    annualLeave: number;
+    sickLeave: number;
+    personalLeave: number;
+  };
+  activeEntry: TimeEntry | null;
+  upcomingShifts: Shift[];
+  recentTimeOff: TimeOffRequest[];
+  recentPayslips: Payslip[];
+  openTasks: ProjectTask[];
+}
+
+export async function fetchEmployeeMe(token: string): Promise<{ success: boolean; data: Employee }> {
+  return (await api.get('/api/employee/me', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeeDashboard(token: string): Promise<{ success: boolean; data: EmployeeDashboardData }> {
+  return (await api.get('/api/employee/dashboard', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeeContracts(
+  token: string,
+  params?: { page?: number; limit?: number },
+): Promise<{ success: boolean; data: Contract[]; pagination: any }> {
+  return (await api.get('/api/employee/contracts', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeeContract(token: string, id: string | number): Promise<{ success: boolean; data: Contract }> {
+  return (await api.get(`/api/employee/contracts/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeePayslips(
+  token: string,
+  params?: { page?: number; limit?: number },
+): Promise<{ success: boolean; data: Payslip[]; pagination: any }> {
+  return (await api.get('/api/employee/payslips', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeePayslip(token: string, id: string | number): Promise<{ success: boolean; data: Payslip }> {
+  return (await api.get(`/api/employee/payslips/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeeTimeOff(
+  token: string,
+  params?: { page?: number; limit?: number },
+): Promise<{ success: boolean; data: TimeOffRequest[]; pagination: any }> {
+  return (await api.get('/api/employee/time-off', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeeTasks(
+  token: string,
+  params?: { page?: number; limit?: number; status?: string },
+): Promise<{ success: boolean; data: ProjectTask[]; pagination: any }> {
+  return (await api.get('/api/employee/tasks', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchEmployeeTask(token: string, id: string | number): Promise<{ success: boolean; data: ProjectTask }> {
+  return (await api.get(`/api/employee/tasks/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function createEmployeeItSupportTicket(
+  token: string,
+  body: { subject: string; description: string; priority?: string },
+): Promise<{ success: boolean; data: any }> {
+  return (await api.post('/api/employee/it-support', body, { headers: authHeaders(token) })).data;
+}
+
 export default api;

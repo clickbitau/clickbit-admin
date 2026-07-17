@@ -240,6 +240,7 @@ export interface ProjectTask {
   is_template_generated?: boolean;
   is_demo?: boolean;
   assignee?: CompanyOwner | null;
+  crm_projects?: { id: number; name?: string | null; project_number?: string | null } | null;
   subtasks?: ProjectTask[];
 }
 

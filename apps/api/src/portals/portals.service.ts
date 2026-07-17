@@ -596,4 +596,369 @@ export class PortalsService {
     });
     return { success: true, data: comment };
   }
+
+  private async resolveEmployee(user: UserLike) {
+    const employee = await this.prisma.employees.findUnique({
+      where: { user_id: user.id },
+      include: { profiles: { select: { first_name: true, last_name: true, email: true, phone: true, avatar: true } } },
+    });
+    if (!employee) throw new NotFoundException('Employee record not found');
+    return employee;
+  }
+
+  async employeeMe(user: UserLike) {
+    const employee = await this.resolveEmployee(user);
+    return { success: true, data: this.mapEmployee(employee) };
+  }
+
+  async employeeDashboard(user: UserLike) {
+    const employee = await this.resolveEmployee(user);
+    const employeeId = employee.id;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [
+      activeEntry,
+      upcomingShifts,
+      recentTimeOff,
+      recentPayslips,
+      openTasks,
+      contractCount,
+      pendingTimeOffCount,
+    ] = await Promise.all([
+      this.prisma.hr_time_entries.findFirst({
+        where: { employee_id: employeeId, clock_out_time: null, status: 'active' },
+        orderBy: { clock_in_time: 'desc' },
+      }),
+      this.prisma.hr_shifts.findMany({
+        where: { employee_id: employeeId, shift_date: { gte: todayStart }, status: { not: 'cancelled' } },
+        orderBy: { shift_date: 'asc' },
+        take: 5,
+      }),
+      this.prisma.hr_time_off_requests.findMany({
+        where: { employee_id: employeeId },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      }),
+      this.prisma.payslips.findMany({
+        where: { employee_id: employeeId },
+        orderBy: { payment_date: 'desc' },
+        take: 5,
+      }),
+      this.prisma.project_tasks.findMany({
+        where: { assigned_to: user.id, deleted_at: null, status: { not: 'completed' } } as any,
+        orderBy: { due_date: 'asc' },
+        take: 5,
+        include: { crm_projects: { select: { id: true, name: true, project_number: true } } },
+      }),
+      this.prisma.hr_contracts.count({ where: { employee_id: employeeId } }),
+      this.prisma.hr_time_off_requests.count({ where: { employee_id: employeeId, status: 'pending' } }),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        employee: this.mapEmployee(employee),
+        activeEntry: activeEntry ? this.mapTimeEntry(activeEntry) : null,
+        stats: {
+          openTasks: openTasks.length,
+          pendingTimeOff: pendingTimeOffCount,
+          upcomingShifts: upcomingShifts.length,
+          contracts: contractCount,
+          payslips: recentPayslips.length,
+          annualLeave: toNum0(employee.annual_leave_balance),
+          sickLeave: toNum0(employee.sick_leave_balance),
+          personalLeave: toNum0(employee.personal_leave_balance),
+        },
+        upcomingShifts,
+        recentTimeOff,
+        recentPayslips,
+        openTasks,
+      },
+    };
+  }
+
+  async employeeContracts(user: UserLike, query: any) {
+    const employee = await this.resolveEmployee(user);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
+    const [rows, total] = await Promise.all([
+      this.prisma.hr_contracts.findMany({
+        where: { employee_id: employee.id },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.hr_contracts.count({ where: { employee_id: employee.id } }),
+    ]);
+    const managerIds = [...new Set(rows.map((c) => c.manager_id).filter(Boolean))] as number[];
+    const managers = managerIds.length
+      ? await this.prisma.employees.findMany({
+          where: { id: { in: managerIds } },
+          include: { profiles: { select: { first_name: true, last_name: true, email: true } } },
+        })
+      : [];
+    const managerMap = new Map(managers.map((m) => [m.id, m]));
+    return {
+      success: true,
+      data: rows.map((c) => this.mapContract(c as any, managerMap.get(c.manager_id as number))),
+      pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit },
+    };
+  }
+
+  async employeeContractDetail(user: UserLike, id: number) {
+    const employee = await this.resolveEmployee(user);
+    const contract = await this.prisma.hr_contracts.findFirst({ where: { id, employee_id: employee.id } });
+    if (!contract) throw new NotFoundException('Contract not found');
+    let manager: any = null;
+    if (contract.manager_id) {
+      manager = await this.prisma.employees.findUnique({
+        where: { id: contract.manager_id },
+        include: { profiles: { select: { first_name: true, last_name: true, email: true } } },
+      });
+    }
+    return { success: true, data: this.mapContract(contract as any, manager) };
+  }
+
+  async employeePayslips(user: UserLike, query: any) {
+    const employee = await this.resolveEmployee(user);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
+    const [rows, total] = await Promise.all([
+      this.prisma.payslips.findMany({
+        where: { employee_id: employee.id },
+        orderBy: { payment_date: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+        include: { employees: { select: { employee_number: true } } },
+      }),
+      this.prisma.payslips.count({ where: { employee_id: employee.id } }),
+    ]);
+    return {
+      success: true,
+      data: rows.map((p) => this.mapPayslip(p as any)),
+      pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit },
+    };
+  }
+
+  async employeePayslipDetail(user: UserLike, id: number) {
+    const employee = await this.resolveEmployee(user);
+    const payslip = await this.prisma.payslips.findFirst({
+      where: { id, employee_id: employee.id },
+      include: { employees: { select: { employee_number: true } } },
+    });
+    if (!payslip) throw new NotFoundException('Payslip not found');
+    return { success: true, data: this.mapPayslip(payslip as any) };
+  }
+
+  async employeeTimeOff(user: UserLike, query: any) {
+    const employee = await this.resolveEmployee(user);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
+    const [rows, total] = await Promise.all([
+      this.prisma.hr_time_off_requests.findMany({
+        where: { employee_id: employee.id },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+        include: { profiles: { select: { first_name: true, last_name: true, email: true } } },
+      }),
+      this.prisma.hr_time_off_requests.count({ where: { employee_id: employee.id } }),
+    ]);
+    return {
+      success: true,
+      data: rows.map((r) => this.mapTimeOff(r as any)),
+      pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit },
+    };
+  }
+
+  async employeeTasks(user: UserLike, query: any) {
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
+    const where: any = { assigned_to: user.id, deleted_at: null };
+    if (query.status) where.status = query.status;
+    const [rows, total] = await Promise.all([
+      this.prisma.project_tasks.findMany({
+        where,
+        orderBy: { due_date: 'asc' },
+        take: limit,
+        skip: (page - 1) * limit,
+        include: { crm_projects: { select: { id: true, name: true, project_number: true } } },
+      }),
+      this.prisma.project_tasks.count({ where }),
+    ]);
+    return {
+      success: true,
+      data: rows,
+      pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit },
+    };
+  }
+
+  async employeeTaskDetail(user: UserLike, id: number) {
+    const task = await this.prisma.project_tasks.findFirst({
+      where: { id, assigned_to: user.id, deleted_at: null } as any,
+      include: { crm_projects: { select: { id: true, name: true, project_number: true } }, contacts: { select: { id: true, name: true, email: true } } },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+    return { success: true, data: task };
+  }
+
+  async employeeItSupportTicket(user: UserLike, body: any) {
+    const employee = await this.resolveEmployee(user);
+    const ticket = await this.prisma.tickets.create({
+      data: {
+        ticket_number: `EMP-${Date.now()}`,
+        subject: body.subject,
+        description: body.description,
+        priority: body.priority || 'medium',
+        category: 'IT Support',
+        source: 'employee_portal',
+        status: 'open',
+        contact_email: user.email ? user.email.toLowerCase() : employee.profiles?.email,
+        contact_name: employee.profiles ? `${employee.profiles.first_name || ''} ${employee.profiles.last_name || ''}`.trim() : undefined,
+        created_by: user.id,
+      } as any,
+    });
+    return { success: true, data: ticket };
+  }
+
+  private mapEmployee(employee: any) {
+    const profile = employee.profiles || {};
+    return {
+      id: employee.id,
+      user_id: employee.user_id,
+      name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || employee.employee_number || `Employee ${employee.id}`,
+      email: profile.email || null,
+      phone: profile.phone || null,
+      avatar_url: profile.avatar || null,
+      employee_number: employee.employee_number || null,
+      department: employee.department || null,
+      position: employee.position || null,
+      employment_status: employee.employment_status || null,
+      employment_type: employee.employment_type || null,
+      hire_date: employee.hire_date,
+      annual_leave_balance: toNum0(employee.annual_leave_balance),
+      sick_leave_balance: toNum0(employee.sick_leave_balance),
+      personal_leave_balance: toNum0(employee.personal_leave_balance),
+      default_weekly_hours: toNum0(employee.default_weekly_hours),
+      pay_frequency: employee.pay_frequency || null,
+      salary: toNum0(employee.salary),
+      hourly_rate: toNum0(employee.hourly_rate),
+      work_address: employee.work_address || null,
+      work_city: employee.work_city || null,
+      work_state: employee.work_state || null,
+      work_country: employee.work_country || null,
+      work_postcode: employee.work_postcode || null,
+      emergency_contact_name: employee.emergency_contact_name || null,
+      emergency_contact_phone: employee.emergency_contact_phone || null,
+      emergency_contact_relationship: employee.emergency_contact_relationship || null,
+      timezone: employee.timezone || null,
+      created_at: employee.created_at,
+      updated_at: employee.updated_at,
+    };
+  }
+
+  private mapContract(contract: any, manager: any) {
+    const managerProfile = manager?.profiles || {};
+    return {
+      id: contract.id,
+      contract_number: contract.contract_number || null,
+      employment_type: contract.employment_type || null,
+      position: contract.position || null,
+      department: contract.department || null,
+      start_date: contract.start_date,
+      end_date: contract.end_date || null,
+      renewal_date: contract.renewal_date || null,
+      status: contract.status || null,
+      hourly_rate: toNum0(contract.hourly_rate),
+      salary: toNum0(contract.salary),
+      pay_frequency: contract.pay_frequency || null,
+      currency: contract.currency || 'AUD',
+      default_weekly_hours: toNum0(contract.default_weekly_hours),
+      work_schedule: contract.work_schedule,
+      terms_summary: contract.terms_summary || null,
+      notes: contract.notes || null,
+      work_address: contract.work_address || null,
+      work_city: contract.work_city || null,
+      work_state: contract.work_state || null,
+      work_country: contract.work_country || null,
+      work_postcode: contract.work_postcode || null,
+      employee_accepted_at: contract.employee_accepted_at || null,
+      manager: manager ? { id: manager.id, name: `${managerProfile.first_name || ''} ${managerProfile.last_name || ''}`.trim() || manager.employee_number || null, email: managerProfile.email || null } : null,
+    };
+  }
+
+  private mapPayslip(payslip: any) {
+    return {
+      id: payslip.id,
+      employee_id: payslip.employee_id,
+      pay_period_start: payslip.pay_period_start,
+      pay_period_end: payslip.pay_period_end,
+      payment_date: payslip.payment_date,
+      pay_frequency: payslip.pay_frequency || null,
+      currency: payslip.currency || 'AUD',
+      gross_pay: toNum0(payslip.gross_pay),
+      tax_withheld: toNum0(payslip.tax_withheld),
+      superannuation: toNum0(payslip.superannuation),
+      net_pay: toNum0(payslip.net_pay),
+      ytd_gross: toNum0(payslip.ytd_gross),
+      ytd_tax: toNum0(payslip.ytd_tax),
+      ytd_super: toNum0(payslip.ytd_super),
+      status: payslip.status || null,
+      pdf_url: payslip.pdf_url || null,
+      line_items: payslip.line_items,
+      leave_data: payslip.leave_data,
+      notes: payslip.notes || null,
+      created_at: payslip.created_at,
+      updated_at: payslip.updated_at,
+    };
+  }
+
+  private mapTimeOff(request: any) {
+    const reviewer = request.profiles || {};
+    return {
+      id: request.id,
+      request_number: request.request_number || null,
+      leave_type: request.leave_type,
+      start_date: request.start_date,
+      end_date: request.end_date,
+      is_partial_day: request.is_partial_day || false,
+      partial_day_type: request.partial_day_type || null,
+      partial_start_time: request.partial_start_time || null,
+      partial_end_time: request.partial_end_time || null,
+      total_days: toNum0(request.total_days),
+      total_hours: toNum0(request.total_hours),
+      status: request.status || null,
+      reason: request.reason || null,
+      notes: request.notes || null,
+      reviewed_by: request.reviewed_by || null,
+      reviewed_at: request.reviewed_at || null,
+      review_notes: request.review_notes || null,
+      balance_at_request: toNum0(request.balance_at_request),
+      created_at: request.created_at,
+      updated_at: request.updated_at,
+      reviewer: reviewer.first_name ? { name: `${reviewer.first_name || ''} ${reviewer.last_name || ''}`.trim(), email: reviewer.email || null } : null,
+    };
+  }
+
+  private mapTimeEntry(entry: any) {
+    return {
+      id: entry.id,
+      clock_in_time: entry.clock_in_time,
+      clock_out_time: entry.clock_out_time || null,
+      clock_in_address: entry.clock_in_address || null,
+      clock_out_address: entry.clock_out_address || null,
+      notes: entry.notes || null,
+      break_minutes: entry.break_minutes || 0,
+      total_minutes: entry.total_minutes || null,
+      overtime_minutes: entry.overtime_minutes || 0,
+      status: entry.status || null,
+      approved_by: entry.approved_by || null,
+      approved_at: entry.approved_at || null,
+      approved_by_name: entry.approved_by_name || null,
+      created_at: entry.created_at,
+    };
+  }
 }
