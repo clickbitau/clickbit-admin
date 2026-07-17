@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ExpenseTable } from '@/components/finance/ExpenseTable';
 import { StatCards } from '@/components/design-system/StatCards';
 import { fetchExpenses } from '@/lib/api';
+import Link from 'next/link';
 
 export default function AdminFinanceExpensesPage() {
   const { token } = useAuth();
@@ -47,15 +48,20 @@ export default function AdminFinanceExpensesPage() {
     >
       <StatCards cards={statCards} />
 
-      <Input
-        placeholder="Search expenses..."
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap gap-2">
+        <Input
+          placeholder="Search expenses..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          className="max-w-sm"
+        />
+        <Button asChild>
+          <Link href="/admin/finance/expenses/new">New Expense</Link>
+        </Button>
+      </div>
 
       <Card>
         <CardHeader>

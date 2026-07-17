@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InvoiceTable } from '@/components/finance/InvoiceTable';
 import { StatCards } from '@/components/design-system/StatCards';
 import { fetchInvoices } from '@/lib/api';
+import Link from 'next/link';
 
 export default function AdminFinanceInvoicesPage() {
   const { token } = useAuth();
@@ -74,6 +75,9 @@ export default function AdminFinanceInvoicesPage() {
           <option value="overdue">Overdue</option>
           <option value="cancelled">Cancelled</option>
         </select>
+        <Button asChild className="w-full">
+          <Link href="/admin/finance/invoices/new">New Invoice</Link>
+        </Button>
       </div>
 
       <Card>
