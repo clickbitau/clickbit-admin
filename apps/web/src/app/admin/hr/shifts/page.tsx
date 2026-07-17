@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, CheckCircle, Clock, Copy, Plus, Trash2 } from 'lucide-react';
+import { Calendar, CheckCircle, Copy, Plus, Trash2 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { confirmShift, copyShiftsWeek, createShift, deleteShift, fetchShifts, pu
 
 export default function AdminHrShiftsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [startDate, setStartDate] = useState('');
@@ -149,7 +151,11 @@ export default function AdminHrShiftsPage() {
                   </TableRow>
                 )}
                 {shifts.map((shift: any) => (
-                  <TableRow key={shift.id}>
+                  <TableRow
+                    key={shift.id}
+                    className="cursor-pointer hover:bg-primary/5"
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/shifts/${shift.id}`); }}
+                  >
                     <TableCell>{shift.employee?.name || `Employee ${shift.employee_id}`}</TableCell>
                     <TableCell>{shift.shift_date ? new Date(shift.shift_date).toLocaleDateString() : '-'}</TableCell>
                     <TableCell>{shift.start_time || '-'}</TableCell>

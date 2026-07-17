@@ -1614,6 +1614,11 @@ export async function fetchShifts(
   return (await api.get('/api/hr/shifts', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchShift(token: string, id: string | number): Promise<Shift> {
+  const response = await api.get<{ success: boolean; data: Shift }>(`/api/hr/shifts/${id}`, { headers: authHeaders(token) });
+  return response.data.data;
+}
+
 export async function createShift(token: string, data: Record<string, unknown>) {
   return (await api.post('/api/hr/shifts', data, { headers: authHeaders(token) })).data;
 }
