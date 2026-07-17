@@ -77,6 +77,11 @@ export class HrContractsController {
     return this.hrContractsService.terminate(req.user, id, dto.reason);
   }
 
+  @Get(':id')
+  findOne(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.hrContractsService.findOne(req.user, id);
+  }
+
   @Get(':id/pdf')
   @Header('Content-Type', 'application/pdf')
   async downloadPdf(

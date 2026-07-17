@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, Plus, Power, XCircle } from 'lucide-react';
@@ -23,6 +24,7 @@ const statusColor: Record<string, string> = {
 
 export default function AdminHrContractsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
 
@@ -103,7 +105,11 @@ export default function AdminHrContractsPage() {
                   </TableRow>
                 )}
                 {contracts.map((c: any) => (
-                  <TableRow key={c.id}>
+                  <TableRow
+                    key={c.id}
+                    className="cursor-pointer hover:bg-primary/5"
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/contracts/${c.id}`); }}
+                  >
                     <TableCell>{c.employee?.name || `Employee ${c.employee_id}`}</TableCell>
                     <TableCell>{c.position || '-'}</TableCell>
                     <TableCell className="capitalize">{c.employment_type?.replace('_', ' ') || '-'}</TableCell>
