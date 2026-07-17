@@ -20,7 +20,7 @@ import type {
   ValueBreakdownResponse,
 } from '@/types/crm';
 import type { Expense, Invoice, InvoiceListResponse, Payment, PaymentListResponse } from '@/types/finance';
-import type { Announcement, Employee, HrDashboardData, PublicHoliday, Reminder, TimeOffRequest } from '@/types/hr';
+import type { Announcement, Employee, HrDashboardData, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,
   CannedResponse,
@@ -1415,6 +1415,86 @@ export async function replyCustomerTicket(token: string, id: string | number, me
 
 export async function reopenCustomerTicket(token: string, id: string | number) {
   return (await api.post(`/api/tickets/my-tickets/${id}/reopen`, {}, { headers: authHeaders(token) })).data;
+}
+
+// ─── HR Time Clock, Timesheets & Shifts ─────────────────────────────────────
+
+export async function fetchTimeClockStatus(token: string): Promise<{ success: boolean; data: TimeClockStatus }> {
+  return (await api.get('/api/hr/time-clock/status', { headers: authHeaders(token) })).data;
+}
+
+export async function clockIn(token: string, body?: Record<string, unknown>) {
+  return (await api.post('/api/hr/time-clock/clock-in', body ?? {}, { headers: authHeaders(token) })).data;
+}
+
+export async function clockOut(token: string, body?: Record<string, unknown>) {
+  return (await api.post('/api/hr/time-clock/clock-out', body ?? {}, { headers: authHeaders(token) })).data;
+}
+
+export async function startBreak(token: string, breakType?: string) {
+  return (await api.post('/api/hr/time-clock/start-break', { break_type: breakType }, { headers: authHeaders(token) })).data;
+}
+
+export async function endBreak(token: string) {
+  return (await api.post('/api/hr/time-clock/end-break', {}, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchTimesheets(
+  token: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<{ success: boolean; data: TimeEntry[]; summary: any; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  return (await api.get('/api/hr/timesheets', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchTimesheetSummary(token: string, employeeId: string | number, params?: { start_date?: string; end_date?: string }) {
+  return (await api.get<{ success: boolean; data: TimesheetSummary }>(`/api/hr/timesheets/summary/${employeeId}`, { params, headers: authHeaders(token) })).data;
+}
+
+export async function approveTimesheet(token: string, id: string | number) {
+  return (await api.post(`/api/hr/timesheets/${id}/approve`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function rejectTimesheet(token: string, id: string | number, reason?: string) {
+  return (await api.post(`/api/hr/timesheets/${id}/reject`, { reason }, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteTimesheet(token: string, id: string | number) {
+  return (await api.delete(`/api/hr/timesheets/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function createManualTimesheet(token: string, data: Record<string, unknown>) {
+  return (await api.post('/api/hr/timesheets/manual', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchShifts(
+  token: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<{ success: boolean; data: Shift[] }> {
+  return (await api.get('/api/hr/shifts', { params, headers: authHeaders(token) })).data;
+}
+
+export async function createShift(token: string, data: Record<string, unknown>) {
+  return (await api.post('/api/hr/shifts', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateShift(token: string, id: string | number, data: Record<string, unknown>) {
+  return (await api.put(`/api/hr/shifts/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteShift(token: string, id: string | number) {
+  return (await api.delete(`/api/hr/shifts/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function publishShifts(token: string, shiftIds: number[]) {
+  return (await api.post('/api/hr/shifts/publish', { shift_ids: shiftIds }, { headers: authHeaders(token) })).data;
+}
+
+export async function copyShiftsWeek(token: string, source: string, target: string, employeeIds?: number[]) {
+  return (await api.post('/api/hr/shifts/copy-week', { source_week_start: source, target_week_start: target, employee_ids: employeeIds }, { headers: authHeaders(token) })).data;
+}
+
+export async function confirmShift(token: string, id: string | number) {
+  return (await api.post(`/api/hr/shifts/${id}/confirm`, {}, { headers: authHeaders(token) })).data;
 }
 
 export default api;
