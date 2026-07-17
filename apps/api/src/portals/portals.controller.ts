@@ -32,6 +32,12 @@ export class AgentController {
     return this.service.agentDashboard(req.user);
   }
 
+  @Get('clients')
+  @Roles('agent', 'admin')
+  async clients(@Req() req: RequestWithUser) {
+    return this.service.agentClients(req.user);
+  }
+
   @Get('invoices')
   @Roles('agent', 'admin')
   async invoices(@Req() req: RequestWithUser, @Query() query: any) {
