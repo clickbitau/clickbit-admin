@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmployeeTable } from '@/components/hr/EmployeeTable';
 import { StatCards } from '@/components/design-system/StatCards';
 import { fetchEmployees } from '@/lib/api';
+import Link from 'next/link';
 
 export default function AdminHrEmployeesPage() {
   const { token } = useAuth();
@@ -46,15 +47,20 @@ export default function AdminHrEmployeesPage() {
     >
       <StatCards cards={statCards} />
 
-      <Input
-        placeholder="Search employees..."
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap gap-2">
+        <Input
+          placeholder="Search employees..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          className="max-w-sm"
+        />
+        <Button asChild>
+          <Link href="/admin/hr/employees/new">New Employee</Link>
+        </Button>
+      </div>
 
       <Card>
         <CardHeader>
