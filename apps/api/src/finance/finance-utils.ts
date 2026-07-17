@@ -126,6 +126,8 @@ export function mapExpense(expense: ExpenseWithRelations) {
     employee: e.employees
       ? { ...e.employees, user: (e.employees as { profiles?: unknown }).profiles }
       : undefined,
+    invoice: e.invoices,
+    deal: e.deals,
     crmProject: e.crm_projects,
     crmSubproject: e.crm_subprojects,
     linkedReceipts: e.receipt_records,
@@ -140,6 +142,8 @@ export function mapExpense(expense: ExpenseWithRelations) {
     profiles_expenses_approved_byToprofiles: undefined,
     profiles_expenses_reimbursed_toToprofiles: undefined,
     receipt_records: undefined,
+    invoices: undefined,
+    deals: undefined,
   };
 }
 
@@ -173,7 +177,7 @@ export function mapReceipt(receipt: ReceiptWithRelations) {
   };
 }
 
-export function mapPayment(payment: Record<string, unknown> & { invoices?: Record<string, unknown> | null }) {
+export function mapPayment(payment: Record<string, unknown> & { invoices?: Record<string, unknown> | null; crm_projects?: Record<string, unknown> | null }) {
   const formatted: Record<string, unknown> = { ...payment };
   formatted.amount = parseNumber(payment.amount);
   formatted.gateway_fee = parseNumber(payment.gateway_fee);
@@ -190,6 +194,9 @@ export function mapPayment(payment: Record<string, unknown> & { invoices?: Recor
       total: parseNumber(inv.total_amount),
       currency: inv.currency || 'AUD',
     };
+  }
+  if (payment.crm_projects) {
+    formatted.project = payment.crm_projects;
   }
   return formatted;
 }

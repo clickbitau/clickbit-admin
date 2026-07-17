@@ -15,9 +15,10 @@ import type { Payment } from '@/types/finance';
 interface PaymentTableProps {
   payments: Payment[];
   loading: boolean;
+  onRowClick?: (payment: Payment) => void;
 }
 
-export function PaymentTable({ payments, loading }: PaymentTableProps) {
+export function PaymentTable({ payments, loading, onRowClick }: PaymentTableProps) {
   if (loading) {
     return (
       <div className="space-y-2">
@@ -56,7 +57,7 @@ export function PaymentTable({ payments, loading }: PaymentTableProps) {
         </TableHeader>
         <TableBody>
           {payments.map((payment) => (
-            <TableRow key={payment.id || payment.transaction_id}>
+            <TableRow key={payment.id || payment.transaction_id} className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''} onClick={() => onRowClick?.(payment)}>
               <TableCell>{formatDate(payment.payment_date || payment.created_at)}</TableCell>
               <TableCell className="capitalize">{payment.payment_method || '-'}</TableCell>
               <TableCell className="font-mono text-xs">{payment.transaction_id || '-'}</TableCell>

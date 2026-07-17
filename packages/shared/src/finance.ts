@@ -86,8 +86,19 @@ export interface Payment {
   deleted_at?: string | null;
   notes?: string | null;
   gateway_fee?: number;
+  gateway_response?: string | null;
+  gateway_error?: string | null;
   refunded_amount?: number;
+  refunded_at?: string | null;
+  refunded_reason?: string | null;
+  billing_address?: string | null;
+  payment_details?: string | null;
+  processed_at?: string | null;
+  failed_at?: string | null;
+  retry_count?: number;
+  next_retry_at?: string | null;
   invoice?: Invoice | null;
+  project?: { id: number; name: string; project_number?: string } | null;
 }
 
 export interface PaymentListResponse {
@@ -127,12 +138,14 @@ export interface Expense {
   notes?: string | null;
   invoice_id?: number | null;
   invoice?: { id: number; package_code?: string; title?: string } | null;
+  deal?: { id: number; title: string } | null;
   crm_project_id?: number | null;
   crmProject?: { id: number; name: string; project_number?: string } | null;
   crm_subproject_id?: number | null;
   crmSubproject?: { id: number; name: string } | null;
   receipt_ids?: number[];
   linkedReceipts?: Record<string, unknown>[];
+  receipts?: { id: number; file_name: string; file_url?: string | null; total_amount?: number }[];
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
