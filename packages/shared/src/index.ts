@@ -92,6 +92,7 @@ export interface Company {
   effective_phone?: string | null;
   total_projects?: number;
   total_tasks?: number;
+  total_tickets?: number;
 }
 
 export interface Pagination {

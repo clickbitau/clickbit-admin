@@ -153,6 +153,24 @@ export class CompaniesController {
     return this.companiesService.findDeals(id);
   }
 
+  @Get(':id/projects')
+  async findProjects(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.companiesService.findProjects(id);
+  }
+
+  @Get(':id/tickets')
+  async findTickets(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.companiesService.findTickets(id);
+  }
+
   @Get(':id/documents')
   async getDocuments(
     @Param('id', ParseIntPipe) id: number,
