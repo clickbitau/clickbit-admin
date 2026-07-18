@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { LucideIcon, Grid3X3, Plus, Search, Table2 } from 'lucide-react';
+import { LucideIcon, Grid3X3, Plus, Search, Table2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -32,7 +32,9 @@ interface ContentListPageProps<T> {
   filterTabs?: FilterTab<T>[];
   customFilter?: (item: T) => boolean;
   headerChildren?: React.ReactNode;
+  topSection?: React.ReactNode;
   footer?: React.ReactNode;
+  pageSize?: number;
   tableHeaders: { key: string; label: string; className?: string }[];
   renderGridCard: (item: T) => React.ReactNode;
   renderTableRow: (item: T) => React.ReactNode;
@@ -55,7 +57,9 @@ export function ContentListPage<T extends { id: number | string }>({
   filterTabs,
   customFilter,
   headerChildren,
+  topSection,
   footer,
+  pageSize,
   tableHeaders,
   renderGridCard,
   renderTableRow,
@@ -66,6 +70,9 @@ export function ContentListPage<T extends { id: number | string }>({
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState(filterTabs?.[0]?.id || 'all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => { setPage(1); }, [search, activeTab]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -77,6 +84,16 @@ export function ContentListPage<T extends { id: number | string }>({
       return matchesSearch && matchesTab && matchesCustom;
     });
   }, [items, search, activeTab, filterTabs, searchFn, customFilter]);
+
+  const totalPages = pageSize ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
+  const currentPage = Math.min(page, totalPages);
+  const paginated = useMemo(() => {
+    if (!pageSize) return filtered;
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, pageSize, currentPage]);
+
+  const goToPage = (p: number) => setPage(Math.max(1, Math.min(p, totalPages)));
 
   const tabCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -173,7 +190,9 @@ export function ContentListPage<T extends { id: number | string }>({
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {topSection}
+
+      {paginated.length === 0 ? (
         <div className="text-center py-12 nm-inset-sm rounded-xl">
           <p className="text-muted-foreground">{emptyText}</p>
           {search && (
@@ -184,7 +203,7 @@ export function ContentListPage<T extends { id: number | string }>({
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((item) => (
+          {paginated.map((item) => (
             <div key={keyExtractor(item)} onClick={() => onRowClick?.(item)} className={onRowClick ? 'cursor-pointer' : undefined}>
               {renderGridCard(item)}
             </div>
@@ -204,7 +223,7 @@ export function ContentListPage<T extends { id: number | string }>({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((item) => (
+                {paginated.map((item) => (
                   <tr
                     key={keyExtractor(item)}
                     onClick={() => onRowClick?.(item)}
@@ -218,6 +237,29 @@ export function ContentListPage<T extends { id: number | string }>({
           </div>
         </div>
       )}
+
+      {pageSize && totalPages > 1 && (
+        <div className="nm-raised px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Showing <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> to <span className="font-medium">{Math.min(currentPage * pageSize, filtered.length)}</span> of <span className="font-medium">{filtered.length}</span> results
+          </p>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="p-2 rounded-md nm-inset-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => goToPage(p)}
+                className={`min-w-[2rem] h-8 px-2 rounded-md text-sm font-medium transition-all ${p === currentPage ? 'bg-primary text-primary-foreground' : 'nm-inset-sm text-muted-foreground hover:text-foreground'}`}
+              >
+                {p}
+              </button>
+            ))}
+            <button type="button" onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-2 rounded-md nm-inset-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
+          </div>
+        </div>
+      )}
+
       {footer}
     </PageShell>
   );
