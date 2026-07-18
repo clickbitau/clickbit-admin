@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/ui/button';
 import {
   Home,
@@ -38,11 +39,8 @@ import {
   Layers,
   UserCircle,
   Settings,
-  Shield,
   Bug,
-  Server,
   Lock,
-  Rocket,
   Activity,
   Globe,
   Menu,
@@ -59,6 +57,7 @@ interface NavLink {
   href: string;
   label: string;
   icon: React.ElementType;
+  roles?: string[];
 }
 
 interface NavSection {
@@ -66,6 +65,8 @@ interface NavSection {
   label: string;
   icon: React.ElementType;
   href?: string;
+  flat?: boolean;
+  roles?: string[];
   links: NavLink[];
 }
 
@@ -74,13 +75,14 @@ const sections: NavSection[] = [
     id: 'dashboard',
     label: 'Dashboard',
     icon: Home,
-    href: '/admin',
-    links: [],
+    flat: true,
+    links: [{ href: '/admin', label: 'Dashboard', icon: Home }],
   },
   {
     id: 'crm',
     label: 'CRM',
     icon: HeartHandshake,
+    roles: ['admin', 'manager'],
     links: [
       { href: '/admin/crm/pipeline', label: 'Sales Pipeline', icon: Kanban },
       { href: '/admin/crm/deals', label: 'Deals', icon: Target },
@@ -95,6 +97,7 @@ const sections: NavSection[] = [
     id: 'hr',
     label: 'HR',
     icon: Users,
+    roles: ['admin', 'manager', 'employee'],
     links: [
       { href: '/admin/hr/employees', label: 'Employees', icon: Users },
       { href: '/admin/hr/time-clock', label: 'Time Clock', icon: Clock },
@@ -113,6 +116,7 @@ const sections: NavSection[] = [
     id: 'finance',
     label: 'Finance',
     icon: DollarSign,
+    roles: ['admin', 'manager'],
     links: [
       { href: '/admin/finance/invoices', label: 'Invoices', icon: Receipt },
       { href: '/admin/finance/payments', label: 'Payments', icon: CreditCard },
@@ -124,7 +128,8 @@ const sections: NavSection[] = [
     id: 'support',
     label: 'Support',
     icon: Ticket,
-    href: '/admin/support',
+    flat: true,
+    roles: ['admin', 'manager'],
     links: [
       { href: '/admin/support', label: 'Tickets', icon: Ticket },
       { href: '/admin/support/automation', label: 'Automation', icon: TrendingUp },
@@ -134,7 +139,7 @@ const sections: NavSection[] = [
     id: 'communication',
     label: 'Communication',
     icon: MessageSquare,
-    href: '/admin/communication/chat',
+    roles: ['admin', 'manager'],
     links: [
       { href: '/admin/communication/chat', label: 'Chat', icon: MessageSquare },
       { href: '/admin/communication/mail', label: 'Mail', icon: FileText },
@@ -144,7 +149,7 @@ const sections: NavSection[] = [
     id: 'content',
     label: 'Content',
     icon: FileText,
-    href: '/admin/content',
+    roles: ['admin', 'manager'],
     links: [
       { href: '/admin/content/services', label: 'Services', icon: Layers },
       { href: '/admin/content/team', label: 'Team', icon: UserCircle },
@@ -158,6 +163,7 @@ const sections: NavSection[] = [
     id: 'documents',
     label: 'Documents',
     icon: FileText,
+    roles: ['admin', 'manager'],
     href: '/admin/documents',
     links: [],
   },
@@ -172,6 +178,7 @@ const sections: NavSection[] = [
     id: 'analytics',
     label: 'Analytics',
     icon: BarChart3,
+    roles: ['admin', 'manager'],
     href: '/admin/analytics',
     links: [],
   },
@@ -179,6 +186,7 @@ const sections: NavSection[] = [
     id: 'bug-reports',
     label: 'Bug Reports',
     icon: Bug,
+    roles: ['admin', 'manager'],
     href: '/admin/bug-reports',
     links: [],
   },
@@ -186,7 +194,7 @@ const sections: NavSection[] = [
     id: 'settings',
     label: 'Admin',
     icon: Settings,
-    href: '/admin/settings',
+    roles: ['admin', 'manager'],
     links: [
       { href: '/admin/settings/users', label: 'Users', icon: Users },
       { href: '/admin/settings/credentials', label: 'Credentials', icon: Lock },
@@ -205,30 +213,51 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function canSee(userRole: string | undefined, allowed?: string[]) {
+  return !allowed || allowed.includes(userRole || '');
+}
+
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [expanded, setExpanded] = useState<string[]>(() => {
-    const initial = sections
-      .filter((s) => s.links.some((l) => isActive(pathname || '', l.href)))
-      .map((s) => s.id);
-    return initial.length ? initial : ['dashboard'];
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('adminSidebarCollapsed') === 'true';
+  });
+  const [expanded, setExpanded] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('adminSidebarExpanded');
+      if (saved) return saved;
+    }
+    const current = sections.find(
+      (s) => s.links.some((l) => isActive(pathname || '', l.href)) || (s.href && isActive(pathname || '', s.href))
+    );
+    return current ? current.id : 'dashboard';
   });
 
   useEffect(() => {
     const current = sections.find(
       (s) => s.links.some((l) => isActive(pathname || '', l.href)) || (s.href && isActive(pathname || '', s.href))
     );
-    if (current && !expanded.includes(current.id)) {
-      setExpanded((prev) => [...prev, current.id]);
-    }
+    if (current) setExpanded(current.id);
   }, [pathname]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('adminSidebarCollapsed', String(collapsed));
+    }
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && expanded) {
+      localStorage.setItem('adminSidebarExpanded', expanded);
+    }
+  }, [expanded]);
+
   const toggleSection = (id: string) => {
-    setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setExpanded((prev) => (prev === id ? null : id));
   };
 
   useEffect(() => {
@@ -246,138 +275,216 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   }
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
+  const userRole = user?.role;
 
-  const Nav = ({ collapsedMode = false }: { collapsedMode?: boolean }) => (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-6 mt-4 px-2">
-        {!collapsedMode && (
-          <Link href="/admin" className="flex items-center gap-2 px-2">
-            <div className="nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">C</div>
-            <span className="font-bold text-lg tracking-tight">ClickBit</span>
-          </Link>
-        )}
-        {collapsedMode && (
-          <div className="mx-auto nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">C</div>
-        )}
-        {!collapsedMode && (
-          <button
-            onClick={() => setCollapsed(true)}
-            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors hidden lg:block"
-            aria-label="Collapse sidebar"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-        )}
-      </div>
+  const Nav = ({ collapsedMode = false }: { collapsedMode?: boolean }) => {
+    const [hovered, setHovered] = useState<string | null>(null);
 
-      <nav className="flex-1 overflow-y-auto space-y-1 px-2 pb-2">
-        {sections.map((section) => {
-          const SectionIcon = section.icon;
-          const isExpanded = expanded.includes(section.id);
-          const hasActive = section.links.some((l) => isActive(pathname || '', l.href)) || (section.href && isActive(pathname || '', section.href));
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between mb-6 mt-4 px-2">
+          {!collapsedMode && (
+            <Link href="/admin" className="flex items-center gap-2 px-2">
+              <div className="nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">C</div>
+              <span className="font-bold text-lg tracking-tight">ClickBit</span>
+            </Link>
+          )}
+          {collapsedMode && (
+            <div className="mx-auto nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">C</div>
+          )}
+          {!collapsedMode && (
+            <button
+              onClick={() => setCollapsed(true)}
+              className="p-1.5 text-muted-foreground hover:text-foreground transition-colors hidden lg:block"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
-          if (collapsedMode) {
+        <nav className="flex-1 overflow-y-auto overflow-x-visible space-y-1 px-2 pb-2">
+          {sections.map((section) => {
+            if (!canSee(userRole, section.roles)) return null;
+            const visibleLinks = section.links.filter((l) => canSee(userRole, l.roles));
+            const hasHref = section.href && canSee(userRole, section.roles);
+            if (visibleLinks.length === 0 && !hasHref) return null;
+
+            const SectionIcon = section.icon;
+            const isExpanded = expanded === section.id;
+            const hasActive = visibleLinks.some((l) => isActive(pathname || '', l.href)) || (hasHref && isActive(pathname || '', section.href!));
+            const sectionHref = section.href || visibleLinks[0]?.href || '/admin';
+
+            if (collapsedMode) {
+              return (
+                <div
+                  key={section.id}
+                  className="relative"
+                  onMouseEnter={() => setHovered(section.id)}
+                  onMouseLeave={() => setHovered(null)}
+                >
+                  <Link
+                    href={sectionHref}
+                    className={`flex items-center justify-center p-2.5 rounded-xl transition-all ${
+                      hasActive
+                        ? 'nm-inset-sm text-primary'
+                        : 'text-muted-foreground hover:nm-raised-sm hover:text-foreground'
+                    }`}
+                    title={section.label}
+                  >
+                    <SectionIcon className="h-5 w-5" />
+                  </Link>
+                  {hovered === section.id && visibleLinks.length > 0 && (
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        className="absolute left-full ml-2 top-0 nm-raised rounded-xl z-50 min-w-[200px] py-1 border border-border/50 bg-background"
+                      >
+                        <div className="px-3 py-2 border-b border-border/50 text-sm font-semibold flex items-center gap-2">
+                          <SectionIcon className="h-4 w-4" /> {section.label}
+                        </div>
+                        {visibleLinks.map((link) => {
+                          const LinkIcon = link.icon;
+                          const active = isActive(pathname || '', link.href);
+                          return (
+                            <Link
+                              key={link.href}
+                              href={link.href}
+                              onClick={() => { setMobileOpen(false); setHovered(null); }}
+                              className={`flex items-center gap-2 px-3 py-2 text-sm ${
+                                active ? 'nm-inset-sm text-primary' : 'text-muted-foreground hover:nm-raised-sm hover:text-foreground'
+                              }`}
+                            >
+                              <LinkIcon className="h-4 w-4" /> {link.label}
+                            </Link>
+                          );
+                        })}
+                      </motion.div>
+                    </AnimatePresence>
+                  )}
+                </div>
+              );
+            }
+
+            if (section.flat) {
+              return (
+                <div key={section.id} className="space-y-0.5 mb-1">
+                  {visibleLinks.length > 1 && (
+                    <div className="px-3 pt-2 pb-0.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                        {section.label}
+                      </span>
+                    </div>
+                  )}
+                  {visibleLinks.map((link) => {
+                    const LinkIcon = link.icon;
+                    const active = isActive(pathname || '', link.href);
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                          active
+                            ? 'nm-inset-sm text-primary'
+                            : 'text-foreground/80 hover:nm-raised-sm hover:text-foreground'
+                        }`}
+                      >
+                        <LinkIcon className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">{link.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             return (
-              <div key={section.id} className="relative group">
-                <Link
-                  href={section.links[0]?.href || section.href || '/admin'}
-                  className={`flex items-center justify-center p-2.5 rounded-xl transition-all ${
+              <div key={section.id} className="mb-1">
+                <div
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                     hasActive
                       ? 'nm-inset-sm text-primary'
-                      : 'text-muted-foreground hover:nm-raised-sm hover:text-foreground'
+                      : 'text-foreground/80 hover:nm-raised-sm hover:text-foreground'
                   }`}
                 >
-                  <SectionIcon className="h-5 w-5" />
-                </Link>
+                  <Link
+                    href={sectionHref}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2.5 flex-1 min-w-0"
+                  >
+                    <SectionIcon className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{section.label}</span>
+                  </Link>
+                  {visibleLinks.length > 0 && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); toggleSection(section.id); }}
+                      className="ml-1 p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                      aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
+                    >
+                      {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    </button>
+                  )}
+                </div>
+                <AnimatePresence>
+                  {isExpanded && visibleLinks.length > 0 && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="ml-3 mt-1 space-y-0.5 border-l-2 border-border/50 pl-3 overflow-hidden"
+                    >
+                      {visibleLinks.map((link) => {
+                        const LinkIcon = link.icon;
+                        const active = isActive(pathname || '', link.href);
+                        return (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            onClick={() => setMobileOpen(false)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                              active
+                                ? 'nm-inset-sm text-primary'
+                                : 'text-muted-foreground hover:nm-raised-sm hover:text-foreground'
+                            }`}
+                          >
+                            <LinkIcon className="h-3.5 w-3.5" />
+                            <span className="truncate">{link.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
-          }
+          })}
+        </nav>
 
-          const sectionHref = section.href || section.links[0]?.href || '/admin';
-
-          return (
-            <div key={section.id} className="mb-1">
-              <div
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                  hasActive
-                    ? 'nm-inset-sm text-primary'
-                    : 'text-foreground/80 hover:nm-raised-sm hover:text-foreground'
-                }`}
-              >
-                <Link
-                  href={sectionHref}
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2.5 flex-1 min-w-0"
-                >
-                  <SectionIcon className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">{section.label}</span>
-                </Link>
-                {section.links.length > 0 && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); toggleSection(section.id); }}
-                    className="ml-1 p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
-                    aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
-                  >
-                    {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                  </button>
-                )}
-              </div>
-              <AnimatePresence>
-                {isExpanded && section.links.length > 0 && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-3 mt-1 space-y-0.5 border-l-2 border-border/50 pl-3 overflow-hidden"
-                  >
-                    {section.links.map((link) => {
-                      const LinkIcon = link.icon;
-                      const active = isActive(pathname || '', link.href);
-                      return (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          onClick={() => setMobileOpen(false)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${
-                            active
-                              ? 'nm-inset-sm text-primary'
-                              : 'text-muted-foreground hover:nm-raised-sm hover:text-foreground'
-                          }`}
-                        >
-                          <LinkIcon className="h-3.5 w-3.5" />
-                          <span className="truncate">{link.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </nav>
-
-      <div className="pt-3 border-t border-border/50 px-2">
-        {collapsedMode ? (
-          <button
-            onClick={() => setCollapsed(false)}
-            className="w-full flex items-center justify-center p-2.5 rounded-xl text-muted-foreground hover:nm-raised-sm transition-colors"
-            aria-label="Expand sidebar"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        ) : (
-          <button
-            onClick={logout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-destructive hover:nm-raised-sm transition-all"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Logout</span>
-          </button>
-        )}
+        <div className="pt-3 border-t border-border/50 px-2">
+          {collapsedMode ? (
+            <button
+              onClick={() => setCollapsed(false)}
+              className="w-full flex items-center justify-center p-2.5 rounded-xl text-muted-foreground hover:nm-raised-sm transition-colors"
+              aria-label="Expand sidebar"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              onClick={logout}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-destructive hover:nm-raised-sm transition-all"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex h-screen admin-surface overflow-hidden">
@@ -415,6 +522,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <ThemeToggle />
             <Link href="/admin/settings/profile" className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:nm-raised-sm transition-all">
               {user?.avatar ? (
@@ -438,7 +546,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <span className="font-semibold">{user?.role === 'employee' ? 'Employee Portal' : 'Admin Panel'}</span>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <ThemeToggle />
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-2 lg:p-4">{children}</main>
