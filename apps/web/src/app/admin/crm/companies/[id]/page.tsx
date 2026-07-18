@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/design-system/DataTable';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
+import { PriorityBadge } from '@/components/design-system/PriorityBadge';
+import { Progress } from '@/components/ui/progress';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import {
   fetchCompany,
@@ -21,10 +23,12 @@ import {
   fetchCompanyValueBreakdown,
   fetchCompanyContacts,
   fetchCompanyDeals,
+  fetchCompanyProjects,
+  fetchCompanyTickets,
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Company } from '@/types/crm';
-import { ArrowLeft, Building2, Mail, Phone, MapPin, Globe, User, Target } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, MapPin, Globe, User, Target, Plus } from 'lucide-react';
 
 export default function CompanyDetailPage() {
   const { token } = useAuth();
@@ -38,7 +42,7 @@ export default function CompanyDetailPage() {
   });
 
   useRealtimeRefresh(
-    ['companies', 'contacts', 'deals', 'invoices', 'payments', 'documents'],
+    ['companies', 'contacts', 'deals', 'invoices', 'payments', 'documents', 'crm_projects', 'tickets'],
     ['company', id],
     { enabled: !!id },
   );
@@ -74,6 +78,8 @@ export default function CompanyDetailPage() {
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="deals">Deals</TabsTrigger>
+          <TabsTrigger value="projects">Projects ({company.total_projects ?? 0})</TabsTrigger>
+          <TabsTrigger value="tickets">Tickets ({company.total_tickets ?? 0})</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="value">Value Breakdown</TabsTrigger>
         </TabsList>
@@ -84,6 +90,8 @@ export default function CompanyDetailPage() {
         <TabsContent value="invoices"><CompanyInvoices companyId={id} /></TabsContent>
         <TabsContent value="payments"><CompanyPayments companyId={id} /></TabsContent>
         <TabsContent value="deals"><CompanyDeals companyId={id} /></TabsContent>
+        <TabsContent value="projects"><CompanyProjects companyId={id} /></TabsContent>
+        <TabsContent value="tickets"><CompanyTickets companyId={id} /></TabsContent>
         <TabsContent value="documents"><CompanyDocuments companyId={id} /></TabsContent>
         <TabsContent value="value"><CompanyValue companyId={id} /></TabsContent>
       </Tabs>
@@ -162,7 +170,13 @@ function CompanyContacts({ companyId }: { companyId: string }) {
 
   const contacts = data?.contacts ?? [];
   return (
-    <DataTable
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/crm/contacts/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Contact</Link>
+        </Button>
+      </div>
+      <DataTable
       headers={[{ key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' }, { key: 'stage', label: 'Stage' }, { key: 'primary', label: 'Primary' }]}
       data={contacts}
       loading={isLoading}
@@ -177,6 +191,7 @@ function CompanyContacts({ companyId }: { companyId: string }) {
         <span key="primary">{c.is_primary ? 'Yes' : 'No'}</span>,
       ]}
     />
+    </div>
   );
 }
 
@@ -190,7 +205,13 @@ function CompanyDeals({ companyId }: { companyId: string }) {
 
   const deals = data?.deals ?? [];
   return (
-    <DataTable
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/crm/deals/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Deal</Link>
+        </Button>
+      </div>
+      <DataTable
       headers={[{ key: 'ref', label: 'Ref' }, { key: 'title', label: 'Title' }, { key: 'stage', label: 'Stage' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'close', label: 'Close Date' }]}
       data={deals}
       loading={isLoading}
@@ -200,11 +221,12 @@ function CompanyDeals({ companyId }: { companyId: string }) {
         <span key="ref">{d.deal_number || `#${d.id}`}</span>,
         <Link key="title" href={`/admin/crm/deals/${d.id}`} className="font-medium hover:underline">{d.title}</Link>,
         <span key="stage" className="text-muted-foreground">{d.stage || '-'}</span>,
-        <span key="amount">{formatCurrency(Number(d.value ?? 0))}</span>,
+        <span key="amount">{formatCurrency(Number(d.value ?? 0), d.currency)}</span>,
         <StatusBadge key="status" status={d.status} />,
         <span key="close" className="text-muted-foreground">{formatDate(d.actual_close_date || d.expected_close_date)}</span>,
       ]}
     />
+    </div>
   );
 }
 
@@ -217,7 +239,13 @@ function CompanyUsers({ companyId }: { companyId: string }) {
   });
 
   return (
-    <DataTable
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/settings/users/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New User</Link>
+        </Button>
+      </div>
+      <DataTable
       headers={[{ key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'role', label: 'Role' }, { key: 'status', label: 'Status' }]}
       data={data ?? []}
       loading={isLoading}
@@ -229,6 +257,7 @@ function CompanyUsers({ companyId }: { companyId: string }) {
         <StatusBadge key="status" status={u.status} />,
       ]}
     />
+    </div>
   );
 }
 
@@ -242,7 +271,13 @@ function CompanyInvoices({ companyId }: { companyId: string }) {
 
   const invoices = data?.invoices ?? [];
   return (
-    <DataTable
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/finance/invoices/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Invoice</Link>
+        </Button>
+      </div>
+      <DataTable
       headers={[{ key: 'ref', label: 'Reference' }, { key: 'title', label: 'Title' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Issue Date' }]}
       data={invoices}
       loading={isLoading}
@@ -250,11 +285,12 @@ function CompanyInvoices({ companyId }: { companyId: string }) {
       renderRow={(i) => [
         <span key="ref">{i.package_code || i.invoice_number || `#${i.id}`}</span>,
         <span key="title">{i.title || '-'}</span>,
-        <span key="amount">{formatCurrency(Number(i.total_amount ?? 0))}</span>,
+        <span key="amount">{formatCurrency(Number(i.total_amount ?? 0), i.currency)}</span>,
         <StatusBadge key="status" status={i.status} />,
         <span key="date">{formatDate(i.issue_date)}</span>,
       ]}
     />
+    </div>
   );
 }
 
@@ -268,19 +304,26 @@ function CompanyPayments({ companyId }: { companyId: string }) {
 
   const payments = data?.payments ?? [];
   return (
-    <DataTable
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/finance/payments/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Payment</Link>
+        </Button>
+      </div>
+      <DataTable
       headers={[{ key: 'id', label: 'ID' }, { key: 'amount', label: 'Amount' }, { key: 'method', label: 'Method' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Date' }]}
       data={payments}
       loading={isLoading}
       keyExtractor={(p) => p.id}
       renderRow={(p) => [
         <span key="id">{p.transaction_id || `#${p.id}`}</span>,
-        <span key="amount">{formatCurrency(Number(p.amount ?? 0))}</span>,
+        <span key="amount">{formatCurrency(Number(p.amount ?? 0), p.currency)}</span>,
         <span key="method">{p.payment_method || '-'}</span>,
         <StatusBadge key="status" status={p.status} />,
         <span key="date">{formatDate(p.payment_date)}</span>,
       ]}
     />
+    </div>
   );
 }
 
@@ -294,7 +337,13 @@ function CompanyDocuments({ companyId }: { companyId: string }) {
 
   const docs = [...(data?.documents ?? []), ...(data?.subprojectDocuments ?? [])];
   return (
-    <DataTable
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/documents/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Document</Link>
+        </Button>
+      </div>
+      <DataTable
       headers={[{ key: 'name', label: 'Name' }, { key: 'source', label: 'Source' }, { key: 'size', label: 'Size' }, { key: 'date', label: 'Created' }]}
       data={docs}
       loading={isLoading}
@@ -306,6 +355,77 @@ function CompanyDocuments({ companyId }: { companyId: string }) {
         <span key="date">{formatDate(d.created_at)}</span>,
       ]}
     />
+    </div>
+  );
+}
+
+function CompanyProjects({ companyId }: { companyId: string }) {
+  const { token } = useAuth();
+  const { data, isLoading } = useQuery({
+    queryKey: ['company-projects', companyId],
+    queryFn: () => fetchCompanyProjects(token!, companyId),
+    enabled: !!token,
+  });
+
+  const projects = data?.projects ?? [];
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/crm/projects/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Project</Link>
+        </Button>
+      </div>
+      <DataTable
+        headers={[{ key: 'ref', label: 'Ref' }, { key: 'name', label: 'Name' }, { key: 'budget', label: 'Budget' }, { key: 'progress', label: 'Progress' }, { key: 'status', label: 'Status' }, { key: 'due', label: 'Due' }]}
+        data={projects}
+        loading={isLoading}
+        keyExtractor={(p) => p.id}
+        emptyText="No projects."
+        renderRow={(p) => [
+          <span key="ref">{p.project_number || `#${p.id}`}</span>,
+          <Link key="name" href={`/admin/crm/projects/${p.id}`} className="font-medium hover:underline">{p.name}</Link>,
+          <span key="budget">{formatCurrency(Number(p.budget ?? 0), p.currency)}</span>,
+          <div key="progress" className="w-24"><Progress value={p.progress_percentage ?? 0} className="h-1.5" /><p className="text-xs text-right mt-0.5">{p.progress_percentage ?? 0}%</p></div>,
+          <StatusBadge key="status" status={p.status} />,
+          <span key="due">{formatDate(p.due_date)}</span>,
+        ]}
+      />
+    </div>
+  );
+}
+
+function CompanyTickets({ companyId }: { companyId: string }) {
+  const { token } = useAuth();
+  const { data, isLoading } = useQuery({
+    queryKey: ['company-tickets', companyId],
+    queryFn: () => fetchCompanyTickets(token!, companyId),
+    enabled: !!token,
+  });
+
+  const tickets = data?.tickets ?? [];
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/support/new?company_id=${companyId}`}><Plus className="mr-1 h-4 w-4" /> New Ticket</Link>
+        </Button>
+      </div>
+      <DataTable
+        headers={[{ key: 'ticket', label: 'Ticket' }, { key: 'subject', label: 'Subject' }, { key: 'category', label: 'Category' }, { key: 'priority', label: 'Priority' }, { key: 'status', label: 'Status' }, { key: 'created', label: 'Created' }]}
+        data={tickets}
+        loading={isLoading}
+        keyExtractor={(t) => t.id}
+        emptyText="No tickets."
+        renderRow={(t) => [
+          <span key="ticket">{t.ticket_number || `#${t.id}`}</span>,
+          <Link key="subject" href={`/admin/support/${t.id}`} className="font-medium hover:underline">{t.subject}</Link>,
+          <span key="category">{t.category || '-'}</span>,
+          <PriorityBadge key="priority" priority={t.priority} />,
+          <StatusBadge key="status" status={t.status} />,
+          <span key="created">{formatDate(t.created_at)}</span>,
+        ]}
+      />
+    </div>
   );
 }
 
@@ -328,7 +448,7 @@ function CompanyValue({ companyId }: { companyId: string }) {
         <Badge key="type" variant="outline" className="capitalize">{r.type}</Badge>,
         <span key="ref">{r.reference}</span>,
         <span key="desc">{r.description}</span>,
-        <span key="amount">{formatCurrency(Number(r.amount ?? 0))}</span>,
+        <span key="amount">{formatCurrency(Number(r.amount ?? 0), r.currency)}</span>,
         <StatusBadge key="status" status={r.status} />,
       ]}
     />

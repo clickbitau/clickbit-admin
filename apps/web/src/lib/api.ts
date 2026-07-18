@@ -221,6 +221,20 @@ export async function fetchCompanyDeals(
   return (await api.get(`/api/crm/companies/${id}/deals`, { headers: authHeaders(token) })).data;
 }
 
+export async function fetchCompanyProjects(
+  token: string,
+  id: string | number,
+): Promise<{ projects: { id: number; project_number: string; name: string; budget: number; currency: string; status: string; progress_percentage: number | null; due_date: string | null }[] }> {
+  return (await api.get(`/api/crm/companies/${id}/projects`, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchCompanyTickets(
+  token: string,
+  id: string | number,
+): Promise<{ tickets: { id: number; ticket_number: string; subject: string; status: string; priority: string; category: string | null; created_at: string | null }[] }> {
+  return (await api.get(`/api/crm/companies/${id}/tickets`, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchCompanyDocuments(
   token: string,
   id: string | number,

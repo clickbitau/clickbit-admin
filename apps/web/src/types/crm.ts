@@ -40,6 +40,7 @@ export interface Company extends SharedCompany {
   contactAssociations?: { contact: { id: number; name: string; email?: string; phone?: string } }[];
   total_projects?: number;
   total_tasks?: number;
+  total_tickets?: number;
 }
 
 export interface CrmContact {

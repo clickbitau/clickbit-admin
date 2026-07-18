@@ -526,12 +526,23 @@ export class CompaniesService {
         }
       : null;
 
-    const dealCount = await this.prisma.deals.count({
-      where: { company_id: id, status: { in: ['open', 'won'] } },
-    });
-    const projectCount = await this.prisma.deals.count({
-      where: { company_id: id, status: 'won' },
-    });
+    const [dealCount, projectCount, ticketCount] = await Promise.all([
+      this.prisma.deals.count({
+        where: { company_id: id, status: { in: ['open', 'won'] } },
+      }),
+      this.prisma.crm_projects.count({
+        where: { company_id: id, deleted_at: null },
+      }),
+      this.prisma.$queryRawUnsafe<Array<{ count: number }>>(
+        `
+        SELECT COUNT(*)::int AS count
+        FROM tickets t
+        INNER JOIN crm_projects p ON p.id = t.crm_project_id
+        WHERE p.company_id = $1 AND t.deleted_at IS NULL AND p.deleted_at IS NULL
+        `,
+        id,
+      ),
+    ]);
 
     return {
       ...company,
@@ -541,6 +552,7 @@ export class CompaniesService {
       effective_phone: company.phone || primaryContact?.phone || null,
       total_deals: dealCount,
       total_projects: projectCount,
+      total_tickets: Number(ticketCount[0]?.count ?? 0),
     } as Company & Record<string, unknown>;
   }
 
@@ -1022,6 +1034,64 @@ export class CompaniesService {
         id: Number(r.id),
         value: toNumber(r.value),
       })),
+    };
+  }
+
+  async findProjects(id: number) {
+    await this.ensureCompanyExists(id);
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{
+        id: number;
+        project_number: string;
+        name: string;
+        budget: unknown;
+        currency: string;
+        status: string;
+        progress_percentage: number | null;
+        due_date: Date | null;
+      }>
+    >(
+      `
+      SELECT id, project_number, name, budget, currency, status, progress_percentage, due_date
+      FROM crm_projects
+      WHERE company_id = $1 AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      `,
+      id,
+    );
+    return {
+      projects: rows.map((r) => ({
+        ...r,
+        id: Number(r.id),
+        budget: toNumber(r.budget),
+      })),
+    };
+  }
+
+  async findTickets(id: number) {
+    await this.ensureCompanyExists(id);
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{
+        id: number;
+        ticket_number: string;
+        subject: string;
+        status: string;
+        priority: string;
+        category: string | null;
+        created_at: Date | null;
+      }>
+    >(
+      `
+      SELECT t.id, t.ticket_number, t.subject, t.status, t.priority, t.category, t.created_at
+      FROM tickets t
+      INNER JOIN crm_projects p ON p.id = t.crm_project_id
+      WHERE p.company_id = $1 AND t.deleted_at IS NULL AND p.deleted_at IS NULL
+      ORDER BY t.created_at DESC
+      `,
+      id,
+    );
+    return {
+      tickets: rows.map((r) => ({ ...r, id: Number(r.id) })),
     };
   }
 
