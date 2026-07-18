@@ -50,7 +50,7 @@ import type {
   TicketQuota,
 } from '@/types/support';
 import type { MonitoredSite, MonitoredSitesResponse, Notification, NotificationsResponse } from '@/types/notifications';
-import type { CreateStaffAdvanceInput, StaffAdvance, StaffAdvanceListResponse } from '@/types/staff-advances';
+import type { CreateStaffAdvanceInput, StaffAdvance, StaffAdvanceDeduction, StaffAdvanceListResponse } from '@/types/staff-advances';
 import type {
   CachedEmail,
   Channel,
@@ -1128,7 +1128,11 @@ export async function deleteTicket(token: string, id: string | number): Promise<
   return (await api.delete(`/api/tickets/admin/${id}`, { headers: authHeaders(token) })).data;
 }
 
-export async function replyToTicket(token: string, id: string | number, data: Partial<TicketMessage>): Promise<TicketReplyResponse> {
+export async function replyToTicket(
+  token: string,
+  id: string | number,
+  data: { message: string; is_internal?: boolean; update_status?: string; attachments?: unknown[] },
+): Promise<TicketReplyResponse> {
   return (await api.post(`/api/tickets/admin/${id}/reply`, data, { headers: authHeaders(token) })).data;
 }
 
@@ -1160,6 +1164,20 @@ export async function fetchSupportStaff(token: string): Promise<SupportStaff[]> 
 
 export async function fetchCannedResponses(token: string): Promise<CannedResponse[]> {
   return (await api.get<CannedResponse[]>('/api/tickets/admin/canned-responses', { headers: authHeaders(token) })).data;
+}
+
+export async function uploadTicketAttachments(
+  token: string,
+  id: string | number,
+  files: File[],
+): Promise<{ success: boolean; urls: { url: string; name: string; size?: number }[] }> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append('files', file));
+  return (
+    await api.post(`/api/tickets/${id}/upload-attachments`, formData, {
+      headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' },
+    })
+  ).data;
 }
 
 export async function saveCannedResponses(token: string, responses: CannedResponse[]): Promise<{ message: string }> {
@@ -2309,6 +2327,30 @@ export async function rejectStaffAdvance(token: string, id: string | number, rea
 
 export async function deleteStaffAdvance(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   return (await api.delete(`/api/staff-advances/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateStaffAdvance(
+  token: string,
+  id: string | number,
+  data: Partial<CreateStaffAdvanceInput>,
+): Promise<{ success: boolean; data: StaffAdvance }> {
+  return (await api.put(`/api/staff-advances/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function addStaffAdvanceDeduction(
+  token: string,
+  id: string | number,
+  data: { amount: number; deduction_date: string; deduction_type: 'pay_deduction' | 'cash_repayment' | 'manual_adjustment'; notes?: string },
+): Promise<{ success: boolean; data: StaffAdvanceDeduction; remainingBalance: number; status: string }> {
+  return (await api.post(`/api/staff-advances/${id}/deductions`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function removeStaffAdvanceDeduction(
+  token: string,
+  id: string | number,
+  deductionId: number,
+): Promise<{ success: boolean; message: string; remainingBalance: number; status: string }> {
+  return (await api.delete(`/api/staff-advances/${id}/deductions/${deductionId}`, { headers: authHeaders(token) })).data;
 }
 
 // ─── Employee Portal ────────────────────────────────────────────────────────

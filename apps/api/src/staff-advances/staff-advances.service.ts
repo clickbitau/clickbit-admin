@@ -31,6 +31,15 @@ export class StaffAdvancesService {
     const where: any = {};
     if (typeof query.status === 'string') where.status = query.status;
     if (query.employee_id) where.employee_id = Number(query.employee_id);
+    if (typeof query.search === 'string' && query.search.trim()) {
+      const term = query.search.trim();
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } },
+        { notes: { contains: term, mode: 'insensitive' } },
+        { employees: { profiles: { OR: [{ first_name: { contains: term, mode: 'insensitive' } }, { last_name: { contains: term, mode: 'insensitive' } }, { email: { contains: term, mode: 'insensitive' } }] } } },
+      ];
+    }
 
     const page = Math.max(Number(query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 200);
