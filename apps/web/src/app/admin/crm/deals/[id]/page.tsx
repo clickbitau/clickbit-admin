@@ -95,7 +95,7 @@ export default function DealDetailPage() {
         </div>
       }
     >
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={DollarSign} label="Value" value={formatCurrency(Number(deal.value ?? 0))} />
         <StatCard icon={TrendingUp} label="Probability" value={`${deal.probability ?? 0}%`} />
         <StatCard icon={Target} label="Weighted Value" value={formatCurrency(weighted)} />

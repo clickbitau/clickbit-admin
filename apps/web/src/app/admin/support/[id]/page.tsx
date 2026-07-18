@@ -163,7 +163,7 @@ export default function AdminTicketDetailPage() {
                     <select
                       value={ticket.assigned_to ?? ''}
                       onChange={(e) => updateMutation.mutate({ assigned_to: e.target.value ? Number(e.target.value) : null })}
-                      className="mt-1 w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm"
+                      className="mt-1 w-full sm:max-w-sm rounded-md border bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Unassigned</option>
                       {staff?.map((s) => <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.email})</option>)}

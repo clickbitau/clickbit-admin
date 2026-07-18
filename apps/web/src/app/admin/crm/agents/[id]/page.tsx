@@ -77,7 +77,7 @@ export default function AgentDetailPage() {
     >
       <AgentHeader agent={agent} />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Clients</p>

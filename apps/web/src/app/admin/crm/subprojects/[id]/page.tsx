@@ -73,7 +73,7 @@ function SubprojectContent({ subproject }: { subproject: CrmSubproject }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Budget</p><p className="text-xl font-bold">{formatCurrency(Number(subproject.budget ?? 0))}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Actual Cost</p><p className="text-xl font-bold">{formatCurrency(Number(subproject.actual_cost ?? 0))}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Progress</p><p className="text-xl font-bold">{subproject.progress_percentage ?? 0}%</p></CardContent></Card>

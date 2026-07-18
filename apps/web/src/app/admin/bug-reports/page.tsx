@@ -169,7 +169,7 @@ export default function AdminBugReportsPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="max-w-sm"
+          className="sm:max-w-sm"
         />
         <div className="flex items-center gap-2">
           <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>

@@ -84,7 +84,7 @@ export default function LeadDetailPage() {
         </div>
       }
     >
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={DollarSign} label="Estimated Value" value={formatCurrency(Number(lead.estimated_value ?? 0))} />
         <StatCard icon={Star} label="Lead Score" value={`${lead.lead_score ?? 0}`} />
         <StatCard icon={TrendingUp} label="Probability" value={`${lead.probability ?? 0}%`} />

@@ -33,7 +33,7 @@ export default function AgentDashboardPage() {
     return (
       <div className="p-4 space-y-6">
         <Skeleton className="h-40 w-full" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" />
         </div>
       </div>
@@ -65,7 +65,7 @@ export default function AgentDashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground mb-3">

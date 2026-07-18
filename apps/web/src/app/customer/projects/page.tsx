@@ -50,7 +50,7 @@ export default function CustomerProjectsPage() {
   return (
     <PageShell title="Projects" icon={FolderKanban} description="Track your project progress">
       <div className="flex flex-wrap gap-3">
-        <div className="relative max-w-sm flex-1 min-w-[200px]">
+        <div className="relative sm:max-w-sm flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search projects..."

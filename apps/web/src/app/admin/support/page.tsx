@@ -107,7 +107,7 @@ export default function AdminSupportPage() {
             <Card>
               <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" /> Assignee Workload</CardTitle></CardHeader>
               <CardContent>
-                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {staff.map((s) => (
                     <div key={s.id} className="rounded border p-3 text-sm">
                       <p className="font-medium truncate">{`${s.first_name || ''} ${s.last_name || ''}`.trim() || s.email}</p>
@@ -121,7 +121,7 @@ export default function AdminSupportPage() {
           )}
 
           <div className="flex flex-wrap gap-3">
-            <Input placeholder="Search tickets..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="max-w-sm" />
+            <Input placeholder="Search tickets..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="sm:max-w-sm" />
             <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-md border bg-background px-3 py-2 text-sm">
               {statusOptions.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
             </select>

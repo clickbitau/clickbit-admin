@@ -110,7 +110,7 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-muted-foreground">Sign in to your account to continue</p>
         </div>
 
-        <div className="nm-raised p-8 rounded-3xl space-y-6">
+        <div className="nm-raised p-6 sm:p-8 rounded-3xl space-y-6">
           {mfaRequired ? (
             <div className="space-y-6">
               <div className="text-center">
@@ -248,7 +248,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { id: 'google', label: 'Google' },
               { id: 'apple', label: 'Apple' },

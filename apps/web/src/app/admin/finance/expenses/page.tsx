@@ -80,7 +80,7 @@ export default function AdminFinanceExpensesPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="max-w-sm"
+          className="sm:max-w-sm"
         />
         <select
           value={status}

@@ -23,7 +23,7 @@ export function PageShell({ title, description, icon: Icon, actions, children }:
               {description && <p className="admin-subtitle">{description}</p>}
             </div>
           </div>
-          {actions && <div className="flex items-center gap-3 flex-shrink-0">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-3 flex-shrink-0">{actions}</div>}
         </div>
       {children}
     </div>
