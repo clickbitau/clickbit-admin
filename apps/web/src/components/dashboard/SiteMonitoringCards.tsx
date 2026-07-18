@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Activity,
@@ -16,8 +15,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { fetchMonitoredSites, updateMonitoredSiteStatus, clearAllMonitoredSites } from '@/lib/api';
-import { formatDate } from '@/lib/format';
+import { fetchMonitoredSites, clearAllMonitoredSites } from '@/lib/api';
 import type { MonitoredSite, MonitoredSiteStats } from '@/types/notifications';
 import { toast } from 'sonner';
 
@@ -34,20 +32,8 @@ function getStatusIcon(status: string) {
   }
 }
 
-function statusGlow(status: string) {
-  switch (status) {
-    case 'up':
-      return 'ring-emerald-400/60';
-    case 'down':
-      return 'ring-red-400/60';
-    case 'paused':
-      return 'ring-amber-400/60';
-    default:
-      return 'ring-muted-foreground/30';
-  }
-}
-
 function getDowntimeDuration(site: MonitoredSite): string | null {
+  if (site.downtimeDuration) return site.downtimeDuration;
   if (site.status !== 'down' || !site.downSince) return null;
   const diffMs = Date.now() - new Date(site.downSince).getTime();
   const seconds = Math.floor(diffMs / 1000);
@@ -79,16 +65,6 @@ export function SiteMonitoringCards() {
     refetchInterval: 60000,
   });
 
-  const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      updateMonitoredSiteStatus(token!, id, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['monitored-sites', token] });
-      toast.success('Site status updated');
-    },
-    onError: () => toast.error('Failed to update site status'),
-  });
-
   const clearAll = useMutation({
     mutationFn: () => clearAllMonitoredSites(token!),
     onSuccess: () => {
@@ -98,7 +74,15 @@ export function SiteMonitoringCards() {
     onError: () => toast.error('Failed to clear sites'),
   });
 
-  const sites = data?.sites ?? [];
+  const sites = useMemo(() => {
+    const list = data?.sites ?? [];
+    return [...list].sort((a, b) => {
+      if (a.status === 'down' && b.status !== 'down') return -1;
+      if (a.status !== 'down' && b.status === 'down') return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [data?.sites]);
+
   const stats = data?.stats ?? { total: 0, up: 0, down: 0, paused: 0 };
 
   const handleRefresh = async () => {
@@ -114,20 +98,36 @@ export function SiteMonitoringCards() {
 
   if (isLoading) {
     return (
-      <div className="nm-raised p-4 sm:p-5">
-        <div className="flex items-center gap-2 text-base font-semibold mb-3">
-          <Activity className="h-4 w-4" /> Site Monitoring
+      <div className="nm-raised p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 nm-inset-sm rounded-lg">
+            <Activity className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Site Monitoring</h2>
+            <p className="text-sm text-muted-foreground">Uptime Kuma integration</p>
+          </div>
         </div>
-        <Skeleton className="h-24 w-full rounded-xl" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="nm-raised p-4 sm:p-5">
-        <div className="flex items-center gap-2 text-base font-semibold mb-3">
-          <Activity className="h-4 w-4" /> Site Monitoring
+      <div className="nm-raised p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="p-2 nm-inset-sm rounded-lg">
+            <Activity className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Site Monitoring</h2>
+            <p className="text-sm text-muted-foreground">Uptime Kuma integration</p>
+          </div>
         </div>
         <p className="text-sm text-destructive">Failed to load monitored sites.</p>
       </div>
@@ -135,114 +135,123 @@ export function SiteMonitoringCards() {
   }
 
   return (
-    <div className="nm-raised p-4 sm:p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <h3 className="flex items-center gap-2 text-base font-semibold">
-          <Activity className="h-4 w-4" /> Site Monitoring
-        </h3>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="nm-raised-sm inline-flex items-center gap-1 px-2 py-1 text-emerald-600 dark:text-emerald-400">
+    <div className="nm-raised p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 nm-inset-sm rounded-lg">
+            <Activity className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Site Monitoring</h2>
+            <p className="text-sm text-muted-foreground">Uptime Kuma integration</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-sm nm-inset-sm rounded-lg p-1">
+            <span className="px-3 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium whitespace-nowrap">
               {stats.up} up
             </span>
             {stats.down > 0 && (
-              <span className="nm-raised-sm inline-flex items-center gap-1 px-2 py-1 text-red-600 dark:text-red-400 animate-pulse">
+              <span className="px-3 py-1 rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 font-medium whitespace-nowrap animate-pulse">
                 {stats.down} down
               </span>
             )}
             {stats.paused > 0 && (
-              <span className="nm-raised-sm inline-flex items-center gap-1 px-2 py-1 text-amber-600 dark:text-amber-400">
+              <span className="px-3 py-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium whitespace-nowrap">
                 {stats.paused} paused
               </span>
             )}
           </div>
-          <Button variant="ghost" size="icon" className="nm-interactive rounded-lg" onClick={handleRefresh} disabled={refreshing} title="Refresh">
+
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 text-muted-foreground hover:text-primary nm-interactive rounded-lg transition-all duration-200"
+            title="Refresh"
+          >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </Button>
+          </button>
+
           {sites.length > 0 && (
-            <Button variant="ghost" size="icon" className="nm-interactive rounded-lg" onClick={handleClearAll} disabled={clearAll.isPending} title="Clear all sites">
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="p-2 text-muted-foreground hover:text-destructive nm-interactive rounded-lg transition-all duration-200"
+              title="Clear all sites"
+            >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </button>
           )}
         </div>
       </div>
 
       {sites.length === 0 ? (
-        <div className="text-center py-8 nm-inset-sm rounded-xl text-muted-foreground">
-          <Globe className="h-8 w-8 mx-auto mb-2" />
-          <p className="text-sm font-medium">No sites monitored</p>
-          <p className="text-xs">Sites will appear here when Uptime Kuma sends webhook notifications.</p>
+        <div className="text-center py-12 px-4 nm-inset-sm rounded-xl">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+            <Globe className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-medium mb-2">No sites monitored</h3>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">
+            Sites will appear here automatically when Uptime Kuma sends webhook notifications.
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-2">
           {sites.map((site) => (
             <div
               key={site.id}
-              className={`nm-raised-sm p-3 ring-1 ${statusGlow(site.status)} transition-all hover:-translate-y-0.5`}
+              className={`nm-inset-sm rounded-xl p-3 flex items-center justify-between border-l-4 ${
+                site.status === 'down'
+                  ? 'border-red-500 bg-red-50/50 dark:bg-red-900/10'
+                  : site.status === 'up'
+                    ? 'border-emerald-500'
+                    : 'border-amber-500'
+              }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="relative flex-shrink-0">
-                    {getStatusIcon(site.status)}
-                    {site.status === 'down' && (
-                      <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="truncate text-sm font-semibold">{site.name}</h4>
-                    {site.url ? (
-                      <a
-                        href={site.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block truncate text-xs text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {site.url}
-                      </a>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No URL provided</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end flex-shrink-0">
-                  {site.status === 'down' && getDowntimeDuration(site) ? (
-                    <span className="text-xs font-medium text-red-600 dark:text-red-400">
-                      Down {getDowntimeDuration(site)}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex-shrink-0 relative">
+                  {getStatusIcon(site.status)}
+                  {site.status === 'down' && (
+                    <span className="absolute top-0 right-0 flex h-2 w-2 -mt-1 -mr-1">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
                     </span>
-                  ) : (
-                    <span className="text-xs capitalize text-muted-foreground">{site.status}</span>
                   )}
-                  {site.url && (
-                    <a
-                      href={site.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 text-muted-foreground hover:text-primary"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-semibold text-sm truncate">{site.name}</h4>
+                  <a
+                    href={site.url || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline truncate block"
+                    onClick={(e) => !site.url && e.preventDefault()}
+                  >
+                    {site.url || 'No URL provided'}
+                  </a>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <select
-                  value={site.status}
-                  onChange={(e) => updateStatus.mutate({ id: site.id, status: e.target.value })}
-                  className="h-8 rounded-lg bg-background px-2 text-xs nm-interactive border-0"
-                >
-                  <option value="up">Up</option>
-                  <option value="down">Down</option>
-                  <option value="paused">Paused</option>
-                  <option value="unknown">Unknown</option>
-                </select>
-                <span className="text-xs text-muted-foreground truncate">
-                  {site.lastMessage ? `Last: ${site.lastMessage}` : `Updated ${formatDate(site.updatedAt)}`}
-                </span>
+
+              <div className="flex flex-col items-end flex-shrink-0 ml-2">
+                {site.status === 'down' && getDowntimeDuration(site) ? (
+                  <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                    Down {getDowntimeDuration(site)}
+                  </span>
+                ) : (
+                  <span className="text-xs font-medium text-muted-foreground capitalize">{site.status}</span>
+                )}
+                {site.url && (
+                  <a
+                    href={site.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 p-1 nm-surface rounded-md text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
               </div>
             </div>
           ))}
