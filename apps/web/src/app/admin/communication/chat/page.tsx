@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  MessageSquare as MessageSquareIcon,
   Plus,
   Hash,
   Send,
@@ -17,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,14 +59,14 @@ function participantName(p?: DirectMessageParticipant | null) {
 }
 
 function getDmName(dm: DirectMessage, currentUserId?: number) {
-  if (dm.name) return dm.name;
   const others = (dm.participants || []).filter((p) => p.user_id !== currentUserId);
+  const fallbackName = dm.name?.replace(/^DM\s*\d*$/i, '').trim() || undefined;
   if (dm.type === 'group' || others.length > 1) {
-    if (others.length === 0) return `Group ${dm.id}`;
+    if (others.length === 0) return fallbackName || `Group ${dm.id}`;
     const names = others.map(participantName);
     return names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '');
   }
-  return participantName(others[0]) || `DM ${dm.id}`;
+  return participantName(others[0]) || fallbackName || `DM ${dm.id}`;
 }
 
 function formatMessageTime(dateString?: string) {
@@ -262,16 +260,8 @@ export default function AdminCommunicationChatPage() {
   const isOwn = (m: Message) => m.user_id === user?.id;
 
   return (
-    <PageShell
-      title="Chat"
-      icon={MessageSquareIcon}
-      actions={
-        <div className="flex items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex"><Link href="/admin/communication/chat/new"><Plus className="mr-1 h-4 w-4" /> New</Link></Button>
-        </div>
-      }
-    >
-      <div className="rounded-2xl overflow-hidden nm-raised h-[calc(100vh-8rem)] md:h-[calc(100vh-10rem)] -m-4 sm:-m-6">
+    <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] -m-2 lg:-m-4 animate-fade-in">
+      <div className="rounded-2xl overflow-hidden nm-raised h-full">
         <div className="grid grid-cols-1 md:grid-cols-[72px_260px_1fr] h-full gap-0">
           {/* Workspace rail */}
           <div className="hidden md:flex flex-col items-center py-4 space-y-3 bg-muted/30 border-r border-border/50 overflow-y-auto">
@@ -444,7 +434,7 @@ export default function AdminCommunicationChatPage() {
                         </button>
                       ) : null}
                       {!editingId && (
-                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <div className="items-center gap-1 mt-1 hidden group-hover:flex focus-within:flex">
                           <div className="relative">
                             <button onClick={() => setActiveEmojiMessage(activeEmojiMessage === m.id ? null : m.id)} className="p-1 rounded-md text-muted-foreground hover:text-foreground" title="Add reaction"><Smile className="h-3.5 w-3.5" /></button>
                             {activeEmojiMessage === m.id && (
@@ -488,6 +478,6 @@ export default function AdminCommunicationChatPage() {
           </div>
         </div>
       </div>
-    </PageShell>
+    </div>
   );
 }

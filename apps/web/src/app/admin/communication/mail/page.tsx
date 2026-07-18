@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Mail,
   Plus,
   Search,
   Inbox,
@@ -23,7 +22,6 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -203,14 +201,8 @@ export default function AdminCommunicationMailPage() {
   const selectedMessage = messageDetail?.data as CachedEmail | undefined;
 
   return (
-    <PageShell
-      title="Mail"
-      icon={Mail}
-      actions={
-        <Button asChild><Link href="/admin/communication/mail/compose"><Plus className="mr-1 h-4 w-4" /> Compose</Link></Button>
-      }
-    >
-      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr_1fr] gap-0 rounded-2xl overflow-hidden nm-raised h-[calc(100vh-10rem)]">
+    <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] -m-2 lg:-m-4 animate-fade-in">
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr_1fr] gap-0 rounded-2xl overflow-hidden nm-raised h-full">
         {/* Left sidebar: accounts, folders, templates */}
         <div className="hidden md:flex flex-col border-r border-border/50 bg-background/50 min-h-0">
           <div className="p-3 border-b border-border/50">
@@ -237,6 +229,7 @@ export default function AdminCommunicationMailPage() {
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)} placeholder="Search accounts..." className="pl-7 h-8 text-xs" />
             </div>
+            <Button asChild size="sm" className="w-full mt-2"><Link href="/admin/communication/mail/compose"><Plus className="mr-1 h-4 w-4" /> Compose</Link></Button>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-3">
             {loadingAccounts ? <Skeleton className="h-16 w-full" /> : (
@@ -313,6 +306,7 @@ export default function AdminCommunicationMailPage() {
               {folderList.map((f) => <option key={f.path} value={f.path}>{f.name}</option>)}
             </select>
           )}
+          <Button asChild size="sm" variant="outline" className="w-full"><Link href="/admin/communication/mail/compose"><Plus className="mr-1 h-4 w-4" /> Compose</Link></Button>
         </div>
 
         {/* Message list */}
@@ -388,7 +382,13 @@ export default function AdminCommunicationMailPage() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4">
-                <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{selectedMessage.text_body || selectedMessage.html_body || 'No content.'}</div>
+                {selectedMessage.html_body ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: selectedMessage.html_body }} />
+                ) : selectedMessage.text_body ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{selectedMessage.text_body}</div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No content.</div>
+                )}
               </div>
             </>
           ) : (
@@ -396,6 +396,6 @@ export default function AdminCommunicationMailPage() {
           )}
         </div>
       </div>
-    </PageShell>
+    </div>
   );
 }
