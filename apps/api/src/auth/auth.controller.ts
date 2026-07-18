@@ -2,16 +2,30 @@ import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards 
 import { AuthService } from './auth.service';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { RequestWithUser } from '../types/request-with-user';
+import {
+  CheckTrustDto,
+  ForgotPasswordDto,
+  LinkProviderDto,
+  LoginDto,
+  MagicLinkDto,
+  OAuthCallbackDto,
+  RefreshDto,
+  RegisterDto,
+  ResetPasswordDto,
+  SocialLoginDto,
+  TrustDeviceDto,
+  VerifyEmailDto,
+} from './dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  async register(@Body() body: any) { return this.authService.register(body || {}); }
+  async register(@Body() body: RegisterDto) { return this.authService.register(body || {}); }
 
   @Post('login')
-  async login(@Body() body: any) { return this.authService.login(body || {}); }
+  async login(@Body() body: LoginDto) { return this.authService.login(body || {}); }
 
   @Post('logout')
   @UseGuards(SupabaseAuthGuard)
@@ -22,22 +36,22 @@ export class AuthController {
   async me(@Req() req: RequestWithUser) { return this.authService.me(req.user); }
 
   @Post('refresh')
-  async refresh(@Body() body: any) { return this.authService.refresh(body || {}); }
+  async refresh(@Body() body: RefreshDto) { return this.authService.refresh(body || {}); }
 
   @Post('forgot-password')
-  async forgotPassword(@Body() body: any) { return this.authService.forgotPassword(body || {}); }
+  async forgotPassword(@Body() body: ForgotPasswordDto) { return this.authService.forgotPassword(body || {}); }
 
   @Post('reset-password')
-  async resetPassword(@Body() body: any) { return this.authService.resetPassword(body || {}); }
+  async resetPassword(@Body() body: ResetPasswordDto) { return this.authService.resetPassword(body || {}); }
 
   @Post('verify-email')
-  async resendVerification(@Body() body: any) { return this.authService.resendVerification(body || {}); }
+  async resendVerification(@Body() body: VerifyEmailDto) { return this.authService.resendVerification(body || {}); }
 
   @Post('magic-link')
-  async magicLink(@Body() body: any) { return this.authService.magicLink(body || {}); }
+  async magicLink(@Body() body: MagicLinkDto) { return this.authService.magicLink(body || {}); }
 
   @Post('oauth/callback')
-  oauthCallback(@Body() body: any) { return this.authService.oauthCallback(body || {}); }
+  oauthCallback(@Body() body: OAuthCallbackDto) { return this.authService.oauthCallback(body || {}); }
 
   @Get('callback')
   authCallback(@Query() query: any) { return this.authService.authCallback(query || {}); }
@@ -48,10 +62,10 @@ export class AuthController {
 
   @Post('trust-device')
   @UseGuards(SupabaseAuthGuard)
-  trustDevice(@Body() body: any) { return this.authService.trustDevice(body || {}); }
+  trustDevice(@Body() body: TrustDeviceDto) { return this.authService.trustDevice(body || {}); }
 
   @Post('check-trust')
-  checkTrust(@Body() body: any) { return this.authService.checkTrust(body || {}); }
+  checkTrust(@Body() body: CheckTrustDto) { return this.authService.checkTrust(body || {}); }
 
   @Get('trusted-devices')
   @UseGuards(SupabaseAuthGuard)
@@ -79,12 +93,12 @@ export class AuthController {
 
   @Post('link-provider')
   @UseGuards(SupabaseAuthGuard)
-  linkProvider(@Req() req: RequestWithUser, @Body() body: any) { return this.authService.linkProvider(req.user, body || {}); }
+  linkProvider(@Req() req: RequestWithUser, @Body() body: LinkProviderDto) { return this.authService.linkProvider(req.user, body || {}); }
 
   @Delete('unlink-provider/:provider')
   @UseGuards(SupabaseAuthGuard)
   unlinkProvider(@Req() req: RequestWithUser, @Param('provider') provider: string) { return this.authService.unlinkProvider(req.user, provider); }
 
   @Post('social-login')
-  socialLogin(@Body() body: any) { return this.authService.socialLogin(body || {}); }
+  socialLogin(@Body() body: SocialLoginDto) { return this.authService.socialLogin(body || {}); }
 }
