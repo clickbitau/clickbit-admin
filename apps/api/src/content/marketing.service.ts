@@ -34,6 +34,22 @@ export class MarketingService {
     return { posts: rows.map((p: any) => this.mapPost(p)), total: count };
   }
 
+  async statsAdmin() {
+    const where: any = { deleted_at: null, tags: { contains: MARKETING_TAG, mode: 'insensitive' } };
+    const [total, published, draft] = await this.prisma.$transaction([
+      this.prisma.blog_posts.count({ where }),
+      this.prisma.blog_posts.count({ where: { ...where, status: 'published' } }),
+      this.prisma.blog_posts.count({ where: { ...where, status: 'draft' } }),
+    ]);
+    return { total, published, draft };
+  }
+
+  async findOneAdmin(id: number) {
+    const post = await this.prisma.blog_posts.findUnique({ where: { id }, include: { profiles: { select: profileSelect } } });
+    if (!post || post.deleted_at) throw new NotFoundException({ message: 'Marketing post not found' });
+    return { post: this.mapPost(post as any) };
+  }
+
   async create(user: Profile, dto: Record<string, unknown>) {
     const title = stringValue(dto.title);
     const slug = stringValue(dto.slug) || slugify(title);

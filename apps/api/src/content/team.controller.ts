@@ -29,6 +29,13 @@ export class TeamController {
     return this.teamService.findAllAdmin();
   }
 
+  @Get('admin/stats')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  adminStats() {
+    return this.teamService.statsAdmin();
+  }
+
   @Post()
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('admin', 'manager')

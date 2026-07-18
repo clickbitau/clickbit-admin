@@ -1299,6 +1299,10 @@ export async function fetchAdminServices(token: string, params?: Record<string, 
   return (await api.get('/api/services/admin/all', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchAdminServiceStats(token: string): Promise<{ total: number; active: number; inactive: number; popular: number }> {
+  return (await api.get('/api/services/admin/stats', { headers: authHeaders(token) })).data;
+}
+
 export async function fetchAdminService(token: string, id: string | number): Promise<Service> {
   return (await api.get<{ item: Service }>(`/api/services/admin/${id}`, { headers: authHeaders(token) })).data.item;
 }
@@ -1327,6 +1331,10 @@ export async function fetchAdminPortfolio(token: string, params?: Record<string,
   return (await api.get('/api/portfolio/admin/all', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchAdminPortfolioStats(token: string): Promise<{ total: number; published: number; draft: number; featured: number }> {
+  return (await api.get('/api/portfolio/admin/stats', { headers: authHeaders(token) })).data;
+}
+
 export async function fetchAdminPortfolioItem(token: string, id: string | number): Promise<PortfolioItem> {
   return (await api.get<{ item: PortfolioItem }>(`/api/portfolio/admin/${id}`, { headers: authHeaders(token) })).data.item;
 }
@@ -1349,6 +1357,10 @@ export async function fetchTeamMembers(): Promise<TeamMember[]> {
 
 export async function fetchAdminTeamMembers(token: string): Promise<TeamMember[]> {
   return (await api.get('/api/team/admin/all', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchAdminTeamStats(token: string): Promise<{ total: number; active: number; inactive: number }> {
+  return (await api.get('/api/team/admin/stats', { headers: authHeaders(token) })).data;
 }
 
 export async function fetchTeamMember(token: string, id: string | number): Promise<TeamMember> {
@@ -1439,8 +1451,20 @@ export async function fetchMarketingPosts(token: string, params?: Record<string,
   return (await api.get('/api/marketing-posts/admin', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchAdminMarketingStats(token: string): Promise<{ total: number; published: number; draft: number }> {
+  return (await api.get('/api/marketing-posts/admin/stats', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMarketingPost(token: string, id: string | number): Promise<BlogPost> {
+  return (await api.get<{ post: BlogPost }>(`/api/marketing-posts/admin/${id}`, { headers: authHeaders(token) })).data.post;
+}
+
 export async function createMarketingPost(token: string, data: Partial<BlogPost>): Promise<{ post: BlogPost }> {
   return (await api.post('/api/marketing-posts/admin', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateMarketingPost(token: string, id: number, data: Partial<BlogPost>): Promise<{ post: BlogPost }> {
+  return (await api.put(`/api/marketing-posts/admin/${id}`, data, { headers: authHeaders(token) })).data;
 }
 
 export async function deleteMarketingPost(token: string, id: number): Promise<ContentLegacyMessageResponse> {

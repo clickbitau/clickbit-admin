@@ -19,7 +19,7 @@ import { ArrowLeft, Save, Trash, type LucideIcon } from 'lucide-react';
 interface FieldConfig {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox';
+  type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox' | 'json' | 'image';
   options?: string[];
 }
 
@@ -119,6 +119,28 @@ export function ContentDetailPage({
             <Label htmlFor={field.key}>{field.label}</Label>
           </div>
         );
+      case 'json':
+        return (
+          <Textarea
+            value={value !== undefined ? JSON.stringify(value, null, 2) : '{}'}
+            onChange={(e) => {
+              try {
+                setValue(JSON.parse(e.target.value));
+              } catch {
+                setValue(e.target.value);
+              }
+            }}
+            rows={6}
+            className="font-mono text-sm"
+          />
+        );
+      case 'image':
+        return (
+          <div className="space-y-2">
+            <Input value={value || ''} onChange={(e) => setValue(e.target.value)} placeholder="https://..." />
+            {value && <img src={value} alt={field.label} className="max-h-40 rounded-md object-cover" />}
+          </div>
+        );
       default:
         return <Input value={value || ''} onChange={(e) => setValue(e.target.value)} />;
     }
@@ -128,6 +150,8 @@ export function ContentDetailPage({
     const value = form[field.key];
     if (field.type === 'checkbox') return value ? 'Yes' : 'No';
     if (field.type === 'date') return value ? new Date(value).toLocaleDateString() : '—';
+    if (field.type === 'json') return value ? JSON.stringify(value).slice(0, 120) + (JSON.stringify(value).length > 120 ? '...' : '') : '—';
+    if (field.type === 'image') return value ? <img src={value} alt={field.label} className="max-h-24 rounded-md object-cover" /> : '—';
     return value || '—';
   };
 
@@ -147,7 +171,7 @@ export function ContentDetailPage({
       icon={icon}
       description={data?.status ? `Status: ${data.status}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href={backHref}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>
