@@ -401,12 +401,14 @@ export class EmployeesService {
       throw new ForbiddenException({ success: false, message: 'Not authorized to view this employee profile' });
     }
 
-    const [contracts, timeEntries, timeOffRequests, payslips, shifts] = await Promise.all([
+    const [contracts, timeEntries, timeOffRequests, payslips, shifts, staffAdvances, kpiScores] = await Promise.all([
       this.prisma.hr_contracts.findMany({ where: { employee_id: id }, orderBy: { created_at: 'desc' }, take: 10 }),
       this.prisma.hr_time_entries.findMany({ where: { employee_id: id }, orderBy: { clock_in_time: 'desc' }, take: 10 }),
       this.prisma.hr_time_off_requests.findMany({ where: { employee_id: id }, orderBy: { submitted_at: 'desc' }, take: 10 }),
       this.prisma.payslips.findMany({ where: { employee_id: id }, orderBy: { payment_date: 'desc' }, take: 10 }),
       this.prisma.hr_shifts.findMany({ where: { employee_id: id }, orderBy: [{ shift_date: 'desc' }, { start_time: 'desc' }], take: 10 }),
+      this.prisma.staff_advances.findMany({ where: { employee_id: id }, orderBy: { created_at: 'desc' }, take: 10 }),
+      this.prisma.hr_kpi_scores.findMany({ where: { employee_id: id }, orderBy: { period: 'desc' }, take: 12 }),
     ]);
 
     const activeEntry = await this.prisma.hr_time_entries.findFirst({
@@ -423,6 +425,8 @@ export class EmployeesService {
         timeOffRequests,
         payslips,
         shifts,
+        staffAdvances,
+        kpiScores,
         activeEntry,
         isWorking: !!activeEntry,
         todayHours: 0,

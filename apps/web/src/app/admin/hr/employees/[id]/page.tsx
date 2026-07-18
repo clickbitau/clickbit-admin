@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { fetchEmployee, updateEmployee, deleteEmployee } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import type { Employee } from '@/types/hr';
-import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase, FileClock, ClipboardList, GraduationCap, Plus } from 'lucide-react';
+import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase, FileClock, ClipboardList, GraduationCap, Plus, HandCoins, Target } from 'lucide-react';
 
 const employmentTypes = ['full_time', 'part_time', 'contract', 'casual', 'intern'];
 const employmentStatuses = ['active', 'inactive', 'terminated', 'on_leave'];
@@ -295,6 +295,24 @@ export default function AdminEmployeeDetailPage() {
               </Card>
 
               <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><HandCoins className="h-5 w-5 text-primary" /><CardTitle>Staff Advances</CardTitle></CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {(employee.staffAdvances || []).length === 0 && <li className="text-muted-foreground">No staff advances.</li>}
+                    {(employee.staffAdvances || []).slice(0, 5).map((row: any) => (
+                      <li key={row.id} className="flex items-center justify-between">
+                        <Link href={`/admin/finance/staff-advances/${row.id}`} className="truncate max-w-[200px] hover:underline">{row.title || `Advance #${row.id}`}</Link>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono">{formatCurrency(row.remaining_balance)} / {formatCurrency(row.total_amount)}</span>
+                          <Badge variant="outline">{row.status || 'active'}</Badge>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
                 <CardHeader className="flex flex-row items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><CardTitle>Documents</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -314,6 +332,21 @@ export default function AdminEmployeeDetailPage() {
                 <CardContent className="space-y-2 text-sm">
                   <p><span className="text-muted-foreground">Skills:</span> {Array.isArray(employee.skills) ? employee.skills.join(', ') : employee.skills ? String(employee.skills) : '—'}</p>
                   <p><span className="text-muted-foreground">Certifications:</span> {Array.isArray(employee.certifications) ? employee.certifications.join(', ') : employee.certifications ? String(employee.certifications) : '—'}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2"><Target className="h-5 w-5 text-primary" /><CardTitle>KPI Scores</CardTitle></CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {(employee.kpiScores || []).length === 0 && <li className="text-muted-foreground">No KPI scores.</li>}
+                    {(employee.kpiScores || []).slice(0, 6).map((row: any) => (
+                      <li key={row.id} className="flex items-center justify-between">
+                        <Link href={`/admin/hr/kpi/${row.id}`} className="hover:underline">{row.period || `Score #${row.id}`}</Link>
+                        <span className="font-mono">{row.total_score ?? '—'}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </CardContent>
               </Card>
 
