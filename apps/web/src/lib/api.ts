@@ -1007,6 +1007,22 @@ export async function deleteExpense(token: string, id: string | number): Promise
   return (await api.delete<{ success: boolean; message: string }>(`/api/expenses/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function approveExpense(token: string, id: string | number): Promise<{ success: boolean; data: Expense }> {
+  return (await api.post<{ success: boolean; data: Expense }>(`/api/expenses/${id}/approve`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function rejectExpense(token: string, id: string | number, reason?: string): Promise<{ success: boolean; data: Expense }> {
+  return (await api.post<{ success: boolean; data: Expense }>(`/api/expenses/${id}/reject`, { reason }, { headers: authHeaders(token) })).data;
+}
+
+export async function reimburseExpense(token: string, id: string | number, reference?: string): Promise<{ success: boolean; data: Expense }> {
+  return (await api.post<{ success: boolean; data: Expense }>(`/api/expenses/${id}/reimburse`, { reference }, { headers: authHeaders(token) })).data;
+}
+
+export async function duplicateExpense(token: string, id: string | number): Promise<{ success: boolean; data: Expense }> {
+  return (await api.post<{ success: boolean; data: Expense }>(`/api/expenses/${id}/duplicate`, {}, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchInvoiceStats(token: string): Promise<{ success: boolean; data: InvoiceStats }> {
   return (await api.get<{ success: boolean; data: InvoiceStats }>('/api/invoices/stats', { headers: authHeaders(token) })).data;
 }
