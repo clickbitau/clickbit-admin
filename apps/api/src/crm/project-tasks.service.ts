@@ -36,7 +36,7 @@ export class ProjectTasksService {
       project_phases: { select: { id: true, name: true, position: true, status: true } },
       crm_projects: { select: { id: true, project_number: true, name: true } },
       crm_subprojects: { select: { id: true, name: true } },
-      contacts: { select: { id: true, first_name: true, last_name: true, email: true, avatar_url: true } },
+      contacts: { select: { id: true, name: true, email: true, avatar_url: true } },
       profiles_project_tasks_assigned_toToprofiles: {
         select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
       },
@@ -72,7 +72,7 @@ export class ProjectTasksService {
     const customer = t.contacts
       ? {
           ...t.contacts,
-          name: `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim() || t.contacts.email,
+          name: t.contacts.name || t.contacts.email,
           avatar: t.contacts.avatar_url,
         }
       : null;
