@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { SiteMonitoringCards } from '@/components/dashboard/SiteMonitoringCards';
+import { ActiveWebsiteCard } from '@/components/dashboard/ActiveWebsiteCard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
@@ -280,6 +281,8 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
           </div>
         </div>
       )}
+
+      <ActiveWebsiteCard />
 
       <SiteMonitoringCards />
 

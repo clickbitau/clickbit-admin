@@ -9,8 +9,8 @@ describe('Auth / Users / Public Payments legacy contract tests', () => {
     it('POST /api/auth/register returns success message', async () => {
       const service = { register: jest.fn().mockResolvedValue({ success: true, message: 'registered' }) } as any;
       const controller = new AuthController(service);
-      const result = await controller.register({ email: 'a@b.com', password: '12345678' });
-      expect(service.register).toHaveBeenCalledWith({ email: 'a@b.com', password: '12345678' });
+      const result = await controller.register({ email: 'a@b.com', password: '12345678', first_name: 'Test', last_name: 'User' });
+      expect(service.register).toHaveBeenCalledWith({ email: 'a@b.com', password: '12345678', first_name: 'Test', last_name: 'User' });
       expect(result).toEqual(expect.objectContaining({ success: true }));
     });
 

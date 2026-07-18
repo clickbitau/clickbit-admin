@@ -1453,6 +1453,10 @@ export async function fetchPublicBillingSettings(): Promise<{ stripePublishableK
   return (await api.get('/api/settings/public/billing-settings')).data;
 }
 
+export async function fetchPublicSiteSettings(): Promise<Record<string, string | number | boolean | null>> {
+  return (await api.get('/api/settings/public')).data;
+}
+
 export async function fetchAdminSettings(token: string, params?: Record<string, string | number | boolean>) {
   return (await api.get('/api/settings/admin/all', { params, headers: authHeaders(token) })).data;
 }
