@@ -62,6 +62,8 @@ export interface Employee {
   timeOffRequests?: Record<string, unknown>[];
   payslips?: Record<string, unknown>[];
   shifts?: Record<string, unknown>[];
+  staffAdvances?: Record<string, unknown>[];
+  kpiScores?: Record<string, unknown>[];
   isWorking?: boolean;
   todayHours?: number;
   weeklyHours?: number;
