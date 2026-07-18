@@ -86,7 +86,7 @@ export default function AdminKpiEmployeeDetailPage() {
       icon={BarChart3}
       description="Employee performance score history and breakdown."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/hr/kpi"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           <Button variant="outline" size="sm" onClick={() => snapshot.mutate()} disabled={snapshot.isPending}><RefreshCw className="mr-1 h-4 w-4" /> Snapshot</Button>
         </div>

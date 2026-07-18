@@ -80,7 +80,7 @@ export default function AdminDocumentDetailPage() {
       icon={FileText}
       description={doc ? `${formatBytes(doc.file_size)} · ${doc.file_type || 'unknown'}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/documents"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           <Button variant="outline" size="sm" onClick={() => signedUrlMutation.mutate()} disabled={signedUrlMutation.isPending}><Download className="mr-1 h-4 w-4" /> Open / Download</Button>
           <Button variant="destructive" size="sm" onClick={() => remove.mutate()} disabled={remove.isPending}><Trash className="mr-1 h-4 w-4" /> Delete</Button>
@@ -97,7 +97,7 @@ export default function AdminDocumentDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
                       <CardTitle className="text-2xl">{doc.name || doc.original_name || `Document ${doc.id}`}</CardTitle>
                       <p className="text-sm text-muted-foreground">{doc.file_type || 'unknown'} · {formatBytes(doc.file_size)}</p>

@@ -158,7 +158,8 @@ export default function LeadsPage() {
   const stageOptions = currentPipeline?.stages ?? [];
 
   return (
-    <PageShell title="Leads" icon={UserPlus} description="Track and score sales leads" actions={<div className="flex items-center gap-2">
+    <PageShell title="Leads" icon={UserPlus} description="Track and score sales leads" actions={
+        <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => recalculateLeadScores(token!).then(() => { toast.success('Scores recalculated'); queryClient.invalidateQueries({ queryKey: ['leads'] }); }).catch((err: Error) => toast.error(err.message || 'Failed'))}>
               <RefreshCw className="mr-1 h-4 w-4" /> Recalculate
             </Button>

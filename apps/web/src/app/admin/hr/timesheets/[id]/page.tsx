@@ -97,7 +97,7 @@ export default function AdminTimesheetDetailPage() {
       icon={Clock}
       description={entry ? `${entry.employee?.name || `Employee ${entry.employee_id}`} · ${formatDate(entry.clock_in_time)}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/hr/timesheets"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           {entry?.status !== 'approved' && <Button size="sm" onClick={() => approve.mutate()} disabled={approve.isPending}><CheckCircle className="mr-1 h-4 w-4" /> Approve</Button>}
           {entry?.status !== 'rejected' && <Button variant="outline" size="sm" onClick={() => reject.mutate()} disabled={reject.isPending}><XCircle className="mr-1 h-4 w-4" /> Reject</Button>}
@@ -115,7 +115,7 @@ export default function AdminTimesheetDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
                       <CardTitle className="text-2xl">Timesheet #{entry.id}</CardTitle>
                       <p className="text-sm text-muted-foreground">{entry.employee?.name || `Employee ${entry.employee_id}`} · {formatDate(entry.clock_in_time)}</p>

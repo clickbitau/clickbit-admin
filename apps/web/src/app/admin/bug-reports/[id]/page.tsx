@@ -93,7 +93,7 @@ export default function AdminBugReportDetailPage() {
       icon={Bug}
       description={report ? `Reported ${formatDate(report.created_at)} · ${report.target_repo || 'no repo'}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/bug-reports"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           <Button variant="outline" size="sm" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}><RefreshCw className="mr-1 h-4 w-4" /> Sync</Button>
           <Button variant="outline" size="sm" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}><RotateCcw className="mr-1 h-4 w-4" /> Retry</Button>
@@ -110,7 +110,7 @@ export default function AdminBugReportDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
                       <CardTitle className="text-2xl">{report.title}</CardTitle>
                       <p className="text-sm text-muted-foreground">{report.category} · reported by {report.reporter ? `${report.reporter.first_name} ${report.reporter.last_name}` : 'Unknown'}</p>
@@ -181,7 +181,7 @@ export default function AdminBugReportDetailPage() {
               <Card>
                 <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <Button variant="secondary" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}><CheckCircle className="mr-1 h-4 w-4" /> Approve</Button>
                     <Button onClick={() => mergeMutation.mutate()} disabled={mergeMutation.isPending}><GitMerge className="mr-1 h-4 w-4" /> Force merge</Button>
                     <Button variant="outline" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}><Play className="mr-1 h-4 w-4" /> Retry</Button>

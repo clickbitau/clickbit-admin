@@ -52,7 +52,7 @@ export default function SubprojectDetailPage() {
       icon={FolderKanban}
       description={`Subproject · ${subproject.status?.replace(/_/g, ' ')}`}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href={`/admin/crm/projects/${subproject.parent_project_id}`}><ArrowLeft className="mr-1 h-4 w-4" /> Back to project</Link>
           </Button>

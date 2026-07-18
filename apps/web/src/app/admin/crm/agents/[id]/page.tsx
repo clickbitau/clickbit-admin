@@ -67,7 +67,7 @@ export default function AgentDetailPage() {
       icon={Headphones}
       description={agent.email || 'Agent detail'}
       actions={
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/crm/agents"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>

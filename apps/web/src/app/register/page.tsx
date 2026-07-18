@@ -95,7 +95,7 @@ export default function RegisterPage() {
           <p className="mt-2 text-sm text-muted-foreground">Get started with ClickBit</p>
         </div>
 
-        <div className="nm-raised p-8 rounded-3xl space-y-4">
+        <div className="nm-raised p-6 sm:p-8 rounded-3xl space-y-4">
           {success ? (
             <div className="rounded-xl bg-green-500/10 text-green-600 text-sm p-4 text-center space-y-4">
               <p>{success}</p>
@@ -105,7 +105,7 @@ export default function RegisterPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="first_name">First name</Label>
                   <div className="relative mt-1.5">

@@ -42,7 +42,7 @@ export default function ForgotPasswordPage() {
           <p className="mt-2 text-sm text-muted-foreground">We will send a reset link to your email</p>
         </div>
 
-        <div className="nm-raised p-8 rounded-3xl space-y-6">
+        <div className="nm-raised p-6 sm:p-8 rounded-3xl space-y-6">
           {success ? (
             <div className="rounded-xl bg-green-500/10 text-green-600 text-sm p-6 text-center space-y-4">
               <CheckCircle2 className="h-10 w-10 mx-auto" />

@@ -98,7 +98,7 @@ export default function AdminBlogPostDetailPage() {
       icon={BookOpen}
       description={post ? `/${post.slug}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/content/blog"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           {!isEditing ? (
             <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>Edit</Button>
@@ -115,7 +115,7 @@ export default function AdminBlogPostDetailPage() {
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
-                <div className="flex items-start justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div>
                     <CardTitle className="text-2xl">{post.title}</CardTitle>
                     <p className="text-sm text-muted-foreground">{post.author ? `By ${post.author.first_name} ${post.author.last_name}` : 'No author'}</p>
