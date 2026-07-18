@@ -2095,7 +2095,7 @@ export async function fetchTimesheetTasks(token: string, id: string | number): P
   return (await api.get(`/api/hr/timesheets/${id}/tasks`, { headers: authHeaders(token) })).data;
 }
 
-export async function addTimesheetWorkItem(token: string, id: string | number, data: { task_id: number; actual_hours?: number }) {
+export async function addTimesheetWorkItem(token: string, id: string | number, data: { task_id: number; hours_spent?: number }) {
   return (await api.post(`/api/hr/timesheets/${id}/work-items`, data, { headers: authHeaders(token) })).data;
 }
 
