@@ -3,7 +3,7 @@ import { DollarSign as DollarSignIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InvoiceTable } from '@/components/finance/InvoiceTable';
 import { StatCards } from '@/components/design-system/StatCards';
-import { fetchInvoices, fetchInvoiceStats, fetchContacts } from '@/lib/api';
+import { fetchInvoices, fetchInvoiceStats, fetchContacts, sendInvoice, downloadInvoicePdf, voidInvoice, markInvoicePaid, deleteInvoice } from '@/lib/api';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { useDebounce } from '@/lib/useDebounce';
 
 const statusOptions = ['', 'draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'cancelled'];
@@ -29,6 +30,7 @@ const sortFields = [
 export default function AdminFinanceInvoicesPage() {
   const { token } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [documentType, setDocumentType] = useState('');
@@ -36,6 +38,7 @@ export default function AdminFinanceInvoicesPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [copiedLinkId, setCopiedLinkId] = useState<string | number | null>(null);
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
@@ -72,6 +75,61 @@ export default function AdminFinanceInvoicesPage() {
   const invoices = data?.invoices ?? data?.data ?? [];
   const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 12 };
   const stats = statsData?.data;
+
+  const onSuccess = (message: string) => {
+    toast.success(message);
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    queryClient.invalidateQueries({ queryKey: ['invoice-stats'] });
+  };
+
+  const sendMutation = useMutation({
+    mutationFn: (id: number) => sendInvoice(token!, id),
+    onSuccess: () => onSuccess('Invoice sent'),
+    onError: () => toast.error('Failed to send invoice'),
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: (id: number) => voidInvoice(token!, id),
+    onSuccess: () => onSuccess('Invoice voided'),
+    onError: () => toast.error('Failed to void invoice'),
+  });
+
+  const paidMutation = useMutation({
+    mutationFn: (id: number) => markInvoicePaid(token!, id),
+    onSuccess: () => onSuccess('Marked as paid'),
+    onError: () => toast.error('Failed to mark invoice as paid'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteInvoice(token!, id),
+    onSuccess: () => onSuccess('Invoice deleted'),
+    onError: () => toast.error('Failed to delete invoice'),
+  });
+
+  const handleDownload = async (invoice: any) => {
+    try {
+      const blob = await downloadInvoicePdf(token!, invoice.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoice.invoice_number || invoice.package_code || 'invoice'}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to download PDF');
+    }
+  };
+
+  const handleCopyLink = async (invoice: any) => {
+    const url = `${window.location.origin}/pay/${invoice.invoice_number || invoice.package_code || invoice.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedLinkId(invoice.id);
+      setTimeout(() => setCopiedLinkId(null), 2000);
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  };
 
   const totalUnpaid = useMemo(() => {
     if (!stats) return 0;
@@ -192,6 +250,20 @@ export default function AdminFinanceInvoicesPage() {
               sortField={sortBy}
               sortOrder={sortOrder}
               onSort={handleSort}
+              onView={(i) => router.push(`/admin/finance/invoices/${i.id}`)}
+              onDownload={handleDownload}
+              onSend={(i) => sendMutation.mutate(i.id)}
+              onCopyLink={handleCopyLink}
+              onMarkPaid={(i) => {
+                if (window.confirm('Mark this invoice as fully paid?')) paidMutation.mutate(i.id);
+              }}
+              onVoid={(i) => {
+                if (window.confirm('Void this invoice?')) voidMutation.mutate(i.id);
+              }}
+              onDelete={(i) => {
+                if (window.confirm('Delete this invoice?')) deleteMutation.mutate(i.id);
+              }}
+              copiedLinkId={copiedLinkId}
             />
           )}
         </CardContent>
