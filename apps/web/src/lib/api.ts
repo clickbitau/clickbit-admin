@@ -1587,8 +1587,44 @@ export async function changePassword(token: string, data: { current_password: st
   return (await api.put('/api/profile/password', data, { headers: authHeaders(token) })).data;
 }
 
+export async function uploadAvatar(token: string, file: File) {
+  const form = new FormData();
+  form.append('avatar', file);
+  return (await api.post('/api/profile/avatar', form, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } })).data;
+}
+
+export async function deleteAvatar(token: string) {
+  return (await api.delete('/api/profile/avatar', { headers: authHeaders(token) })).data;
+}
+
+export async function uploadCompanyLogo(token: string, file: File) {
+  const form = new FormData();
+  form.append('logo', file);
+  return (await api.post('/api/profile/company-logo', form, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } })).data;
+}
+
+export async function deleteCompanyLogo(token: string) {
+  return (await api.delete('/api/profile/company-logo', { headers: authHeaders(token) })).data;
+}
+
+export async function fetchLinkedAccounts(token: string) {
+  return (await api.get('/api/auth/linked-accounts', { headers: authHeaders(token) })).data;
+}
+
+export async function linkProvider(token: string, provider: string, access_token?: string) {
+  return (await api.post('/api/auth/link-provider', { provider, access_token }, { headers: authHeaders(token) })).data;
+}
+
+export async function unlinkProvider(token: string, provider: string) {
+  return (await api.delete(`/api/auth/unlink-provider/${provider}`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateProfileNotifications(token: string, preferences: Record<string, boolean>) {
+  return (await api.put('/api/profile/notifications', { preferences }, { headers: authHeaders(token) })).data;
+}
+
 export async function deleteAccount(token: string, password?: string) {
-  return (await api.delete('/api/profile', { headers: authHeaders(token), data: { password } })).data;
+  return (await api.delete('/api/profile', { data: { password }, headers: authHeaders(token) })).data;
 }
 
 export async function fetchDashboardStats(token: string): Promise<{ success: boolean; data: DashboardStats }> {
