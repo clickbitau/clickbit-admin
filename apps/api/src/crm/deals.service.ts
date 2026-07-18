@@ -262,9 +262,19 @@ export class DealsService {
       throw new BadRequestException('Invalid stage for this pipeline');
     }
 
-    const updateData: Record<string, unknown> = { stage_id: dto.stage_id };
+    const updateData: Record<string, unknown> = { stage_id: dto.stage_id, stage_entered_at: new Date() };
     if (dto.position !== undefined) updateData.position = dto.position;
     if (stage.probability !== undefined) updateData.probability = stage.probability;
+
+    if (stage.is_won) {
+      updateData.status = 'won';
+      updateData.actual_close_date = new Date();
+    } else if (stage.is_lost) {
+      updateData.status = 'lost';
+      updateData.actual_close_date = new Date();
+    } else {
+      updateData.status = 'open';
+    }
 
     await this.prisma.deals.update({
       where: { id },
