@@ -76,11 +76,15 @@ export class TrustDeviceDto {
   @IsOptional()
   @IsString()
   deviceName?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceInfo?: string;
 }
 
 export class CheckTrustDto {
   @IsString()
-  fingerprint: string;
+  token: string;
 }
 
 export class LinkProviderDto {

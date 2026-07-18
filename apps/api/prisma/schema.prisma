@@ -5701,3 +5701,35 @@ enum phase_status_type {
 
   @@schema("public")
 }
+
+model passkeys {
+  id                    Int       @id @default(autoincrement())
+  user_id               Int
+  credential_id         String    @unique @db.VarChar(255)
+  friendly_name         String?   @db.VarChar(255)
+  credential_public_key Bytes
+  counter               Int       @default(0)
+  transports            String?
+  user_agent            String?   @db.VarChar(500)
+  last_used_at          DateTime? @db.Timestamptz(6)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+  deleted_at            DateTime? @db.Timestamptz(6)
+
+  @@index([user_id])
+  @@index([credential_id])
+  @@schema("public")
+}
+
+model passkey_challenges {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    Int?
+  challenge  String   @unique @db.VarChar(255)
+  type       String   @db.VarChar(20)
+  expires_at DateTime @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([challenge])
+  @@index([expires_at])
+  @@schema("public")
+}

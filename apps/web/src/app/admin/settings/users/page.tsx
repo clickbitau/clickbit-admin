@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   User as UserIcon,
@@ -14,104 +14,153 @@ import {
   RefreshCw,
   Crown,
   Users,
+  CheckCircle,
+  AlertCircle,
+  MailX,
+  ShieldOff,
+  Edit2,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
-import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { ConfirmDialog } from '@/components/design-system/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { StatCards } from '@/components/design-system/StatCards';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchUsers, resendUserWelcome, resetUser2fa, deleteUser } from '@/lib/api';
+import { useDebounce } from '@/lib/useDebounce';
 import { formatDate } from '@/lib/format';
 import { toast } from 'sonner';
 import type { User } from '@/types/crm';
+import Image from 'next/image';
+
+const PAGE_SIZE = 20;
+const TEAM_ROLES = 'admin,manager,employee,agent';
+const CUSTOMER_ROLES = 'customer';
+
+type SortField = 'name' | 'email' | 'status' | 'last_login' | 'created_at';
+type SortOrder = 'asc' | 'desc';
 
 const statusOptions = ['', 'active', 'inactive', 'suspended', 'archived'];
-const sortOptions = [
-  { key: 'name', label: 'Name' },
-  { key: 'email', label: 'Email' },
-  { key: 'status', label: 'Status' },
-  { key: 'created_at', label: 'Created' },
-  { key: 'last_login', label: 'Last login' },
-];
 
-const teamRoles = 'admin,manager,employee,agent';
-const customerRoles = 'customer';
+function getRoleBadgeClass(role?: string) {
+  switch (role) {
+    case 'admin': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
+    case 'manager': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300';
+    case 'employee': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+    case 'agent': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+    case 'customer': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
+    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+  }
+}
 
-export default function AdminSettingsUsersPage() {
-  const { token, user } = useAuth();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const isManager = user?.role === 'manager';
-  const [tab, setTab] = useState<'team' | 'customers'>(isManager ? 'customers' : 'team');
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+function getRoleIcon(role?: string) {
+  switch (role) {
+    case 'admin': return <Crown className="h-3 w-3 mr-1" />;
+    case 'manager': return <UserIcon className="h-3 w-3 mr-1" />;
+    case 'employee': return <Users className="h-3 w-3 mr-1" />;
+    case 'agent': return <UserIcon className="h-3 w-3 mr-1" />;
+    default: return <UserIcon className="h-3 w-3 mr-1" />;
+  }
+}
+
+function getStatusBadgeClass(status?: string) {
+  if (status === 'active') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
+  if (status === 'suspended') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+  if (status === 'archived') return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+  if (status === 'inactive') return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+  return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+}
+
+function isLocked(u: User) {
+  return !!u.locked_until && new Date(u.locked_until) > new Date();
+}
+
+function SortButton({
+  label,
+  field,
+  current,
+  onSort,
+}: {
+  label: string;
+  field: SortField;
+  current: { field: SortField; order: SortOrder };
+  onSort: (field: SortField) => void;
+}) {
+  const active = current.field === field;
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className={`flex items-center gap-1 text-xs font-medium uppercase tracking-wider ${active ? 'text-primary' : 'text-muted-foreground'} hover:text-foreground`}
+    >
+      {label}
+      <ArrowUpDown className="h-3 w-3" />
+    </button>
+  );
+}
+
+function useUserSection(roles: string, search: string, status: string) {
+  const { token } = useAuth();
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ field: SortField; order: SortOrder }>({ field: 'name', order: 'asc' });
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['admin-users', token, roles, search, status, page, sort.field, sort.order],
+    queryFn: () => {
+      if (!token) throw new Error('No token');
+      const params: Record<string, string | number | boolean> = {
+        page,
+        limit: PAGE_SIZE,
+        roles,
+        sortBy: sort.field,
+        sortOrder: sort.order,
+      };
+      if (search) params.search = search;
+      if (status) params.status = status;
+      return fetchUsers(token, params);
+    },
+    enabled: !!token,
+  });
+
+  const handleSort = (field: SortField) => {
+    setSort((prev) => ({ field, order: prev.field === field && prev.order === 'asc' ? 'desc' : 'asc' }));
+    setPage(1);
+  };
+
+  return {
+    users: (data?.data ?? []) as User[],
+    meta: data?.meta ?? { total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 },
+    isLoading,
+    error,
+    refetch,
+    page,
+    setPage,
+    sort,
+    handleSort,
+  };
+}
+
+function UserActions({ u, canReset2fa }: { u: User; canReset2fa: boolean }) {
+  const { token, user } = useAuth();
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [deleting, setDeleting] = useState<User | null>(null);
 
-  const roles = tab === 'team' ? teamRoles : customerRoles;
-
-  const buildParams = (limit = 25, pageOverride?: number) => {
-    const params: Record<string, string | number> = { page: pageOverride ?? page, limit, sortBy, sortOrder };
-    if (search) params.search = search;
-    if (status) params.status = status;
-    if (!isManager) params.roles = roles;
-    return params;
-  };
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', token, tab, page, search, status, sortBy, sortOrder],
-    queryFn: () => {
-      if (!token) throw new Error('No token');
-      return fetchUsers(token, buildParams());
-    },
-    enabled: !!token,
-  });
-
-  const teamCountQuery = useQuery({
-    queryKey: ['admin-users-count', token, 'team'],
-    queryFn: () => {
-      if (!token) throw new Error('No token');
-      return fetchUsers(token, { page: 1, limit: 1, roles: teamRoles });
-    },
-    enabled: !!token && !isManager,
-  });
-
-  const customerCountQuery = useQuery({
-    queryKey: ['admin-users-count', token, 'customers'],
-    queryFn: () => {
-      if (!token) throw new Error('No token');
-      return fetchUsers(token, { page: 1, limit: 1, roles: customerRoles });
-    },
-    enabled: !!token,
-  });
-
-  const users = (data?.data ?? []) as User[];
-  const meta = data?.meta ?? { total: 0, page: 1, limit: 25, totalPages: 1 };
-  const teamTotal = teamCountQuery.data?.meta?.total ?? 0;
-  const customerTotal = customerCountQuery.data?.meta?.total ?? 0;
-  const activeTotal = users.filter((u) => u.status === 'active').length;
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-  };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-users'] });
 
   const resendMutation = useMutation({
     mutationFn: (id: number) => resendUserWelcome(token!, id),
-    onSuccess: () => { toast.success('Welcome email sent'); },
+    onSuccess: () => toast.success('Welcome email sent'),
     onError: () => toast.error('Failed to send welcome email'),
   });
 
   const reset2faMutation = useMutation({
     mutationFn: (id: number) => resetUser2fa(token!, id),
-    onSuccess: (res: any) => { toast.success(res?.message || '2FA reset'); },
+    onSuccess: (res: any) => toast.success(res?.message || '2FA reset'),
     onError: () => toast.error('Failed to reset 2FA'),
   });
 
@@ -121,136 +170,24 @@ export default function AdminSettingsUsersPage() {
     onError: () => toast.error('Failed to delete user'),
   });
 
-  const title = isManager ? 'Customer Management' : 'User Management';
-  const description = isManager
-    ? `${customerTotal} customers`
-    : `${teamTotal + customerTotal} total users · ${teamTotal} team · ${customerTotal} customers`;
-
-  const statCards = [
-    { label: 'Total', value: isManager ? customerTotal : teamTotal + customerTotal, icon: UserIcon },
-    { label: 'Team', value: teamTotal, icon: Crown, accent: 'primary' as const, onClick: () => { if (!isManager) setTab('team'); } },
-    { label: 'Customers', value: customerTotal, icon: Users, accent: 'success' as const, onClick: () => setTab('customers') },
-    { label: 'Active', value: activeTotal, icon: RefreshCw, accent: 'secondary' as const },
-  ];
-
-  const getStatusBadge = (status?: string) => {
-    if (status === 'active') return <Badge variant="default">Active</Badge>;
-    if (status === 'inactive') return <Badge variant="secondary">Inactive</Badge>;
-    if (status === 'suspended') return <Badge variant="destructive">Suspended</Badge>;
-    if (status === 'archived') return <Badge variant="outline">Archived</Badge>;
-    return <Badge variant="outline">{status || 'active'}</Badge>;
-  };
-
-  const isLocked = (u: User) => !!u.locked_until && new Date(u.locked_until) > new Date();
-
   return (
-    <PageShell
-      title={title}
-      icon={UserIcon}
-      description={description}
-      actions={
-        <Button asChild>
-          <Link href="/admin/settings/users/new">
-            <Plus className="mr-1 h-4 w-4" /> Add {isManager ? 'Customer' : 'User'}
-          </Link>
+    <div className="flex items-center justify-end gap-1">
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/admin/settings/users/${u.id}`)} title="Edit user">
+        <Edit2 className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => resendMutation.mutate(u.id)} title="Resend welcome email">
+        <Mail className="h-4 w-4" />
+      </Button>
+      {canReset2fa && u.auth_uid && (
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600" onClick={() => reset2faMutation.mutate(u.id)} title="Reset 2FA">
+          <ShieldOff className="h-4 w-4" />
         </Button>
-      }
-    >
-      <StatCards cards={statCards} />
-
-      {!isManager && (
-        <Tabs value={tab} onValueChange={(v) => { setTab(v as 'team' | 'customers'); setPage(1); }} className="w-full">
-          <TabsList>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="customers">Customers</TabsTrigger>
-          </TabsList>
-        </Tabs>
       )}
-
-      <Card>
-        <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Input
-            placeholder="Search name or email..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="sm:max-w-sm"
-          />
-          <select
-            value={status}
-            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
-            {statusOptions.map((s) => <option key={s} value={s}>{s ? s.replace(/\b\w/g, (c) => c.toUpperCase()) : 'All statuses'}</option>)}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
-            {sortOptions.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-          <Button variant="outline" size="sm" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
-            {sortOrder === 'asc' ? 'Asc' : 'Desc'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <DataTable<User>
-        headers={[
-          { key: 'user', label: 'User' },
-          { key: 'role', label: 'Role' },
-          { key: 'status', label: 'Status' },
-          { key: 'last_login', label: 'Last login' },
-          { key: 'actions', label: '' },
-        ]}
-        data={users}
-        loading={isLoading}
-        emptyText="No users found."
-        keyExtractor={(u) => u.id}
-        onRowClick={(u) => router.push(`/admin/settings/users/${u.id}`)}
-        renderRow={(u) => [
-          <div key="user" className="flex items-center gap-3">
-            {u.avatar ? (
-              <img src={u.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                {u.first_name?.[0] || u.email?.[0] || '?'}
-              </div>
-            )}
-            <div>
-              <p className="font-medium">{u.first_name || u.last_name ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : u.email}</p>
-              <p className="text-xs text-muted-foreground">{u.email}</p>
-            </div>
-            {!u.email_verified && <Badge variant="outline" className="ml-2">Unverified</Badge>}
-            {isLocked(u) && <Badge variant="destructive" className="ml-2">Locked</Badge>}
-          </div>,
-          <Badge key="role" variant="outline" className="capitalize">{u.role}</Badge>,
-          <div key="status">{getStatusBadge(u.status)}</div>,
-          <span key="last_login" className="text-sm text-muted-foreground">{u.last_login ? formatDate(u.last_login) : '—'}</span>,
-          <div key="actions" className="flex items-center justify-end gap-1">
-            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); resendMutation.mutate(u.id); }} title="Resend welcome email">
-              <Mail className="h-3.5 w-3.5" />
-            </Button>
-            {!isManager && user?.role === 'admin' && (
-              <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); reset2faMutation.mutate(u.id); }} title="Reset 2FA">
-                <KeyRound className="h-3.5 w-3.5" />
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleting(u); }} title="Delete user">
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>,
-        ]}
-      />
-
-      <Pagination
-        currentPage={meta.page}
-        totalPages={meta.totalPages}
-        totalItems={meta.total}
-        onPageChange={setPage}
-      />
-
+      {user?.role === 'admin' && u.id !== user.id && (
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleting(u)} title="Delete user">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(open) => { if (!open) setDeleting(null); }}
@@ -260,6 +197,294 @@ export default function AdminSettingsUsersPage() {
         loading={deleteMutation.isPending}
         confirmLabel="Delete"
       />
+    </div>
+  );
+}
+
+function UserTable({
+  users,
+  sort,
+  onSort,
+  canReset2fa,
+}: {
+  users: User[];
+  sort: { field: SortField; order: SortOrder };
+  onSort: (field: SortField) => void;
+  canReset2fa: boolean;
+}) {
+  return (
+    <div className="hidden lg:block overflow-x-auto">
+      <table className="min-w-full divide-y divide-border">
+        <thead className="bg-muted/50">
+          <tr>
+            <th className="px-6 py-3 text-left"><SortButton label="User" field="name" current={sort} onSort={onSort} /></th>
+            <th className="px-6 py-3 text-left"><SortButton label="Role" field="email" current={sort} onSort={onSort} /></th>
+            <th className="px-6 py-3 text-left"><SortButton label="Status" field="status" current={sort} onSort={onSort} /></th>
+            <th className="px-6 py-3 text-left"><SortButton label="Last login" field="last_login" current={sort} onSort={onSort} /></th>
+            <th className="px-6 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {users.map((u) => (
+            <tr key={u.id} className="hover:bg-primary/5 transition-colors">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex items-center gap-3">
+                  {u.avatar ? (
+                    <Image src={u.avatar} alt="" width={40} height={40} unoptimized className="h-10 w-10 rounded-full object-cover border-2 border-background" />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium bg-muted text-foreground">
+                      {u.first_name?.[0] || u.last_name?.[0] || u.email?.[0] || '?'}
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-sm font-medium">{u.first_name || u.last_name ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : u.email}</div>
+                    <div className="text-sm text-muted-foreground">{u.email}</div>
+                  </div>
+                  {!u.email_verified && <Badge variant="outline">Unverified</Badge>}
+                  {isLocked(u) && <Badge variant="destructive">Locked</Badge>}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getRoleBadgeClass(u.role)}`}>
+                  {getRoleIcon(u.role)}{u.role}
+                </span>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadgeClass(u.status)}`}>
+                  {u.status || 'active'}
+                </span>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{u.last_login ? formatDate(u.last_login) : '—'}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-right">
+                <UserActions u={u} canReset2fa={canReset2fa} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function UserCard({ u, canReset2fa }: { u: User; canReset2fa: boolean }) {
+  return (
+    <div className="lg:hidden p-4 border-b border-border last:border-0">
+      <div className="flex items-start gap-3 mb-3">
+        {u.avatar ? (
+          <Image src={u.avatar} alt="" width={40} height={40} unoptimized className="h-10 w-10 rounded-full object-cover border-2 border-background" />
+        ) : (
+          <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium bg-muted text-foreground">
+            {u.first_name?.[0] || u.last_name?.[0] || u.email?.[0] || '?'}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{u.first_name || u.last_name ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : u.email}</p>
+          <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${getRoleBadgeClass(u.role)}`}>
+              {getRoleIcon(u.role)}{u.role}
+            </span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${getStatusBadgeClass(u.status)}`}>
+              {u.status || 'active'}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+          <span title={u.auth_uid ? 'Connected to auth' : 'Not connected to auth'}>{u.auth_uid ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-yellow-600" />}</span>
+          <span title={u.email_verified ? 'Email verified' : 'Email not verified'}>{u.email_verified ? <Mail className="h-4 w-4 text-emerald-600" /> : <MailX className="h-4 w-4 text-red-600" />}</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">{u.last_login ? `Last login ${formatDate(u.last_login)}` : 'Never logged in'}</span>
+        <UserActions u={u} canReset2fa={canReset2fa} />
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  icon: Icon,
+  count,
+  isOpen,
+  onToggle,
+  gradient,
+}: {
+  title: string;
+  icon: typeof Crown;
+  count: number;
+  isOpen: boolean;
+  onToggle: () => void;
+  gradient: string;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`w-full flex items-center justify-between p-4 text-white rounded-t-lg transition-all ${gradient}`}
+    >
+      <div className="flex items-center gap-3">
+        <Icon className="h-5 w-5" />
+        <span className="font-semibold text-lg">{title}</span>
+        <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-sm">{count}</span>
+      </div>
+      {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+    </button>
+  );
+}
+
+function UserSection({
+  title,
+  icon,
+  roles,
+  search,
+  status,
+  canReset2fa,
+  isManager,
+  defaultOpen = true,
+}: {
+  title: string;
+  icon: typeof Crown;
+  roles: string;
+  search: string;
+  status: string;
+  canReset2fa: boolean;
+  isManager: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const { users, meta, isLoading, error, refetch, page, setPage, sort, handleSort } = useUserSection(roles, search, status);
+
+  return (
+    <div className="mb-6">
+      <SectionHeader title={title} icon={icon} count={meta.total} isOpen={isOpen} onToggle={() => setIsOpen(!isOpen)} gradient={title === 'Team Members' ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-gradient-to-r from-cyan-600 to-blue-600'} />
+      {isOpen && (
+        <div className="nm-raised rounded-b-lg overflow-hidden border-t-0">
+          {isLoading ? (
+            <div className="p-8 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : error ? (
+            <div className="p-6 text-destructive flex items-center justify-between">
+              <span>Failed to load users</span>
+              <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCw className="h-4 w-4" /></Button>
+            </div>
+          ) : (
+            <>
+              <UserTable users={users} sort={sort} onSort={handleSort} canReset2fa={canReset2fa} />
+              <div className="lg:hidden divide-y divide-border">
+                {users.map((u) => <UserCard key={u.id} u={u} canReset2fa={canReset2fa} />)}
+                {users.length === 0 && <div className="p-8 text-center text-muted-foreground">No {title.toLowerCase()} found</div>}
+              </div>
+              {users.length > 0 && (
+                <div className="p-3 border-t border-border/50">
+                  <Pagination
+                    currentPage={meta.page}
+                    totalPages={meta.totalPages}
+                    totalItems={meta.total}
+                    onPageChange={setPage}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AdminSettingsUsersPage() {
+  const { token, user } = useAuth();
+  const router = useRouter();
+  const isManager = user?.role === 'manager';
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const debouncedSearch = useDebounce(search, 400);
+
+  const teamQuery = useQuery({
+    queryKey: ['admin-users-total', token, TEAM_ROLES],
+    queryFn: () => {
+      if (!token) throw new Error('No token');
+      return fetchUsers(token, { page: 1, limit: 1, roles: TEAM_ROLES });
+    },
+    enabled: !!token && !isManager,
+  });
+
+  const customerQuery = useQuery({
+    queryKey: ['admin-users-total', token, CUSTOMER_ROLES],
+    queryFn: () => {
+      if (!token) throw new Error('No token');
+      return fetchUsers(token, { page: 1, limit: 1, roles: CUSTOMER_ROLES });
+    },
+    enabled: !!token,
+  });
+
+  const teamTotal = (teamQuery.data?.meta?.total ?? 0) as number;
+  const customerTotal = (customerQuery.data?.meta?.total ?? 0) as number;
+
+  const title = isManager ? 'Customer Management' : 'User Management';
+  const description = isManager ? `${customerTotal} customers` : `${teamTotal + customerTotal} total users · ${teamTotal} team · ${customerTotal} customers`;
+
+  return (
+    <PageShell
+      title={title}
+      icon={UserIcon}
+      description={description}
+      actions={
+        <Button asChild>
+          <Link href="/admin/settings/users/new"><Plus className="mr-1 h-4 w-4" /> Add {isManager ? 'Customer' : 'User'}</Link>
+        </Button>
+      }
+    >
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users by name or email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="h-10 rounded-md border bg-background px-3 text-sm"
+            >
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>{s ? s.replace(/\b\w/g, (c) => c.toUpperCase()) : 'All statuses'}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {!isManager && (
+          <UserSection
+            title="Team Members"
+            icon={Crown}
+            roles={TEAM_ROLES}
+            search={debouncedSearch}
+            status={status}
+            canReset2fa={user?.role === 'admin'}
+            isManager={isManager}
+            defaultOpen
+          />
+        )}
+
+        <UserSection
+          title="Customers"
+          icon={Users}
+          roles={CUSTOMER_ROLES}
+          search={debouncedSearch}
+          status={status}
+          canReset2fa={user?.role === 'admin'}
+          isManager={isManager}
+          defaultOpen
+        />
+      </div>
     </PageShell>
   );
 }

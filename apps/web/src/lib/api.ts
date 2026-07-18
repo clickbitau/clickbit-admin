@@ -2343,4 +2343,45 @@ export async function createEmployeeItSupportTicket(
   return (await api.post('/api/employee/it-support', body, { headers: authHeaders(token) })).data;
 }
 
+// Passkeys & trusted devices
+export async function fetchPasskeys(token: string): Promise<{ success: boolean; data: { id: number; credential_id: string; friendly_name?: string | null; user_agent?: string | null; last_used_at?: string | null; created_at?: string | null }[] }> {
+  return (await api.get('/api/auth/passkeys', { headers: authHeaders(token) })).data;
+}
+
+export async function createPasskeyRegistrationOptions(token: string): Promise<{ success: boolean; data: any }> {
+  return (await api.post('/api/auth/passkeys/register-options', {}, { headers: authHeaders(token) })).data;
+}
+
+export async function verifyPasskeyRegistration(token: string, body: any): Promise<{ success: boolean; message?: string; data?: any }> {
+  return (await api.post('/api/auth/passkeys/register', body, { headers: authHeaders(token) })).data;
+}
+
+export async function deletePasskey(token: string, id: number): Promise<{ success: boolean; message?: string }> {
+  return (await api.delete(`/api/auth/passkeys/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function createPasskeyLoginOptions(): Promise<{ success: boolean; data: any }> {
+  return (await api.post('/api/auth/passkeys/login-options', {})).data;
+}
+
+export async function verifyPasskeyLogin(body: any): Promise<{ success: boolean; data: { user: any; accessToken: string; refreshToken: string; expiresAt: number } }> {
+  return (await api.post('/api/auth/passkeys/login', body)).data;
+}
+
+export async function fetchTrustedDevices(token: string): Promise<{ success: boolean; data: { devices: { id: number; device_info: string; expires_at: string; created_at: string }[] } }> {
+  return (await api.get('/api/auth/trusted-devices', { headers: authHeaders(token) })).data;
+}
+
+export async function trustDevice(token: string, deviceName?: string): Promise<{ success: boolean; data: { id: number; token: string; expiresAt: string } }> {
+  return (await api.post('/api/auth/trust-device', { deviceName }, { headers: authHeaders(token) })).data;
+}
+
+export async function checkTrust(token: string, trustToken: string): Promise<{ success: boolean; data: { valid: boolean; id?: number; expiresAt?: string } }> {
+  return (await api.post('/api/auth/check-trust', { token: trustToken }, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteTrustedDevice(token: string, id: number): Promise<{ success: boolean; message?: string }> {
+  return (await api.delete(`/api/auth/trusted-devices/${id}`, { headers: authHeaders(token) })).data;
+}
+
 export default api;
