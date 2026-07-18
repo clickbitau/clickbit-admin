@@ -137,8 +137,13 @@ export class PublicInvoicesService {
   }
 
   private async getInvoiceByCode(code: string) {
-    const invoice = await this.prisma.invoices.findUnique({ where: { package_code: code }, include: invoiceInclude });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('Invoice not found');
+    const trimmed = (code || '').trim();
+    if (!trimmed) throw new NotFoundException('Invoice not found');
+    const invoice = await this.prisma.invoices.findFirst({
+      where: { deleted_at: null, package_code: { equals: trimmed, mode: 'insensitive' } },
+      include: invoiceInclude,
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
     return invoice;
   }
 

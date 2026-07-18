@@ -1,40 +1,63 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { fetchPublicInvoice, createInvoiceCheckout, downloadPublicInvoicePdf, confirmPublicInvoicePayment } from '@/lib/api';
 import { toast } from 'sonner';
-import { Download, CreditCard, FileText } from 'lucide-react';
+import { Download, CreditCard, AlertCircle } from 'lucide-react';
+
+interface AxiosErrorLike {
+  response?: { status?: number; data?: { message?: string } };
+  message?: string;
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  return (error as AxiosErrorLike)?.response?.status;
+}
+
+function getErrorMessage(error: unknown): string {
+  const data = (error as AxiosErrorLike)?.response?.data;
+  if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string') return data.message;
+  return (error as AxiosErrorLike)?.message || 'Unable to load invoice.';
+}
 
 export default function PublicPayPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const code = String(params.code);
-  const token = searchParams.get('token') || undefined;
-  const sessionId = searchParams.get('session_id') || undefined;
-  const [selectedPayment, setSelectedPayment] = useState<'full' | 'half'>('full');
+  const code = String(params.code || '').trim();
+  const [token, setToken] = useState(searchParams.get('token') || '');
+  const [tokenInput, setTokenInput] = useState('');
   const [verified, setVerified] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<'full' | 'half'>('full');
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['public-invoice', code, token],
-    queryFn: () => fetchPublicInvoice(code, token),
+  const sessionId = searchParams.get('session_id') || undefined;
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['public-invoice', code, token || null],
+    queryFn: () => fetchPublicInvoice(code, token || undefined),
     enabled: !!code,
+    retry: false,
   });
+
+  useEffect(() => {
+    setSelectedPayment('full');
+  }, [code]);
 
   useEffect(() => {
     if (sessionId && code && !verified) {
       setVerified(true);
-      confirmPublicInvoicePayment(code, sessionId, token)
+      confirmPublicInvoicePayment(code, sessionId, token || undefined)
         .then(() => {
           toast.success('Payment confirmed');
-          queryClient.invalidateQueries({ queryKey: ['public-invoice', code, token] });
+          queryClient.invalidateQueries({ queryKey: ['public-invoice', code, token || null] });
         })
         .catch(() => {
           toast.error('Payment confirmation failed');
@@ -43,7 +66,7 @@ export default function PublicPayPage() {
   }, [sessionId, code, token, verified, queryClient]);
 
   const checkoutMutation = useMutation({
-    mutationFn: () => createInvoiceCheckout(code, selectedPayment, token),
+    mutationFn: () => createInvoiceCheckout(code, selectedPayment, token || undefined),
     onSuccess: (result) => {
       if (result?.url) {
         window.location.href = result.url;
@@ -55,7 +78,7 @@ export default function PublicPayPage() {
   });
 
   const pdfMutation = useMutation({
-    mutationFn: () => downloadPublicInvoicePdf(code, token),
+    mutationFn: () => downloadPublicInvoicePdf(code, token || undefined),
     onSuccess: (blob) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -67,8 +90,8 @@ export default function PublicPayPage() {
     onError: () => toast.error('Failed to download PDF'),
   });
 
-  const formatCurrency = (value: number | string | undefined) =>
-    new Intl.NumberFormat('en-AU', { style: 'currency', currency: data?.currency || 'AUD' }).format(Number(value ?? 0));
+  const status = getErrorStatus(error);
+  const message = getErrorMessage(error);
 
   if (isLoading) {
     return (
@@ -85,9 +108,23 @@ export default function PublicPayPage() {
     return (
       <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center">
         <Card className="w-full max-w-md">
-          <CardHeader><CardTitle>Invoice not found</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">This invoice link is invalid or has expired.</p>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              {status === 404 ? 'Invoice not found' : status === 403 ? 'Access denied' : 'Unable to load invoice'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">{message}</p>
+            {(status === 400 || status === 403) && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Enter the security token from your invoice email to continue.</p>
+                <div className="flex gap-2">
+                  <Input value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder="Security token" className="flex-1" />
+                  <Button onClick={() => { setToken(tokenInput); setTimeout(() => refetch(), 0); }}>Continue</Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -96,6 +133,9 @@ export default function PublicPayPage() {
 
   const full = data.payment_options?.full_payment;
   const half = data.payment_options?.half_payment;
+
+  const formatCurrency = (value: number | string | undefined) =>
+    new Intl.NumberFormat('en-AU', { style: 'currency', currency: data?.currency || 'AUD' }).format(Number(value ?? 0));
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -151,6 +191,7 @@ export default function PublicPayPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {full?.available !== false && (
                   <button
+                    type="button"
                     onClick={() => setSelectedPayment('full')}
                     className={`rounded-lg border p-4 text-left transition ${selectedPayment === 'full' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}
                   >
@@ -162,6 +203,7 @@ export default function PublicPayPage() {
                 )}
                 {half?.available !== false && (
                   <button
+                    type="button"
                     onClick={() => setSelectedPayment('half')}
                     className={`rounded-lg border p-4 text-left transition ${selectedPayment === 'half' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}
                   >
