@@ -127,6 +127,17 @@ export class NotificationsController {
     return this.notificationsService.markAllRead(req.user);
   }
 
+  @Delete(':id')
+  @UseGuards(SupabaseAuthGuard)
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.notificationsService.remove(req.user, id);
+  }
+
   @Post('push-token')
   @UseGuards(SupabaseAuthGuard)
   async savePushToken(
