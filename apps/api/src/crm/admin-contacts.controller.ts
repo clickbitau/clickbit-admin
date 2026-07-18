@@ -95,18 +95,54 @@ export class AdminContactsController {
     const agents = await this.prisma.contacts.findMany({
       where: {
         deleted_at: null,
-        OR: [{ commission_type: { not: 'none' } }, { companies_companies_agent_idTocontacts: { some: {} } }],
+        OR: [{ lifecycle_stage: 'agent' }, { contact_type: { contains: 'agent' } }],
       },
       include: {
-        companies_contacts_company_idTocompanies: { select: { id: true, name: true } },
+        companies_contacts_company_idTocompanies: { select: { id: true, name: true, logo_url: true } },
         profiles: { select: { id: true, first_name: true, last_name: true, email: true } },
       },
       orderBy: { name: 'asc' },
     });
 
+    const agentIds = agents.map((a) => a.id);
+    const [companies] = await Promise.all([
+      agentIds.length
+        ? this.prisma.companies.findMany({
+            where: { agent_id: { in: agentIds }, deleted_at: null },
+            select: { agent_id: true, id: true, name: true, total_revenue: true, lifecycle_stage: true },
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+
+    const statsByAgent = new Map<number, { client_count: number; client_revenue: number }>();
+    for (const company of companies) {
+      if (!company.agent_id) continue;
+      const existing = statsByAgent.get(company.agent_id) || { client_count: 0, client_revenue: 0 };
+      existing.client_count += 1;
+      existing.client_revenue += Number(company.total_revenue || 0);
+      statsByAgent.set(company.agent_id, existing);
+    }
+
     return {
       success: true,
-      data: agents.map((a) => this.mapContact(a)),
+      data: agents.map((a) => {
+        const stats = statsByAgent.get(a.id) || { client_count: 0, client_revenue: 0 };
+        const mapped = this.mapContact(a);
+        const commissionRate = Number(a.commission_rate || 0);
+        let commissionDue = 0;
+        if (a.commission_type === 'percentage') {
+          commissionDue = stats.client_revenue * (commissionRate / 100);
+        } else if (a.commission_type === 'fixed_amount') {
+          commissionDue = commissionRate * stats.client_count;
+        }
+        return {
+          ...mapped,
+          client_count: stats.client_count,
+          client_revenue: stats.client_revenue,
+          commission_due: commissionDue,
+          total_revenue: Number(a.total_revenue || 0),
+        };
+      }),
     };
   }
 
@@ -115,15 +151,33 @@ export class AdminContactsController {
     setNoCache(res);
     const companies = await this.prisma.companies.findMany({
       where: { agent_id: id, deleted_at: null },
-      select: { id: true, name: true, email: true, phone: true, total_revenue: true, lifecycle_stage: true, created_at: true },
+      include: {
+        crm_contact_companies: {
+          select: {
+            contacts: {
+              select: { id: true, name: true, email: true, phone: true, avatar_url: true, lifecycle_stage: true },
+            },
+          },
+        },
+      },
       orderBy: { name: 'asc' },
     });
 
     return {
       success: true,
-      data: companies.map((c) => ({
-        ...c,
+      data: companies.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        industry: c.industry,
+        logo_url: c.logo_url,
+        lifecycle_stage: c.lifecycle_stage,
         total_revenue: Number(c.total_revenue || 0),
+        created_at: c.created_at,
+        contacts: (c.crm_contact_companies || [])
+          .map((cc: any) => cc.contacts)
+          .filter(Boolean),
       })),
     };
   }
@@ -153,11 +207,12 @@ export class AdminContactsController {
   }
 
   private mapContact(c: any) {
-    const company = c.companies_contacts_company_idTocompanies;
+    const primaryCompany = c.companies_contacts_company_idTocompanies;
     const owner = c.profiles;
     return {
       ...c,
-      company: company ? { id: company.id, name: company.name } : null,
+      company: c.company,
+      primary_company: primaryCompany ? { id: primaryCompany.id, name: primaryCompany.name, logo_url: primaryCompany.logo_url } : null,
       owner: owner ? { id: owner.id, name: `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || owner.email } : null,
       total_revenue: Number(c.total_revenue || 0),
       lead_score: c.lead_score ?? 0,

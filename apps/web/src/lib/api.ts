@@ -538,6 +538,63 @@ export async function updateAgentCommission(
   return response.data;
 }
 
+export async function fetchContactInvoices(
+  token: string,
+  id: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<InvoiceListResponse> {
+  const response = await api.get<InvoiceListResponse>(`/api/crm/contacts/${id}/invoices`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchContactInteractions(token: string, id: string | number): Promise<Activity[]> {
+  const response = await api.get<{ success: boolean; data: Activity[] }>(`/api/admin/contacts/${id}/interactions`, {
+    headers: authHeaders(token),
+  });
+  return extractList<Activity>(response, 'data');
+}
+
+export async function fetchContactDocuments(token: string, id: string | number): Promise<AppDocument[]> {
+  const response = await api.get<{ success: boolean; data: AppDocument[] }>(`/api/admin/contacts/${id}/documents`, {
+    headers: authHeaders(token),
+  });
+  return extractList<AppDocument>(response, 'data');
+}
+
+export async function logContactInteraction(
+  token: string,
+  id: string | number,
+  data: { method: string; notes: string; date?: string; subject?: string },
+): Promise<{ success: boolean; data: CrmContact }> {
+  const response = await api.post(`/api/admin/contacts/${id}/log-contact`, data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function createContactDocument(
+  token: string,
+  id: string | number,
+  data: { title: string; file_url: string; file_name: string; file_size: number; file_type: string; category?: string },
+): Promise<{ success: boolean; data: AppDocument }> {
+  const response = await api.post(`/api/admin/contacts/${id}/documents`, data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function deleteContactDocument(token: string, contactId: string | number, docId: number): Promise<void> {
+  await api.delete(`/api/admin/contacts/${contactId}/documents/${docId}`, { headers: authHeaders(token) });
+}
+
+export async function assignAgentToCompany(
+  token: string,
+  companyId: string | number,
+  contactId: number | null,
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.put(`/api/admin/companies/${companyId}/assign-agent`, { contact_id: contactId }, { headers: authHeaders(token) });
+  return response.data;
+}
+
 // ─── Projects ────────────────────────────────────────────────────────────────
 
 export async function fetchProjects(
