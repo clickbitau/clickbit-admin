@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, Coffee, MapPin, Play, Square } from 'lucide-react';
+import { Clock, Coffee, MapPin, Play, Square, Users } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { clockIn, clockOut, endBreak, fetchTimeClockStatus, startBreak } from '@/lib/api';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { clockIn, clockOut, endBreak, fetchTimeClockActive, fetchTimeClockStatus, startBreak } from '@/lib/api';
 
 function formatDuration(minutes?: number | null) {
   if (!minutes) return '0h 0m';
@@ -19,8 +21,9 @@ function formatDuration(minutes?: number | null) {
 }
 
 export default function AdminHrTimeClockPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const queryClient = useQueryClient();
+  const isManager = user?.role === 'admin' || user?.role === 'manager';
   const [location, setLocation] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
   const [locating, setLocating] = useState(false);
 
@@ -35,7 +38,19 @@ export default function AdminHrTimeClockPage() {
 
   const status = data?.data;
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['time-clock-status', token] });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['time-clock-status', token] });
+    queryClient.invalidateQueries({ queryKey: ['time-clock-active', token] });
+  };
+
+  const { data: activeData, isLoading: loadingActive } = useQuery({
+    queryKey: ['time-clock-active', token],
+    queryFn: async () => {
+      if (!token) throw new Error('No token');
+      return fetchTimeClockActive(token);
+    },
+    enabled: !!token && isManager,
+  });
 
   const clockInMutation = useMutation({
     mutationFn: async () => {
@@ -87,11 +102,16 @@ export default function AdminHrTimeClockPage() {
     );
   };
 
+  const activeCount = (activeData?.data || []).length;
+  const onBreakCount = (activeData?.data || []).filter((e: any) => e.is_on_break).length;
+
   const statCards = [
     { label: 'Clocked In', value: status?.clockedIn ? 'Yes' : 'No', icon: Clock, accent: status?.clockedIn ? ('success' as const) : undefined },
     { label: 'On Break', value: status?.isOnBreak ? 'Yes' : 'No', icon: Coffee, accent: status?.isOnBreak ? ('warning' as const) : undefined },
     { label: 'Today Worked', value: formatDuration(status?.todaySummary?.totalMinutes), icon: Clock },
     { label: 'Breaks', value: formatDuration(status?.todaySummary?.breakMinutes), icon: Coffee },
+    ...(isManager ? [{ label: 'Active Employees', value: activeCount, icon: Users, accent: activeCount ? ('primary' as const) : undefined }] : []),
+    ...(isManager ? [{ label: 'On Break (team)', value: onBreakCount, icon: Coffee, accent: onBreakCount ? ('warning' as const) : undefined }] : []),
   ];
 
   const activeEntry = status?.activeEntry;
@@ -159,6 +179,50 @@ export default function AdminHrTimeClockPage() {
           )}
         </CardContent>
       </Card>
+
+      {isManager && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Active Employees</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingActive && <Skeleton className="h-20" />}
+            {!loadingActive && activeData?.data?.length === 0 && (
+              <p className="text-sm text-muted-foreground">No one is currently clocked in.</p>
+            )}
+            {!loadingActive && activeData?.data && activeData.data.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Clock In</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Department</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeData.data.map((entry: any) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-medium">{entry.employee_name}</TableCell>
+                      <TableCell>{new Date(entry.clock_in_time).toLocaleString()}</TableCell>
+                      <TableCell>{entry.formatted_duration}</TableCell>
+                      <TableCell>
+                        {entry.is_on_break ? (
+                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">On Break</Badge>
+                        ) : (
+                          <Badge variant="default">Active</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{entry.department}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </PageShell>
   );
 }
