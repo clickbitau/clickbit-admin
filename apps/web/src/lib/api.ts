@@ -772,6 +772,16 @@ export async function downloadInvoicePdf(token: string, id: string | number): Pr
   return response.data;
 }
 
+export async function voidInvoice(token: string, id: string | number): Promise<{ message: string }> {
+  const response = await api.post<{ message: string }>(`/api/invoices/${id}/void`, {}, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function markInvoicePaid(token: string, id: string | number): Promise<{ message: string }> {
+  const response = await api.post<{ message: string }>(`/api/invoices/${id}/mark-paid`, {}, { headers: authHeaders(token) });
+  return response.data;
+}
+
 export async function fetchPublicInvoice(code: string, token?: string): Promise<any> {
   const response = await api.get(`/api/invoices/pay/${code}`, { params: token ? { token } : undefined });
   return response.data;
