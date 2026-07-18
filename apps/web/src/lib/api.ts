@@ -638,7 +638,7 @@ export async function fetchProjectMeetings(
 export async function fetchProjectRelated(
   token: string,
   projectId: string | number,
-): Promise<{ project_id: number; tasks: ProjectTask[]; subprojects: CrmSubproject[]; documents: ProjectDocument[]; meetings: ProjectMeeting[]; contacts: { id: number; name: string }[]; companies: { id: number; name: string } | null; invoices: { id: number; package_code: string; title: string; total_amount: number; status: string; issue_date: string }[]; expenses: { id: number; expense_number: string; title: string; total_amount: number; status: string; expense_date: string }[]; tickets: { id: number; ticket_number: string; subject: string; status: string; priority: string }[]; financials: Record<string, number> }> {
+): Promise<{ project_id: number; tasks: ProjectTask[]; subprojects: CrmSubproject[]; documents: ProjectDocument[]; meetings: ProjectMeeting[]; contacts: { id: number; name: string }[]; companies: { id: number; name: string } | null; invoices: { id: number; package_code: string; title: string; total_amount: number; status: string; issue_date: string; currency?: string }[]; expenses: { id: number; expense_number: string; title: string; total_amount: number; status: string; expense_date: string; currency?: string }[]; tickets: { id: number; ticket_number: string; subject: string; status: string; priority: string }[]; payments: { id: number; transaction_id?: string; payment_method?: string; payment_provider?: string; amount: number; currency?: string; status: string; payment_date?: string | null; created_at?: string }[]; financials: Record<string, number> }> {
   const response = await api.get(`/api/crm/projects-new/${projectId}/related`, { headers: authHeaders(token) });
   return response.data;
 }
