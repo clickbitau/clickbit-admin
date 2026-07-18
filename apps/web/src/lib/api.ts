@@ -1401,7 +1401,7 @@ export async function fetchAdminBlogPost(token: string, id: string | number): Pr
   return (await api.get<{ post: BlogPost }>(`/api/blog/admin/${id}`, { headers: authHeaders(token) })).data.post;
 }
 
-export async function fetchAdminBlogStats(token: string): Promise<{ total: number; published: number; draft: number; featured: number }> {
+export async function fetchAdminBlogStats(token: string): Promise<{ total: number; published: number; draft: number; scheduled: number; archived: number; featured: number }> {
   return (await api.get('/api/blog/admin/stats', { headers: authHeaders(token) })).data;
 }
 
