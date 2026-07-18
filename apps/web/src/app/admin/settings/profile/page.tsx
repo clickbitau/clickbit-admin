@@ -2,7 +2,7 @@
 import { UserCircle as UserCircleIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,26 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchProfile, updateProfile } from '@/lib/api';
+import { SecuritySection } from './SecuritySection';
 
 export default function AdminSettingsProfilePage() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['profile', token], queryFn: () => { if (!token) throw new Error('No token'); return fetchProfile(token); }, enabled: !!token });
   const user = data?.data?.user;
-  const [form, setForm] = useState({ first_name: user?.first_name || '', last_name: user?.last_name || '', phone: user?.phone || '', job_title: user?.job_title || '', company: user?.company || '' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', job_title: '', company: '' });
+
+  useEffect(() => {
+    if (user) {
+      setForm({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        phone: user.phone || '',
+        job_title: user.job_title || '',
+        company: user.company || '',
+      });
+    }
+  }, [user]);
 
   const save = useMutation({
     mutationFn: () => updateProfile(token!, form),
@@ -41,6 +54,7 @@ export default function AdminSettingsProfilePage() {
           <Button onClick={() => save.mutate()} disabled={save.isPending}>Save</Button>
         </CardContent>
       </Card>
+      <SecuritySection />
     </PageShell>
   );
 }

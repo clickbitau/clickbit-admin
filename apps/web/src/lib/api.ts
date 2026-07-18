@@ -1587,6 +1587,10 @@ export async function changePassword(token: string, data: { current_password: st
   return (await api.put('/api/profile/password', data, { headers: authHeaders(token) })).data;
 }
 
+export async function deleteAccount(token: string, password?: string) {
+  return (await api.delete('/api/profile', { headers: authHeaders(token), data: { password } })).data;
+}
+
 export async function fetchDashboardStats(token: string): Promise<{ success: boolean; data: DashboardStats }> {
   return (await api.get('/api/admin/dashboard/stats', { headers: authHeaders(token) })).data;
 }

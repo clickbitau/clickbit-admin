@@ -87,6 +87,7 @@ export class AuthService {
     const { data, error } = await publicClient.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     if (error || !data.session) throw new BadRequestException(error?.message || 'Invalid credentials');
     const user = await this.getProfileByAuthUid(data.user.id);
+    const factors = (data.user.factors || []).filter((f: any) => f.status === 'verified');
     return {
       success: true,
       data: {
@@ -94,6 +95,8 @@ export class AuthService {
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
         expiresAt: data.session.expires_at,
+        requiresMfa: factors.length > 0,
+        factors: factors.map((f: any) => ({ id: f.id, friendly_name: f.friendly_name, factor_type: f.factor_type, status: f.status })),
       },
     };
   }

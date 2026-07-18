@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,7 @@ function getDashboardPath(role?: string) {
 }
 
 export default function LoginPage() {
-  const { user, loading, error, login, clearError, oauthSignIn, sendMagicLink } = useAuth();
+  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, cancelMfa, clearError, oauthSignIn, sendMagicLink } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,12 +28,21 @@ export default function LoginPage() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [selectedFactorId, setSelectedFactorId] = useState<string>('');
+  const [isMfaLoading, setIsMfaLoading] = useState(false);
 
   useEffect(() => {
-    if (user && !loading) {
+    if (mfaRequired && mfaFactors.length > 0 && !selectedFactorId) {
+      setSelectedFactorId(mfaFactors[0].id);
+    }
+  }, [mfaRequired, mfaFactors, selectedFactorId]);
+
+  useEffect(() => {
+    if (user && !loading && !mfaRequired) {
       router.replace(getDashboardPath(user.role));
     }
-  }, [user, loading, router]);
+  }, [user, loading, mfaRequired, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +52,17 @@ export default function LoginPage() {
       await login(email, password);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFactorId || mfaCode.length < 6) return;
+    setIsMfaLoading(true);
+    try {
+      await completeMfa(selectedFactorId, mfaCode);
+    } finally {
+      setIsMfaLoading(false);
     }
   };
 
@@ -91,9 +111,73 @@ export default function LoginPage() {
         </div>
 
         <div className="nm-raised p-8 rounded-3xl space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="email">Email address</Label>
+          {mfaRequired ? (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="mx-auto mb-4 nm-raised-sm w-14 h-14 flex items-center justify-center rounded-2xl">
+                  <ShieldCheck className="h-7 w-7 text-primary" />
+                </div>
+                <h2 className="text-xl font-bold">Two-factor authentication</h2>
+                <p className="mt-2 text-sm text-muted-foreground">Enter the 6-digit code from your authenticator app.</p>
+              </div>
+
+              <form onSubmit={handleMfaSubmit} className="space-y-4">
+                {mfaFactors.length > 1 && (
+                  <div>
+                    <Label htmlFor="factor">Authenticator</Label>
+                    <select
+                      id="factor"
+                      value={selectedFactorId}
+                      onChange={(e) => setSelectedFactorId(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {mfaFactors.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.friendly_name || `${f.factor_type} authenticator`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <Label htmlFor="mfa-code">Authentication code</Label>
+                  <Input
+                    id="mfa-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    required
+                    minLength={6}
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="mt-1.5 text-center tracking-[0.5em] text-lg font-semibold"
+                    placeholder="000000"
+                  />
+                </div>
+
+                {error && (
+                  <div className="rounded-xl bg-destructive/10 text-destructive text-sm p-3">
+                    {error}
+                  </div>
+                )}
+
+                <Button type="submit" className="w-full" disabled={isMfaLoading || mfaCode.length < 6 || !selectedFactorId}>
+                  {isMfaLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
+                  Verify
+                </Button>
+
+                <Button type="button" variant="outline" className="w-full" onClick={cancelMfa} disabled={isMfaLoading}>
+                  Cancel
+                </Button>
+              </form>
+            </div>
+          ) : (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="email">Email address</Label>
               <div className="relative mt-1.5">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -207,6 +291,7 @@ export default function LoginPage() {
               </Button>
             )}
           </div>
+        </>)}
         </div>
 
         <p className="text-center text-sm text-muted-foreground">

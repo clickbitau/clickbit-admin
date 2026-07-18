@@ -29,6 +29,7 @@
     "@supabase/supabase-js": "2.109.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "expo-server-sdk": "^3.14.0",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^9.0.3",
