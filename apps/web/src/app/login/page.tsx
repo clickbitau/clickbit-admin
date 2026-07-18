@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2, ShieldCheck, Fingerprint } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { createPasskeyLoginOptions, verifyPasskeyLogin } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +20,7 @@ function getDashboardPath(role?: string) {
 }
 
 export default function LoginPage() {
-  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, cancelMfa, clearError, oauthSignIn, sendMagicLink } = useAuth();
+  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, cancelMfa, clearError, oauthSignIn, sendMagicLink, setToken } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,6 +32,8 @@ export default function LoginPage() {
   const [mfaCode, setMfaCode] = useState('');
   const [selectedFactorId, setSelectedFactorId] = useState<string>('');
   const [isMfaLoading, setIsMfaLoading] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   useEffect(() => {
     if (mfaRequired && mfaFactors.length > 0 && !selectedFactorId) {
@@ -60,7 +63,7 @@ export default function LoginPage() {
     if (!selectedFactorId || mfaCode.length < 6) return;
     setIsMfaLoading(true);
     try {
-      await completeMfa(selectedFactorId, mfaCode);
+      await completeMfa(selectedFactorId, mfaCode, trustDevice);
     } finally {
       setIsMfaLoading(false);
     }
@@ -84,6 +87,29 @@ export default function LoginPage() {
     } catch (err: any) {
       alert(err.message || `${provider} sign in failed`);
       setOauthLoading(null);
+    }
+  };
+
+  const handlePasskey = async () => {
+    if (!window.PublicKeyCredential) {
+      alert('Passkeys are not supported in this browser.');
+      return;
+    }
+    setPasskeyLoading(true);
+    try {
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      const opts = await createPasskeyLoginOptions();
+      const auth = await startAuthentication({ optionsJSON: opts.data });
+      const res = await verifyPasskeyLogin({ ...auth, challenge: opts.data.challenge });
+      setToken(res.data.accessToken, res.data.refreshToken);
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') {
+        // cancelled
+      } else {
+        alert(err?.response?.data?.message || err?.message || 'Passkey sign in failed');
+      }
+    } finally {
+      setPasskeyLoading(false);
     }
   };
 
@@ -156,6 +182,16 @@ export default function LoginPage() {
                     placeholder="000000"
                   />
                 </div>
+
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={trustDevice}
+                    onChange={(e) => setTrustDevice(e.target.checked)}
+                    className="rounded border-input"
+                  />
+                  Trust this device for 7 days
+                </label>
 
                 {error && (
                   <div className="rounded-xl bg-destructive/10 text-destructive text-sm p-3">
@@ -291,6 +327,17 @@ export default function LoginPage() {
               </Button>
             )}
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={passkeyLoading}
+            onClick={handlePasskey}
+          >
+            {passkeyLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Fingerprint className="h-4 w-4 mr-2" />}
+            Sign in with passkey
+          </Button>
         </>)}
         </div>
 
