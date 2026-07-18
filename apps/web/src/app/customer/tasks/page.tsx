@@ -5,6 +5,8 @@ import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { fetchCustomerTasks } from '@/lib/api';
 import type { ProjectTask } from '@/types/crm';
 import { formatDate } from '@/lib/format';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
+import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { ListTodo } from 'lucide-react';
 
 export default function CustomerTasksPage() {
@@ -19,8 +21,16 @@ export default function CustomerTasksPage() {
       getRowId={(row) => row.id}
       columns={[
         { key: 'title', header: 'Title', accessor: 'title' },
-        { key: 'status', header: 'Status', accessor: 'status' },
-        { key: 'priority', header: 'Priority', accessor: 'priority' },
+        {
+          key: 'status',
+          header: 'Status',
+          cell: (row) => <StatusBadge status={row.status} />,
+        },
+        {
+          key: 'priority',
+          header: 'Priority',
+          cell: (row) => <PriorityBadge priority={row.priority} />,
+        },
         {
           key: 'due_date',
           header: 'Due',

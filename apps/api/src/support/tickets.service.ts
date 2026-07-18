@@ -350,7 +350,7 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException({ message: 'Ticket not found' });
 
     await this.markCustomerMessagesRead(ticket.id);
-    return ticket;
+    return mapTicket(ticket);
   }
 
   async replyToMyTicket(id: number, user: Profile, dto: Record<string, unknown>) {

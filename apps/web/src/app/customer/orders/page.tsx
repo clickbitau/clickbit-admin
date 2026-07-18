@@ -5,6 +5,7 @@ import { ResourceListPage } from '@/components/crm/ResourceListPage';
 import { fetchCustomerOrders } from '@/lib/api';
 import type { Order } from '@/types/crm';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ShoppingCart } from 'lucide-react';
 
 export default function CustomerOrdersPage() {
@@ -19,8 +20,16 @@ export default function CustomerOrdersPage() {
       getRowId={(row) => row.id}
       columns={[
         { key: 'order_number', header: 'Order #', accessor: 'order_number' },
-        { key: 'status', header: 'Status', accessor: 'status' },
-        { key: 'payment_status', header: 'Payment', accessor: 'payment_status' },
+        {
+          key: 'status',
+          header: 'Status',
+          cell: (row) => <StatusBadge status={row.status} />,
+        },
+        {
+          key: 'payment_status',
+          header: 'Payment',
+          cell: (row) => <StatusBadge status={row.payment_status} />,
+        },
         {
           key: 'total_amount',
           header: 'Total',

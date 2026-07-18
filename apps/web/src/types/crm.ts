@@ -282,8 +282,21 @@ export interface ProjectTask {
   customer_visible?: boolean;
   tags?: string[];
   subtasks?: ProjectTask[];
+  task_comments?: TaskComment[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface TaskComment {
+  id: number;
+  task_id: number;
+  author_id?: number | null;
+  content: string;
+  attachments?: unknown[];
+  is_internal?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  profiles?: { id: number; first_name?: string; last_name?: string; email?: string; avatar?: string | null } | null;
 }
 
 export interface TaskStats {
