@@ -205,6 +205,19 @@ export class NotificationsService {
     return { success: true, message: 'All notifications marked as read', unreadCount: 0 };
   }
 
+  async remove(user: UserLike, id: number) {
+    const notification = await this.prisma.notifications.findUnique({ where: { id } });
+    if (!notification) throw new NotFoundException('Notification not found');
+    if (!this.canAccessNotification(notification, user)) {
+      throw new ForbiddenException('Access denied');
+    }
+    await this.prisma.notifications.update({ where: { id }, data: { deleted_at: new Date() } });
+    const unreadCount = await this.prisma.notifications.count({
+      where: this.buildNotificationWhere(user, true),
+    });
+    return { success: true, message: 'Notification deleted', unreadCount };
+  }
+
   async savePushToken(user: UserLike, token: string) {
     if (!token) throw new BadRequestException('Push token required');
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
@@ -324,8 +337,8 @@ export class NotificationsService {
   private buildNotificationWhere(user: UserLike, unreadOnly: boolean): Prisma.notificationsWhereInput {
     const isStaff = ['admin', 'manager'].includes(user.role.toLowerCase());
     const where: Prisma.notificationsWhereInput = isStaff
-      ? { OR: [{ user_id: user.id }, { user_id: null }] }
-      : { user_id: user.id };
+      ? { deleted_at: null, OR: [{ user_id: user.id }, { user_id: null }] }
+      : { deleted_at: null, user_id: user.id };
     if (unreadOnly) (where as any).is_read = false;
     return where;
   }
