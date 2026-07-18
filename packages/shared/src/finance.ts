@@ -161,7 +161,15 @@ export interface InvoiceStats {
   cancelled: number;
   expired: number;
   overdue: number;
-  [key: string]: number;
+  totalAmount?: number;
+  paidAmount?: number;
+  outstandingAmount?: number;
+  overdueAmount?: number;
+  draftAmount?: number;
+  sentAmount?: number;
+  viewedAmount?: number;
+  partialAmount?: number;
+  [key: string]: number | undefined;
 }
 
 export interface PaymentStats {
