@@ -1310,6 +1310,14 @@ export async function addReaction(token: string, messageId: number, emoji: strin
   return (await api.post(`/api/messages/${messageId}/reactions`, { emoji }, { headers: authHeaders(token) })).data;
 }
 
+export async function removeReaction(token: string, messageId: number, emoji: string): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.delete(`/api/messages/${messageId}/reactions`, { data: { emoji }, headers: authHeaders(token) })).data;
+}
+
+export async function fetchMessageThread(token: string, messageId: number): Promise<MessageListResponse> {
+  return (await api.get(`/api/messages/${messageId}/thread`, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchMailAccounts(token: string): Promise<CommunicationLegacyDataResponse<MailAccount[]>> {
   return (await api.get('/api/mail/accounts', { headers: authHeaders(token) })).data;
 }
@@ -1331,7 +1339,11 @@ export async function fetchMailFolders(token: string, accountId: string): Promis
 }
 
 export async function fetchMailMessages(token: string, accountId: string, folderPath: string, params?: Record<string, string | number | boolean>): Promise<CommunicationLegacyListResponse<CachedEmail>> {
-  return (await api.get(`/api/mail/accounts/${accountId}/folders/${folderPath}/messages`, { params, headers: authHeaders(token) })).data;
+  return (await api.get(`/api/mail/accounts/${accountId}/folders/${encodeURIComponent(folderPath)}/messages`, { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchMailMessage(token: string, accountId: string, folderPath: string, uid: number): Promise<CommunicationLegacyDataResponse<CachedEmail>> {
+  return (await api.get(`/api/mail/accounts/${accountId}/folders/${encodeURIComponent(folderPath)}/messages/${uid}`, { headers: authHeaders(token) })).data;
 }
 
 export async function fetchMailTemplates(token: string): Promise<CommunicationLegacyDataResponse<EmailTemplate[]>> {
