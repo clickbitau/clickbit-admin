@@ -107,7 +107,7 @@ export class ProjectsService {
   async getRelated(id: number) {
     const project = await this.ensureProjectExists(id);
 
-    const [tasks, subprojects, documents, meetings, contacts, companies, invoices, expenses, tickets, financials] = await Promise.all([
+    const [tasks, subprojects, documents, meetings, contacts, companies, invoices, expenses, tickets, payments, financials] = await Promise.all([
       this.prisma.project_tasks.findMany({ where: { crm_project_id: id, deleted_at: null } }),
       this.prisma.crm_subprojects.findMany({ where: { parent_project_id: id, deleted_at: null } }),
       this.prisma.crm_project_documents.findMany({ where: { project_id: id } }),
@@ -117,6 +117,7 @@ export class ProjectsService {
       this.prisma.invoices.findMany({ where: { crm_project_id: id, deleted_at: null }, orderBy: { created_at: 'desc' } }),
       this.prisma.expenses.findMany({ where: { crm_project_id: id }, orderBy: { created_at: 'desc' } }),
       this.prisma.tickets.findMany({ where: { crm_project_id: id, deleted_at: null }, orderBy: { created_at: 'desc' } }),
+      this.prisma.payments.findMany({ where: { crm_project_id: id, deleted_at: null }, orderBy: { created_at: 'desc' } }),
       this.projectFinancials(id),
     ]);
 
@@ -131,6 +132,7 @@ export class ProjectsService {
       invoices,
       expenses,
       tickets,
+      payments,
       financials,
     };
   }

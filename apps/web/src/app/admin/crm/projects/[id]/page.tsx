@@ -33,6 +33,7 @@ import {
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { CrmProject, CrmSubproject, ProjectDocument, ProjectMeeting, ProjectTask } from '@/types/crm';
+import type { Payment } from '@/types/finance';
 import {
   ArrowLeft,
   Building2,
@@ -46,6 +47,7 @@ import {
   CheckCircle2,
   ExternalLink,
   AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -168,10 +170,10 @@ export default function ProjectDetailPage() {
     >
       {/* Header stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={DollarSign} label="Budget" value={formatCurrency(Number(project.budget ?? 0))} />
-        <StatCard icon={Briefcase} label="Revenue" value={formatCurrency(financials.totalValue)} />
-        <StatCard icon={CheckCircle2} label="Paid" value={formatCurrency(financials.totalPaid)} />
-        <StatCard icon={DollarSign} label="Net Profit" value={formatCurrency(financials.netProfit)} />
+        <StatCard icon={DollarSign} label="Budget" value={formatCurrency(Number(project.budget ?? 0), project.currency)} />
+        <StatCard icon={Briefcase} label="Revenue" value={formatCurrency(financials.totalValue, project.currency)} />
+        <StatCard icon={CheckCircle2} label="Paid" value={formatCurrency(financials.totalPaid, project.currency)} />
+        <StatCard icon={DollarSign} label="Net Profit" value={formatCurrency(financials.netProfit, project.currency)} />
       </div>
 
       {/* Progress and support */}
@@ -200,12 +202,17 @@ export default function ProjectDetailPage() {
               <span className="text-muted-foreground flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due</span>
               <span className={isOverdue ? 'text-red-600 font-medium' : ''}>{formatDate(project.due_date)}</span>
             </div>
-            {project.support_period_type && (
+            {project.support_period_type ? (
               <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                <p className="text-xs font-semibold uppercase text-muted-foreground">Support</p>
-                <p className="text-xs">{project.support_period_type} {project.support_price ? `· ${formatCurrency(Number(project.support_price))}` : ''}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Support</p>
+                  <SupportBadge project={project} />
+                </div>
+                <p className="text-xs">{project.support_period_type} {project.support_price ? `· ${formatCurrency(Number(project.support_price), project.support_currency || project.currency)}` : ''}</p>
                 <p className="text-xs text-muted-foreground">{formatDate(project.support_start_date)} - {formatDate(project.support_end_date)}</p>
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground pt-2 border-t border-gray-100 dark:border-gray-700">No support period set.</p>
             )}
           </CardContent>
         </Card>
@@ -219,11 +226,17 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="documents">Documents ({documentsData?.pagination?.totalItems ?? 0})</TabsTrigger>
           <TabsTrigger value="meetings">Meetings ({meetingsData?.pagination?.totalItems ?? 0})</TabsTrigger>
           <TabsTrigger value="invoices">Invoices ({relatedData?.invoices?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="payments">Payments ({relatedData?.payments?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="expenses">Expenses ({relatedData?.expenses?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="tickets">Tickets ({relatedData?.tickets?.length ?? 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/finance/invoices/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Invoice</Link>
+            </Button>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="lg:col-span-2">
               <CardHeader><CardTitle>About</CardTitle></CardHeader>
@@ -233,7 +246,7 @@ export default function ProjectDetailPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Project Type</span> <span>{project.project_type || '-'}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Estimated Hours</span> <span>{project.estimated_hours ?? '-'}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Actual Hours</span> <span>{project.actual_hours ?? '-'}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Hourly Rate</span> <span>{project.hourly_rate ? formatCurrency(Number(project.hourly_rate)) : '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Hourly Rate</span> <span>{project.hourly_rate ? formatCurrency(Number(project.hourly_rate), project.currency) : '-'}</span></div>
                 </div>
               </CardContent>
             </Card>
@@ -250,6 +263,11 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="tasks" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/crm/project-tasks/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Task</Link>
+            </Button>
+          </div>
           <DataTable
             headers={[
               { key: 'task', label: 'Task' },
@@ -277,6 +295,11 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="subprojects" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/crm/projects/new?parent_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Subproject</Link>
+            </Button>
+          </div>
           <DataTable
             headers={[
               { key: 'name', label: 'Subproject' },
@@ -296,7 +319,7 @@ export default function ProjectDetailPage() {
               <StatusBadge key="status" status={s.status} />,
               <div key="progress" className="w-24"><Progress value={s.progress_percentage ?? 0} className="h-1.5" /><p className="text-xs text-right mt-0.5">{s.progress_percentage ?? 0}%</p></div>,
               <PriorityBadge key="priority" priority={s.priority} />,
-              <span key="budget" className="text-sm">{formatCurrency(Number(s.budget ?? 0))}</span>,
+              <span key="budget" className="text-sm">{formatCurrency(Number(s.budget ?? 0), s.currency || project.currency)}</span>,
               <span key="due">{formatDate(s.due_date)}</span>,
             ]}
           />
@@ -306,6 +329,11 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/documents/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Document</Link>
+            </Button>
+          </div>
           <DataTable
             headers={[
               { key: 'name', label: 'File' },
@@ -364,6 +392,11 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="invoices" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/finance/invoices/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Invoice</Link>
+            </Button>
+          </div>
           <DataTable
             headers={[{ key: 'ref', label: 'Ref' }, { key: 'title', label: 'Title' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Issue Date' }]}
             data={relatedData?.invoices ?? []}
@@ -374,14 +407,42 @@ export default function ProjectDetailPage() {
             renderRow={(i) => [
               <span key="ref">{i.package_code || `#${i.id}`}</span>,
               <span key="title">{i.title || '-'}</span>,
-              <span key="amount">{formatCurrency(Number(i.total_amount ?? 0))}</span>,
+              <span key="amount">{formatCurrency(Number(i.total_amount ?? 0), i.currency || project.currency)}</span>,
               <StatusBadge key="status" status={i.status} />,
               <span key="date">{formatDate(i.issue_date)}</span>,
             ]}
           />
         </TabsContent>
 
+        <TabsContent value="payments" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/finance/payments/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Payment</Link>
+            </Button>
+          </div>
+          <DataTable
+            headers={[{ key: 'ref', label: 'Ref' }, { key: 'method', label: 'Method' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Date' }]}
+            data={(relatedData?.payments ?? []) as Payment[]}
+            keyExtractor={(p) => p.id}
+            loading={relatedLoading}
+            emptyText="No project payments."
+            onRowClick={(p) => router.push(`/admin/finance/payments/${p.id}`)}
+            renderRow={(p: Payment) => [
+              <span key="ref">{p.transaction_id || `#${p.id}`}</span>,
+              <span key="method">{p.payment_method || p.payment_provider || '-'}</span>,
+              <span key="amount">{formatCurrency(Number(p.amount ?? 0), p.currency || project.currency)}</span>,
+              <StatusBadge key="status" status={p.status} />,
+              <span key="date">{formatDate(p.payment_date || p.created_at)}</span>,
+            ]}
+          />
+        </TabsContent>
+
         <TabsContent value="expenses" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/finance/expenses/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Expense</Link>
+            </Button>
+          </div>
           <DataTable
             headers={[{ key: 'ref', label: 'Ref' }, { key: 'title', label: 'Title' }, { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'date', label: 'Date' }]}
             data={relatedData?.expenses ?? []}
@@ -392,7 +453,7 @@ export default function ProjectDetailPage() {
             renderRow={(e) => [
               <span key="ref">{e.expense_number || `#${e.id}`}</span>,
               <span key="title">{e.title || '-'}</span>,
-              <span key="amount">{formatCurrency(Number(e.total_amount ?? 0))}</span>,
+              <span key="amount">{formatCurrency(Number(e.total_amount ?? 0), e.currency || project.currency)}</span>,
               <StatusBadge key="status" status={e.status} />,
               <span key="date">{formatDate(e.expense_date)}</span>,
             ]}
@@ -400,6 +461,11 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="tickets" className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/support/new?project_id=${id}`}><Plus className="mr-1 h-4 w-4" /> New Ticket</Link>
+            </Button>
+          </div>
           <DataTable
             headers={[{ key: 'ticket', label: 'Ticket' }, { key: 'subject', label: 'Subject' }, { key: 'priority', label: 'Priority' }, { key: 'status', label: 'Status' }]}
             data={relatedData?.tickets ?? []}
@@ -418,6 +484,26 @@ export default function ProjectDetailPage() {
       </Tabs>
     </PageShell>
   );
+}
+
+function SupportBadge({ project }: { project: CrmProject }) {
+  const type = project.support_period_type;
+  const endDate = project.support_end_date ? new Date(project.support_end_date) : null;
+  if (type === 'lifetime') {
+    return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Lifetime</span>;
+  }
+  if (endDate) {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    const expired = endDate < now;
+    return (
+      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${expired ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
+        {expired ? 'Expired' : 'Active'}
+      </span>
+    );
+  }
+  return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">{type}</span>;
 }
 
 function StatCard({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: string }) {
