@@ -125,10 +125,11 @@ export class UsersService {
     if (sortBy === 'email') orderBy = [{ email: sortOrder }];
     if (sortBy === 'status') orderBy = [{ status: sortOrder }];
     if (sortBy === 'created_at') orderBy = [{ created_at: sortOrder }];
+    if (sortBy === 'last_login') orderBy = [{ last_login: sortOrder }];
 
     const [total, data] = await this.prisma.$transaction([
       this.prisma.profiles.count({ where }),
-      this.prisma.profiles.findMany({ where, select: { id: true, first_name: true, last_name: true, email: true, role: true, status: true, avatar: true, created_at: true, auth_uid: true, email_verified: true }, orderBy, skip: offset, take: limit }),
+      this.prisma.profiles.findMany({ where, select: { id: true, first_name: true, last_name: true, email: true, role: true, status: true, avatar: true, created_at: true, auth_uid: true, email_verified: true, last_login: true, locked_until: true, login_attempts: true }, orderBy, skip: offset, take: limit }),
     ]);
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }

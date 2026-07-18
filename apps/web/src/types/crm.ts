@@ -14,6 +14,11 @@ export interface User {
   job_title?: string | null;
   phone?: string | null;
   created_at?: string;
+  email_verified?: boolean;
+  auth_uid?: string | null;
+  last_login?: string | null;
+  locked_until?: string | null;
+  login_attempts?: number;
 }
 
 export interface Pagination {
