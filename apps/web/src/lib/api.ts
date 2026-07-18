@@ -1310,6 +1310,10 @@ export async function addReaction(token: string, messageId: number, emoji: strin
   return (await api.post(`/api/messages/${messageId}/reactions`, { emoji }, { headers: authHeaders(token) })).data;
 }
 
+export async function removeReaction(token: string, messageId: number, emoji: string): Promise<CommunicationLegacyMessageResponse> {
+  return (await api.delete(`/api/messages/${messageId}/reactions`, { data: { emoji }, headers: authHeaders(token) })).data;
+}
+
 export async function fetchMailAccounts(token: string): Promise<CommunicationLegacyDataResponse<MailAccount[]>> {
   return (await api.get('/api/mail/accounts', { headers: authHeaders(token) })).data;
 }
