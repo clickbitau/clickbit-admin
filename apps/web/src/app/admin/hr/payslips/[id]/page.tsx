@@ -96,7 +96,7 @@ export default function AdminPayslipDetailPage() {
       icon={FileText}
       description={payslip ? `${payslip.employee?.name || `Employee ${payslip.employee_id}`} · ${formatDate(payslip.pay_period_start)} – ${formatDate(payslip.pay_period_end)}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/hr/payslips"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           <Button variant="outline" size="sm" onClick={() => download.mutate()} disabled={download.isPending}><Download className="mr-1 h-4 w-4" /> PDF</Button>
           <Button variant="outline" size="sm" onClick={() => resend.mutate()} disabled={resend.isPending}><Mail className="mr-1 h-4 w-4" /> Resend</Button>
@@ -114,7 +114,7 @@ export default function AdminPayslipDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
                       <CardTitle className="text-2xl">{displayName}</CardTitle>
                       <p className="text-sm text-muted-foreground">{payslip.employee?.name || `Employee ${payslip.employee_id}`}</p>

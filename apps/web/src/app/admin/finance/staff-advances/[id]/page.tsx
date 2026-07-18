@@ -85,7 +85,7 @@ export default function StaffAdvanceDetailPage() {
       icon={HandCoins}
       description={`${employeeName} · ${advance.advance_type}`}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/finance/staff-advances"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
         </div>
       }

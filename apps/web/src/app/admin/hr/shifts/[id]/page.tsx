@@ -89,7 +89,7 @@ export default function AdminShiftDetailPage() {
       icon={Clock}
       description={shift ? `${shift.position || 'No position'} · ${shift.department || 'No department'}` : ''}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/hr/shifts"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
           {shift?.status !== 'confirmed' && <Button variant="outline" size="sm" onClick={() => confirm.mutate()} disabled={confirm.isPending}><CheckCircle className="mr-1 h-4 w-4" /> Confirm</Button>}
           <Button variant="destructive" size="sm" onClick={() => remove.mutate()} disabled={remove.isPending}><Trash className="mr-1 h-4 w-4" /> Delete</Button>
@@ -106,7 +106,7 @@ export default function AdminShiftDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
                       <CardTitle className="text-2xl">{displayName}</CardTitle>
                       <p className="text-sm text-muted-foreground">{shift.position || 'No position'} · {shift.department || 'No department'}</p>

@@ -527,7 +527,7 @@ export default function PipelinePage() {
       icon={Kanban}
       description="Drag and drop leads and deals across stages to manage your sales process."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <button
               onClick={() => setShowPipelineSelector(!showPipelineSelector)}

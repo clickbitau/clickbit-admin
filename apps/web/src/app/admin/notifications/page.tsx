@@ -132,7 +132,7 @@ export default function NotificationsPage() {
       description={`${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`}
       icon={Bell}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {unreadCount > 0 && (
             <Button variant="outline" size="sm" onClick={() => markAll.mutate()} disabled={markAll.isPending}>
               <CheckCheck className="mr-1 h-4 w-4" /> Mark all read

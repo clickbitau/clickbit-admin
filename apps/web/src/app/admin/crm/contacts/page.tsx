@@ -165,7 +165,7 @@ export default function ContactsPage() {
       icon={Contact}
       description="Manage leads, customers, and contact relationships"
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>

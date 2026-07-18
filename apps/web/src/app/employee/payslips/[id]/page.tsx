@@ -49,7 +49,7 @@ export default function EmployeePayslipDetailPage() {
       title={`Payslip — ${formatDate(payslip.pay_period_start)} to ${formatDate(payslip.pay_period_end)}`}
       icon={Receipt}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href="/employee/payslips"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>

@@ -76,7 +76,7 @@ export default function CustomerTicketDetailPage() {
       icon={Ticket}
       description={ticket.subject}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href="/customer/tickets"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>
