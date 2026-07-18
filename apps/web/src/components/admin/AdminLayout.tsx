@@ -33,6 +33,7 @@ import {
   ClipboardList,
   HandCoins,
   ListTodo,
+  CheckSquare,
   Star,
   TrendingUp,
   BarChart3,
@@ -78,6 +79,14 @@ const sections: NavSection[] = [
     icon: Home,
     flat: true,
     links: [{ href: '/admin', label: 'Dashboard', icon: Home }],
+  },
+  {
+    id: 'tasks',
+    label: 'Tasks',
+    icon: CheckSquare,
+    flat: true,
+    roles: ['admin', 'manager'],
+    links: [{ href: '/admin/tasks', label: 'All Tasks', icon: CheckSquare }],
   },
   {
     id: 'my-work',

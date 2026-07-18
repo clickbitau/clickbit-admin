@@ -1933,6 +1933,10 @@ export async function fetchTimeClockStatus(token: string): Promise<{ success: bo
   return (await api.get('/api/hr/time-clock/status', { headers: authHeaders(token) })).data;
 }
 
+export async function fetchTimeClockActive(token: string): Promise<{ success: boolean; data: any[]; message?: string }> {
+  return (await api.get('/api/hr/time-clock/active', { headers: authHeaders(token) })).data;
+}
+
 export async function clockIn(token: string, body?: Record<string, unknown>) {
   return (await api.post('/api/hr/time-clock/clock-in', body ?? {}, { headers: authHeaders(token) })).data;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -89,8 +89,14 @@ function microtaskProgress(microtasks: { is_completed?: boolean }[]) {
 export default function ProjectTasksPage() {
   const { token, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const isManager = user?.role === 'admin' || user?.role === 'manager';
+
+  const isGlobalTasks = pathname === '/admin/tasks';
+  const pageTitle = isGlobalTasks ? 'Tasks' : 'Project Tasks';
+  const pageDescription = isGlobalTasks ? 'Manage and track every task across the business' : 'Manage and track tasks across all projects';
+  const basePath = '/admin/crm/project-tasks';
 
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [page, setPage] = useState(1);
@@ -196,7 +202,22 @@ export default function ProjectTasksPage() {
   );
 
   function handleRowClick(task: ProjectTask) {
-    router.push(`/admin/crm/project-tasks/${task.id}`);
+    router.push(`${basePath}/${task.id}`);
+  }
+
+  function isOverdue(task: ProjectTask) {
+    if (task.status === 'completed' || !task.due_date) return false;
+    const due = new Date(task.due_date);
+    const now = new Date();
+    due.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
+    return due < now;
+  }
+
+  function isSlow(task: ProjectTask) {
+    const actual = typeof task.actual_hours === 'string' ? Number(task.actual_hours) : task.actual_hours;
+    const estimated = typeof task.estimated_hours === 'string' ? Number(task.estimated_hours) : task.estimated_hours;
+    return actual != null && estimated != null && estimated > 0 && actual > estimated;
   }
 
   function renderTaskMeta(task: ProjectTask) {
@@ -211,6 +232,16 @@ export default function ProjectTasksPage() {
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
             {daysUntil(task.due_date)}
+          </span>
+        )}
+        {isOverdue(task) && (
+          <span className="px-1.5 py-0.5 rounded-md bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200 text-[10px] font-semibold">
+            Overdue
+          </span>
+        )}
+        {!isOverdue(task) && isSlow(task) && (
+          <span className="px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200 text-[10px] font-semibold">
+            Slow
           </span>
         )}
         {task.estimated_hours !== undefined && task.estimated_hours !== null && (
@@ -280,37 +311,59 @@ export default function ProjectTasksPage() {
     );
   }
 
+  const KANBAN_COLUMNS = [
+    { key: 'todo', label: 'To Do', color: 'border-l-gray-400', header: 'text-gray-700' },
+    { key: 'overdue', label: 'Overdue', color: 'border-l-red-500', header: 'text-red-700', isPseudo: true },
+    { key: 'slow', label: 'Slow', color: 'border-l-orange-500', header: 'text-orange-700', isPseudo: true },
+    { key: 'in_progress', label: 'In Progress', color: 'border-l-blue-500', header: 'text-blue-700' },
+    { key: 'review', label: 'Review', color: 'border-l-purple-500', header: 'text-purple-700' },
+    { key: 'completed', label: 'Completed', color: 'border-l-emerald-500', header: 'text-emerald-700' },
+    { key: 'late_completed', label: 'Late Completion', color: 'border-l-red-500', header: 'text-red-700', isPseudo: true },
+    { key: 'blocked', label: 'Blocked', color: 'border-l-red-500', header: 'text-red-800' },
+  ];
+
   function KanbanView() {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {STATUSES.map((s) => {
-          const columnTasks = tasks.filter((t) => t.status === s.key);
-          return (
-            <div key={s.key} className="nm-raised-sm flex flex-col max-h-[65vh]">
-              <div className="p-3 border-b border-border/50 flex items-center justify-between">
-                <h3 className="font-semibold text-sm">{s.label}</h3>
-                <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{columnTasks.length}</span>
+      <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+        <div className="flex gap-4 min-w-max pb-4">
+          {KANBAN_COLUMNS.map((col) => {
+            let columnTasks: ProjectTask[] = [];
+            if (col.key === 'overdue') {
+              columnTasks = tasks.filter((t) => t.status !== 'completed' && t.status !== 'blocked' && isOverdue(t));
+            } else if (col.key === 'slow') {
+              columnTasks = tasks.filter((t) => t.status !== 'completed' && t.status !== 'blocked' && isSlow(t) && !isOverdue(t));
+            } else if (col.key === 'late_completed') {
+              columnTasks = tasks.filter((t) => t.status === 'completed' && isSlow(t));
+            } else {
+              columnTasks = tasks.filter((t) => t.status === col.key && !isSlow(t) && !isOverdue(t));
+            }
+            return (
+              <div key={col.key} className="nm-raised-sm flex flex-col w-[280px] max-h-[65vh]">
+                <div className="p-3 border-b border-border/50 flex items-center justify-between">
+                  <h3 className={`font-semibold text-sm ${col.header}`}>{col.label}</h3>
+                  <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{columnTasks.length}</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {columnTasks.map((task) => (
+                    <TaskCard key={task.id} task={task} />
+                  ))}
+                  {columnTasks.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
+                  )}
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                {columnTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} />
-                ))}
-                {columnTasks.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     );
   }
 
   return (
     <PageShell
-      title="Project Tasks"
+      title={pageTitle}
       icon={FolderKanban}
-      description="Manage and track tasks across all projects"
+      description={pageDescription}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center nm-raised-sm rounded-md p-0.5">
@@ -332,7 +385,7 @@ export default function ProjectTasksPage() {
             </Button>
           </div>
           <Button asChild>
-            <Link href="/admin/crm/project-tasks/new">
+            <Link href={`${basePath}/new`}>
               <Plus className="mr-1 h-4 w-4" /> New Task
             </Link>
           </Button>
