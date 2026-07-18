@@ -8,31 +8,52 @@ import {
   Calendar,
   Eye,
   PenLine,
-  CheckCircle,
+  Archive,
+  Star,
   Edit3,
   Trash2,
   ImageIcon,
+  Tag,
+  User,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ContentListPage } from '@/components/content/ContentListPage';
 import { fetchMarketingPosts, fetchAdminMarketingStats, fetchTeam, updateMarketingPost, deleteMarketingPost } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { BlogPost } from '@clickbit/shared/src/content';
-import type { User } from '@/types/crm';
+import type { User as TeamUser } from '@/types/crm';
 import { toast } from 'sonner';
 
+const statusOptions = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'archived', label: 'Archived' },
+];
+
 const statusBadge = (status: string) => {
-  switch (status) {
-    case 'published': return <Badge variant="default">Published</Badge>;
-    case 'draft': return <Badge variant="secondary">Draft</Badge>;
-    case 'scheduled': return <Badge variant="outline" className="text-blue-600">Scheduled</Badge>;
-    case 'archived': return <Badge variant="outline">Archived</Badge>;
-    default: return <Badge variant="outline">{status}</Badge>;
-  }
+  const map: Record<string, string> = {
+    published: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400',
+    draft: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400',
+    scheduled: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
+    archived: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
+  };
+  return map[status] || 'bg-gray-100 text-gray-700';
 };
+
+function asArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* empty */ }
+    return value ? [value] : [];
+  }
+  return [];
+}
 
 export default function AdminContentMarketingPage() {
   const { token } = useAuth();
@@ -61,6 +82,7 @@ export default function AdminContentMarketingPage() {
 
   const posts = useMemo(() => data?.posts ?? [], [data]);
   const stats = statsData ?? { total: 0, published: 0, draft: 0 };
+  const teamMembers = (team ?? []) as TeamUser[];
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-marketing'] });
@@ -75,30 +97,22 @@ export default function AdminContentMarketingPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteMarketingPost(token!, id),
-    onSuccess: () => { toast.success('Marketing post deleted'); invalidate(); },
+    onSuccess: () => { toast.success('Post deleted'); invalidate(); },
     onError: () => toast.error('Failed to delete post'),
   });
 
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    posts.forEach((p) => asArray(p.categories).forEach((c) => set.add(c)));
+    return Array.from(set).sort();
+  }, [posts]);
+
   const statCards = [
-    { label: 'Total', value: stats.total, icon: Megaphone },
+    { label: 'Total Posts', value: stats.total, icon: Megaphone },
     { label: 'Published', value: stats.published, icon: Eye, accent: 'success' as const },
     { label: 'Drafts', value: stats.draft, icon: PenLine, accent: 'warning' as const },
+    { label: 'Categories', value: categories.length, icon: Tag, accent: 'secondary' as const },
   ];
-
-  const teamMembers = (team ?? []) as User[];
-  const categories = useMemo(() => Array.from(new Set(posts.map((p) => (p.categories as string[] | undefined)?.[0]).filter(Boolean) as string[])).sort(), [posts]);
-
-  const nextStatus = (current: string) => {
-    if (current === 'draft' || current === 'scheduled') return 'published';
-    if (current === 'published') return 'archived';
-    if (current === 'archived') return 'published';
-    return 'published';
-  };
-
-  const statusActionLabel = (current: string) => {
-    if (current === 'draft' || current === 'scheduled' || current === 'archived') return 'Publish';
-    return 'Archive';
-  };
 
   const filterTabs = [
     { id: 'all', label: 'All', filter: () => true },
@@ -112,56 +126,63 @@ export default function AdminContentMarketingPage() {
   const searchFn = (p: BlogPost, q: string) =>
     (p.title || '').toLowerCase().includes(q) ||
     (p.excerpt || '').toLowerCase().includes(q) ||
-    (p.author ? `${p.author.first_name} ${p.author.last_name}` : '').toLowerCase().includes(q);
+    (p.slug || '').toLowerCase().includes(q) ||
+    (p.author ? `${p.author.first_name} ${p.author.last_name}` : '').toLowerCase().includes(q) ||
+    asArray(p.categories).some((c) => c.toLowerCase().includes(q)) ||
+    asArray(p.tags).some((t) => t.toLowerCase().includes(q));
 
   const customFilter = (p: BlogPost) => {
     const authorMatch = !author || String(p.author_id || '') === author;
-    const categoryMatch = !category || ((p.categories as string[] | undefined) ?? []).includes(category);
+    const cats = asArray(p.categories);
+    const categoryMatch = !category || cats.includes(category) || cats.some((c) => c.toLowerCase() === category.toLowerCase());
     return authorMatch && categoryMatch;
   };
 
-  const handleStatus = (p: BlogPost, e: React.MouseEvent) => {
-    e.stopPropagation();
-    statusMutation.mutate({ id: p.id, status: nextStatus(p.status) });
+  const handleStatus = (p: BlogPost, status: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (status === p.status) return;
+    statusMutation.mutate({ id: p.id, status });
   };
 
-  const handleDelete = (p: BlogPost, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = (p: BlogPost, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!window.confirm(`Delete "${p.title}"?`)) return;
     deleteMutation.mutate(p.id);
   };
 
+  const coverImage = (p: BlogPost) => p.featured_image || undefined;
+
+  const postDate = (p: BlogPost) => p.published_at ? formatDate(p.published_at) : p.scheduled_at ? formatDate(p.scheduled_at) : formatDate(p.created_at);
+
   const renderGridCard = (p: BlogPost) => (
-    <div className="nm-raised rounded-xl overflow-hidden group">
-      <div className="h-32 bg-muted nm-inset-sm m-3 rounded-lg overflow-hidden flex items-center justify-center">
-        {p.featured_image ? <img src={p.featured_image} alt={p.title} className="w-full h-full object-cover" /> : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+    <div className="nm-raised rounded-xl overflow-hidden group h-full flex flex-col">
+      <div className="h-40 bg-muted nm-inset-sm m-3 rounded-lg overflow-hidden flex items-center justify-center">
+        {coverImage(p) ? <img src={coverImage(p)} alt={p.title} className="w-full h-full object-cover" /> : <ImageIcon className="h-10 w-10 text-muted-foreground" />}
       </div>
-      <div className="px-5 pb-5">
+      <div className="px-5 pb-5 flex-1 flex flex-col">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold truncate">{p.title}</h3>
             <p className="text-xs text-muted-foreground">/{p.slug}</p>
           </div>
-          {statusBadge(p.status)}
+          <span className={`px-2 py-0.5 rounded-md text-xs font-medium border ${statusBadge(p.status)}`}>{p.status}</span>
         </div>
-        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{p.excerpt || 'No excerpt'}</p>
+        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{p.excerpt || 'No excerpt.'}</p>
+        <div className="flex flex-wrap gap-1 mt-3">
+          {asArray(p.categories).slice(0, 3).map((c) => <Badge key={c} variant="secondary" className="text-xs font-normal">{c}</Badge>)}
+        </div>
         <div className="flex flex-wrap gap-2 mt-3 text-xs text-muted-foreground">
-          <span>{p.author ? `${p.author.first_name} ${p.author.last_name}` : '—'}</span>
-          <span>•</span>
-          <span>{p.published_at ? formatDate(p.published_at) : p.scheduled_at ? formatDate(p.scheduled_at) : '—'}</span>
+          <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> {p.author ? `${p.author.first_name} ${p.author.last_name}` : '—'}</span>
+          <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" /> {postDate(p)}</span>
+          <span>{p.view_count ?? 0} views</span>
         </div>
-        <div className="flex items-center justify-between mt-4">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); statusMutation.mutate({ id: p.id, status: nextStatus(p.status) }); }}
-            disabled={statusMutation.isPending}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-all"
-          >
-            <CheckCircle className="h-3.5 w-3.5" /> {statusActionLabel(p.status)}
-          </button>
+        <div className="flex items-center justify-between mt-auto pt-4" onClick={(e) => e.stopPropagation()}>
+          <select value={p.status} onChange={(e) => handleStatus(p, e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs">
+            {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
           <div className="flex items-center gap-1">
-            <Link href={`/admin/content/marketing/${p.id}`} onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-muted-foreground hover:text-primary transition-all"><Edit3 className="h-4 w-4" /></Link>
-            <button type="button" onClick={(e) => handleDelete(p, e)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive transition-all"><Trash2 className="h-4 w-4" /></button>
+            <Link href={`/admin/content/marketing/${p.id}`} className="p-1.5 rounded-md text-muted-foreground hover:text-primary"><Edit3 className="h-4 w-4" /></Link>
+            <button type="button" onClick={(e) => handleDelete(p, e)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
           </div>
         </div>
       </div>
@@ -171,21 +192,28 @@ export default function AdminContentMarketingPage() {
   const renderTableRow = (p: BlogPost) => [
     <td key="title" className="px-4 py-4">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg nm-raised-sm overflow-hidden bg-muted flex items-center justify-center">
-          {p.featured_image ? <img src={p.featured_image} alt={p.title} className="w-full h-full object-cover" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}
+        <div className="w-12 h-12 rounded-lg nm-raised-sm overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
+          {coverImage(p) ? <img src={coverImage(p)} alt={p.title} className="w-full h-full object-cover" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}
         </div>
-        <div>
-          <div className="font-medium">{p.title}</div>
+        <div className="min-w-0">
+          <div className="font-medium truncate">{p.title}</div>
           <div className="text-xs text-muted-foreground">/{p.slug}</div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {asArray(p.categories).slice(0, 3).map((c) => <Badge key={c} variant="secondary" className="text-[10px] px-1 py-0">{c}</Badge>)}
+          </div>
         </div>
       </div>
     </td>,
     <td key="author" className="px-4 py-4 text-sm text-muted-foreground">{p.author ? `${p.author.first_name} ${p.author.last_name}` : '—'}</td>,
-    <td key="status" className="px-4 py-4">{statusBadge(p.status)}</td>,
-    <td key="published" className="px-4 py-4 text-sm text-muted-foreground">{p.published_at ? formatDate(p.published_at) : p.scheduled_at ? formatDate(p.scheduled_at) : '—'}</td>,
+    <td key="status" className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+      <select value={p.status} onChange={(e) => handleStatus(p, e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs">
+        {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+      </select>
+    </td>,
+    <td key="published" className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">{postDate(p)}</td>,
+    <td key="views" className="px-4 py-4 text-sm text-muted-foreground">{p.view_count ?? 0}</td>,
     <td key="actions" className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-end gap-1">
-        <button type="button" onClick={(e) => handleStatus(p, e)} className="p-1.5 rounded-md text-primary hover:bg-primary/10" title={statusActionLabel(p.status)}><CheckCircle className="h-4 w-4" /></button>
         <Link href={`/admin/content/marketing/${p.id}`} className="p-1.5 rounded-md text-muted-foreground hover:text-primary"><Edit3 className="h-4 w-4" /></Link>
         <button type="button" onClick={(e) => handleDelete(p, e)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
       </div>
@@ -195,17 +223,18 @@ export default function AdminContentMarketingPage() {
   return (
     <ContentListPage
       title="Marketing"
-      icon={Megaphone}
       description="Create and manage marketing content."
+      icon={Megaphone}
       newHref="/admin/content/marketing/new"
       newLabel="New Post"
       items={posts}
       isLoading={isLoading}
       statCards={statCards}
-      searchPlaceholder="Search marketing posts..."
+      searchPlaceholder="Search marketing posts, authors, categories, tags..."
       searchFn={searchFn}
       filterTabs={filterTabs}
       customFilter={customFilter}
+      pageSize={10}
       headerChildren={
         <>
           <select value={author} onChange={(e) => setAuthor(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
@@ -218,7 +247,7 @@ export default function AdminContentMarketingPage() {
           </select>
         </>
       }
-      tableHeaders={[{ key: 'title', label: 'Title' }, { key: 'author', label: 'Author' }, { key: 'status', label: 'Status' }, { key: 'published', label: 'Published' }, { key: 'actions', label: '', className: 'text-right' }]}
+      tableHeaders={[{ key: 'title', label: 'Post' }, { key: 'author', label: 'Author' }, { key: 'status', label: 'Status' }, { key: 'published', label: 'Published' }, { key: 'views', label: 'Views' }, { key: 'actions', label: '', className: 'text-right' }]}
       renderGridCard={renderGridCard}
       renderTableRow={renderTableRow}
       onRowClick={(p) => router.push(`/admin/content/marketing/${p.id}`)}
