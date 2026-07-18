@@ -4,14 +4,13 @@ import { PageShell } from '@/components/design-system/PageShell';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings, Users, UserCircle, ShieldCheck, BarChart3, FileText } from 'lucide-react';
+import { Settings, Users, UserCircle, ShieldCheck, FileText } from 'lucide-react';
 
 const modules = [
   { label: 'Site Settings', href: '/admin/settings', icon: Settings },
   { label: 'Users', href: '/admin/settings/users', icon: Users },
   { label: 'Profile', href: '/admin/settings/profile', icon: UserCircle },
   { label: 'Audit Logs', href: '/admin/settings/audit-logs', icon: ShieldCheck },
-  { label: 'Dashboard Stats', href: '/admin/settings/dashboard', icon: BarChart3 },
   { label: 'Billing Settings', href: '/admin/settings/billing', icon: FileText },
 ];
 

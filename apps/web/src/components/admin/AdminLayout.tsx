@@ -199,7 +199,6 @@ const sections: NavSection[] = [
       { href: '/admin/settings/users', label: 'Users', icon: Users },
       { href: '/admin/settings/credentials', label: 'Credentials', icon: Lock },
       { href: '/admin/settings/audit-logs', label: 'Audit Logs', icon: Activity },
-      { href: '/admin/settings/dashboard', label: 'Dashboard', icon: BarChart3 },
       { href: '/admin/settings/pdf-templates', label: 'PDF Templates', icon: FileText },
       { href: '/admin/settings/public-content', label: 'Public Content', icon: Globe },
       { href: '/admin/settings/billing', label: 'Billing', icon: CreditCard },

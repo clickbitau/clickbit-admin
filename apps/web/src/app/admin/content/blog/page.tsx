@@ -1,69 +1,51 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import {
-  Plus,
-  BookOpen as BookOpenIcon,
+  BookOpen,
+  Calendar,
   Eye,
   PenLine,
-  Calendar,
   Archive,
-  Trash2,
-  CheckCircle,
   Star,
+  CheckCircle,
   Edit3,
+  Trash2,
+  ImageIcon,
 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { PageShell } from '@/components/design-system/PageShell';
-import { DataTable } from '@/components/design-system/DataTable';
-import { Pagination } from '@/components/design-system/Pagination';
-import { ConfirmDialog } from '@/components/design-system/ConfirmDialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { StatCards } from '@/components/design-system/StatCards';
-import {
-  fetchAdminBlogPosts,
-  fetchAdminBlogStats,
-  fetchTeam,
-  updateBlogPost,
-  deleteBlogPost,
-} from '@/lib/api';
+import { ContentListPage } from '@/components/content/ContentListPage';
+import { fetchAdminBlogPosts, fetchAdminBlogStats, fetchTeam, updateBlogPost, deleteBlogPost } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { toast } from 'sonner';
-import type { BlogPost } from '@/types/content';
+import type { BlogPost } from '@clickbit/shared/src/content';
 import type { User } from '@/types/crm';
+import { toast } from 'sonner';
 
-const statusOptions = ['', 'draft', 'published', 'scheduled', 'archived'];
-const limit = 25;
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'published': return <Badge variant="default">Published</Badge>;
+    case 'draft': return <Badge variant="secondary">Draft</Badge>;
+    case 'scheduled': return <Badge variant="outline" className="text-blue-600">Scheduled</Badge>;
+    case 'archived': return <Badge variant="outline">Archived</Badge>;
+    default: return <Badge variant="outline">{status}</Badge>;
+  }
+};
 
 export default function AdminContentBlogPage() {
   const { token } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState('');
-  const [page, setPage] = useState(1);
-  const [deleting, setDeleting] = useState<BlogPost | null>(null);
-
-  const params: Record<string, string | number> = { limit, offset: (page - 1) * limit };
-  if (search) params.search = search;
-  if (status) params.status = status;
-  if (author) params.author = author;
-  if (category) params.category = category;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-blog', token, page, search, status, author, category],
-    queryFn: () => {
-      if (!token) throw new Error('No token');
-      return fetchAdminBlogPosts(token, params);
-    },
+    queryKey: ['admin-blog', token],
+    queryFn: () => { if (!token) throw new Error('No token'); return fetchAdminBlogPosts(token, { limit: 1000 }); },
     enabled: !!token,
   });
 
@@ -79,9 +61,7 @@ export default function AdminContentBlogPage() {
     enabled: !!token,
   });
 
-  const posts = data?.posts ?? [];
-  const pagination = data?.pagination ?? { total: 0, limit, offset: 0, hasMore: false };
-  const totalPages = Math.max(1, Math.ceil(pagination.total / limit));
+  const posts = useMemo(() => data?.posts ?? [], [data]);
   const stats = statsData ?? { total: 0, published: 0, draft: 0, scheduled: 0, archived: 0, featured: 0 };
 
   const invalidate = () => {
@@ -97,26 +77,21 @@ export default function AdminContentBlogPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteBlogPost(token!, id),
-    onSuccess: () => { toast.success('Post deleted'); setDeleting(null); invalidate(); },
+    onSuccess: () => { toast.success('Post deleted'); invalidate(); },
     onError: () => toast.error('Failed to delete post'),
   });
 
   const statCards = [
-    { label: 'Total', value: stats.total, icon: BookOpenIcon },
-    { label: 'Published', value: stats.published, icon: Eye, accent: 'success' as const, onClick: () => { setStatus('published'); setPage(1); } },
-    { label: 'Drafts', value: stats.draft, icon: PenLine, accent: 'warning' as const, onClick: () => { setStatus('draft'); setPage(1); } },
-    { label: 'Scheduled', value: stats.scheduled, icon: Calendar, accent: 'primary' as const, onClick: () => { setStatus('scheduled'); setPage(1); } },
-    { label: 'Archived', value: stats.archived, icon: Archive, accent: 'secondary' as const, onClick: () => { setStatus('archived'); setPage(1); } },
-    { label: 'Featured', value: stats.featured, icon: Star, accent: 'destructive' as const, onClick: () => { setStatus(''); setPage(1); } },
+    { label: 'Total', value: stats.total, icon: BookOpen },
+    { label: 'Published', value: stats.published, icon: Eye, accent: 'success' as const },
+    { label: 'Drafts', value: stats.draft, icon: PenLine, accent: 'warning' as const },
+    { label: 'Scheduled', value: stats.scheduled, icon: Calendar, accent: 'primary' as const },
+    { label: 'Archived', value: stats.archived, icon: Archive, accent: 'secondary' as const },
+    { label: 'Featured', value: stats.featured, icon: Star, accent: 'destructive' as const },
   ];
 
-  const statusBadge = (status: string) => {
-    if (status === 'published') return <Badge variant="default">Published</Badge>;
-    if (status === 'draft') return <Badge variant="secondary">Draft</Badge>;
-    if (status === 'scheduled') return <Badge variant="outline" className="text-blue-600">Scheduled</Badge>;
-    if (status === 'archived') return <Badge variant="outline">Archived</Badge>;
-    return <Badge variant="outline">{status}</Badge>;
-  };
+  const teamMembers = (team ?? []) as User[];
+  const categories = useMemo(() => Array.from(new Set(posts.map((p) => (p.categories as string[] | undefined)?.[0]).filter(Boolean) as string[])).sort(), [posts]);
 
   const nextStatus = (current: string) => {
     if (current === 'draft' || current === 'scheduled') return 'published';
@@ -130,100 +105,132 @@ export default function AdminContentBlogPage() {
     return 'Archive';
   };
 
-  const teamMembers = (team ?? []) as User[];
+  const filterTabs = [
+    { id: 'all', label: 'All', filter: () => true },
+    { id: 'published', label: 'Published', filter: (p: BlogPost) => p.status === 'published', activeClassName: 'bg-emerald-600 text-white' },
+    { id: 'draft', label: 'Draft', filter: (p: BlogPost) => p.status === 'draft', activeClassName: 'bg-gray-600 text-white' },
+    { id: 'scheduled', label: 'Scheduled', filter: (p: BlogPost) => p.status === 'scheduled', activeClassName: 'bg-blue-600 text-white' },
+    { id: 'archived', label: 'Archived', filter: (p: BlogPost) => p.status === 'archived', activeClassName: 'bg-amber-600 text-white' },
+    { id: 'featured', label: 'Featured', filter: (p: BlogPost) => !!p.featured, activeClassName: 'bg-yellow-500 text-white' },
+  ];
+
+  const searchFn = (p: BlogPost, q: string) =>
+    (p.title || '').toLowerCase().includes(q) ||
+    (p.excerpt || '').toLowerCase().includes(q) ||
+    (p.author ? `${p.author.first_name} ${p.author.last_name}` : '').toLowerCase().includes(q);
+
+  const customFilter = (p: BlogPost) => {
+    const authorMatch = !author || String(p.author_id || '') === author;
+    const categoryMatch = !category || ((p.categories as string[] | undefined) ?? []).includes(category);
+    return authorMatch && categoryMatch;
+  };
+
+  const handleStatus = (p: BlogPost, e: React.MouseEvent) => {
+    e.stopPropagation();
+    statusMutation.mutate({ id: p.id, status: nextStatus(p.status) });
+  };
+
+  const handleDelete = (p: BlogPost, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${p.title}"?`)) return;
+    deleteMutation.mutate(p.id);
+  };
+
+  const renderGridCard = (p: BlogPost) => (
+    <div className="nm-raised rounded-xl overflow-hidden group">
+      <div className="h-32 bg-muted nm-inset-sm m-3 rounded-lg overflow-hidden flex items-center justify-center">
+        {p.featured_image ? <img src={p.featured_image} alt={p.title} className="w-full h-full object-cover" /> : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+      </div>
+      <div className="px-5 pb-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold truncate">{p.title}</h3>
+            <p className="text-xs text-muted-foreground">/{p.slug}</p>
+          </div>
+          {statusBadge(p.status)}
+        </div>
+        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{p.excerpt || 'No excerpt'}</p>
+        <div className="flex flex-wrap gap-2 mt-3 text-xs text-muted-foreground">
+          <span>{p.author ? `${p.author.first_name} ${p.author.last_name}` : '—'}</span>
+          <span>•</span>
+          <span>{p.published_at ? formatDate(p.published_at) : p.scheduled_at ? formatDate(p.scheduled_at) : '—'}</span>
+          <span>•</span>
+          <span>{p.view_count ?? 0} views</span>
+        </div>
+        <div className="flex items-center justify-between mt-4">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); statusMutation.mutate({ id: p.id, status: nextStatus(p.status) }); }}
+            disabled={statusMutation.isPending}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-all"
+          >
+            <CheckCircle className="h-3.5 w-3.5" /> {statusActionLabel(p.status)}
+          </button>
+          <div className="flex items-center gap-1">
+            <Link href={`/admin/content/blog/${p.id}`} onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-muted-foreground hover:text-primary transition-all"><Edit3 className="h-4 w-4" /></Link>
+            <button type="button" onClick={(e) => handleDelete(p, e)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive transition-all"><Trash2 className="h-4 w-4" /></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTableRow = (p: BlogPost) => [
+    <td key="title" className="px-4 py-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg nm-raised-sm overflow-hidden bg-muted flex items-center justify-center">
+          {p.featured_image ? <img src={p.featured_image} alt={p.title} className="w-full h-full object-cover" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}
+        </div>
+        <div>
+          <div className="font-medium">{p.title}</div>
+          <div className="text-xs text-muted-foreground">/{p.slug}</div>
+        </div>
+      </div>
+    </td>,
+    <td key="author" className="px-4 py-4 text-sm text-muted-foreground">{p.author ? `${p.author.first_name} ${p.author.last_name}` : '—'}</td>,
+    <td key="status" className="px-4 py-4">{statusBadge(p.status)}</td>,
+    <td key="published" className="px-4 py-4 text-sm text-muted-foreground">{p.published_at ? formatDate(p.published_at) : p.scheduled_at ? formatDate(p.scheduled_at) : '—'}</td>,
+    <td key="views" className="px-4 py-4 text-sm text-muted-foreground">{p.view_count ?? 0}</td>,
+    <td key="actions" className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-end gap-1">
+        <button type="button" onClick={(e) => handleStatus(p, e)} className="p-1.5 rounded-md text-primary hover:bg-primary/10" title={statusActionLabel(p.status)}><CheckCircle className="h-4 w-4" /></button>
+        <Link href={`/admin/content/blog/${p.id}`} className="p-1.5 rounded-md text-muted-foreground hover:text-primary"><Edit3 className="h-4 w-4" /></Link>
+        <button type="button" onClick={(e) => handleDelete(p, e)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+      </div>
+    </td>,
+  ];
 
   return (
-    <PageShell
+    <ContentListPage
       title="Blog"
-      icon={BookOpenIcon}
+      icon={BookOpen}
       description="Create, schedule, and manage blog articles."
-      actions={<Button asChild><Link href="/admin/content/blog/new"><Plus className="mr-1 h-4 w-4" /> New Post</Link></Button>}
-    >
-      <StatCards cards={statCards} />
-
-      <Card>
-        <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Input
-            placeholder="Search posts..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="sm:max-w-sm"
-          />
-          <select
-            value={status}
-            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
-            {statusOptions.map((s) => <option key={s} value={s}>{s ? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'All statuses'}</option>)}
-          </select>
-          <select
-            value={author}
-            onChange={(e) => { setAuthor(e.target.value); setPage(1); }}
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
+      newHref="/admin/content/blog/new"
+      newLabel="New Post"
+      items={posts}
+      isLoading={isLoading}
+      statCards={statCards}
+      searchPlaceholder="Search posts..."
+      searchFn={searchFn}
+      filterTabs={filterTabs}
+      customFilter={customFilter}
+      headerChildren={
+        <>
+          <select value={author} onChange={(e) => setAuthor(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
             <option value="">All authors</option>
-            {teamMembers.map((u) => (
-              <option key={u.id} value={u.id}>{`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email}</option>
-            ))}
+            {teamMembers.map((u) => (<option key={u.id} value={String(u.id)}>{`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email}</option>))}
           </select>
-          <Input
-            placeholder="Category..."
-            value={category}
-            onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-            className="max-w-xs"
-          />
-        </CardContent>
-      </Card>
-
-      <DataTable<BlogPost>
-        headers={[{ key: 'title', label: 'Title' }, { key: 'author', label: 'Author' }, { key: 'status', label: 'Status' }, { key: 'published', label: 'Published / Scheduled' }, { key: 'views', label: 'Views' }, { key: 'actions', label: '' }]}
-        data={posts}
-        loading={isLoading}
-        emptyText="No blog posts found."
-        keyExtractor={(p) => p.id}
-        onRowClick={(p) => router.push(`/admin/content/blog/${p.id}`)}
-        renderRow={(p) => [
-          <div key="title">
-            <p className="font-medium">{p.title}</p>
-            <p className="text-xs text-muted-foreground">/{p.slug}</p>
-          </div>,
-          <span key="author" className="text-sm text-muted-foreground">{p.author ? `${p.author.first_name} ${p.author.last_name}` : '—'}</span>,
-          <div key="status">{statusBadge(p.status)}</div>,
-          <span key="published" className="text-sm text-muted-foreground">
-            {p.published_at ? formatDate(p.published_at) : p.scheduled_at ? formatDate(p.scheduled_at) : '—'}
-          </span>,
-          <span key="views" className="text-sm text-muted-foreground">{p.view_count ?? 0}</span>,
-          <div key="actions" className="flex items-center justify-end gap-1">
-            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); router.push(`/admin/content/blog/${p.id}`); }} title="Edit">
-              <Edit3 className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); statusMutation.mutate({ id: p.id, status: nextStatus(p.status) }); }} title={statusActionLabel(p.status)}>
-              <CheckCircle className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleting(p); }} title="Delete">
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>,
-        ]}
-      />
-
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={pagination.total}
-        onPageChange={setPage}
-      />
-
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => { if (!open) setDeleting(null); }}
-        title="Delete blog post"
-        description={deleting ? `Delete "${deleting.title}"? This cannot be undone.` : ''}
-        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
-        loading={deleteMutation.isPending}
-        confirmLabel="Delete"
-      />
-    </PageShell>
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
+            <option value="">All categories</option>
+            {categories.map((c) => (<option key={c} value={c}>{c}</option>))}
+          </select>
+        </>
+      }
+      tableHeaders={[{ key: 'title', label: 'Title' }, { key: 'author', label: 'Author' }, { key: 'status', label: 'Status' }, { key: 'published', label: 'Published / Scheduled' }, { key: 'views', label: 'Views' }, { key: 'actions', label: '', className: 'text-right' }]}
+      renderGridCard={renderGridCard}
+      renderTableRow={renderTableRow}
+      onRowClick={(p) => router.push(`/admin/content/blog/${p.id}`)}
+      emptyText="No blog posts found."
+    />
   );
 }
