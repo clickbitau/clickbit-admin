@@ -72,8 +72,11 @@ export interface CrmContact {
   last_contacted_at?: string | null;
   commission_type?: 'none' | 'percentage' | 'fixed_amount';
   commission_rate?: number;
+  commission_due?: number;
   client_count?: number;
   client_revenue?: number;
+  contact_count?: number;
+  avatar_url?: string | null;
   created_at?: string;
   updated_at?: string;
   effective_email?: string | null;

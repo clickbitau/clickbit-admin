@@ -373,7 +373,7 @@ export class AdminController {
   @Put('companies/:id/assign-agent')
   async assignAgentToCompany(
     @Param('id', ParseIntPipe) companyId: number,
-    @Body('contact_id') contactId: number,
+    @Body('contact_id') contactId: number | null,
   ) {
     return this.adminService.assignAgentToCompany(companyId, contactId);
   }

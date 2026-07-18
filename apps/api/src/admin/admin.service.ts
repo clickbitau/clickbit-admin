@@ -1062,23 +1062,37 @@ export class AdminService {
   async promoteToAgent(id: number) {
     const existing = await this.prisma.contacts.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Contact not found');
-    const row = await this.prisma.contacts.update({ where: { id }, data: { contact_type: 'agent' } as any });
+    const data: any = { contact_type: 'agent', lifecycle_stage: 'agent' };
+    if (existing.user_id) {
+      await this.prisma.profiles.updateMany({ where: { id: existing.user_id }, data: { role: 'agent' } });
+    }
+    const row = await this.prisma.contacts.update({ where: { id }, data });
     return { success: true, data: row };
   }
 
   async logContact(id: number, body: any, userId: number) {
     const existing = await this.prisma.contacts.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Contact not found');
+    const method = body.method || 'other';
+    const methodLabel = method.charAt(0).toUpperCase() + method.slice(1);
+    const activityTypeMap: Record<string, string> = { whatsapp: 'call', phone: 'call', email: 'email', meeting: 'meeting', other: 'other' };
     await this.prisma.crm_activities.create({
       data: {
-        activity_type: 'note',
-        subject: body.subject || 'Contact log',
+        activity_type: activityTypeMap[method] || 'other',
+        subject: body.subject || `${methodLabel} contact with ${existing.name}`,
         description: body.notes || '',
         contact_id: id,
         created_by: userId,
+        completed_at: body.date ? new Date(body.date) : new Date(),
+        due_date: body.date ? new Date(body.date) : new Date(),
+        status: 'completed',
+        custom_fields: { method },
       } as any,
     });
-    const row = await this.prisma.contacts.update({ where: { id }, data: { last_contacted_at: new Date() } });
+    const row = await this.prisma.contacts.update({
+      where: { id },
+      data: { last_contacted_at: body.date ? new Date(body.date) : new Date(), contact_count: { increment: 1 } },
+    });
     return { success: true, data: row };
   }
 
@@ -1122,13 +1136,15 @@ export class AdminService {
   // -------------------------------------------------------------------------
   // Companies
   // -------------------------------------------------------------------------
-  async assignAgentToCompany(companyId: number, contactId: number) {
+  async assignAgentToCompany(companyId: number, contactId: number | null) {
     const company = await this.prisma.companies.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Company not found');
-    const contact = await this.prisma.contacts.findUnique({ where: { id: contactId } });
-    if (!contact) throw new NotFoundException('Contact not found');
-    await this.prisma.companies.update({ where: { id: companyId }, data: { agent_id: contactId } });
-    return { success: true, message: 'Agent assigned to company' };
+    if (contactId) {
+      const contact = await this.prisma.contacts.findUnique({ where: { id: contactId } });
+      if (!contact) throw new NotFoundException('Contact not found');
+    }
+    await this.prisma.companies.update({ where: { id: companyId }, data: { agent_id: contactId ?? null } });
+    return { success: true, message: contactId ? 'Agent assigned to company' : 'Agent removed from company' };
   }
 
   // -------------------------------------------------------------------------
