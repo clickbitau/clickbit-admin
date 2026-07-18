@@ -1,31 +1,108 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, Coffee, MapPin, Play, Square, Users } from 'lucide-react';
+import { toast } from 'sonner';
+import { Clock, Coffee, MapPin, Play, Square, Users, Timer, Calendar, Plus, Trash2, Loader2 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { clockIn, clockOut, endBreak, fetchTimeClockActive, fetchTimeClockStatus, startBreak } from '@/lib/api';
+import { clockIn, clockOut, endBreak, fetchMyTasks, fetchTasks, fetchTimeClockActive, fetchTimeClockStatus, startBreak } from '@/lib/api';
+import type { ProjectTask } from '@/types/crm';
 
-function formatDuration(minutes?: number | null) {
-  if (!minutes) return '0h 0m';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${h}h ${m}m`;
+function formatTime(date: Date) {
+  return date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+}
+
+function formatDateTime(value: string | Date | null | undefined) {
+  if (!value) return '-';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('en-AU');
+}
+
+function formatDurationSeconds(totalSeconds: number) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+interface LocationState {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  accuracy?: number;
+}
+
+interface WorkSelection {
+  selected: boolean;
+  hours: string;
+  note: string;
+}
+
+interface AdHocItem {
+  description: string;
+  hours: string;
+  task_id?: number;
 }
 
 export default function AdminHrTimeClockPage() {
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
   const isManager = user?.role === 'admin' || user?.role === 'manager';
-  const [location, setLocation] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
+
+  const [now, setNow] = useState(Date.now());
+  const [location, setLocation] = useState<LocationState | null>(null);
   const [locating, setLocating] = useState(false);
+
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [myTasks, setMyTasks] = useState<ProjectTask[]>([]);
+  const [selectedTasks, setSelectedTasks] = useState<Record<number, WorkSelection>>({});
+  const [adhocItems, setAdHocItems] = useState<AdHocItem[]>([]);
+  const [sessionNotes, setSessionNotes] = useState('');
+  const [fetchingTasks, setFetchingTasks] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ProjectTask[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [activeAdhocIndex, setActiveAdhocIndex] = useState<number | null>(null);
+
+  const [activeEntryCache, setActiveEntryCache] = useState<{ clockInTime?: string; isOnBreak?: boolean; totalBreakMinutes?: number } | null>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('clickbit-admin-timeclock');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Date.now() - parsed.ts < 5 * 60 * 1000) {
+          setActiveEntryCache(parsed.data);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['time-clock-status', token],
@@ -36,7 +113,30 @@ export default function AdminHrTimeClockPage() {
     enabled: !!token,
   });
 
-  const status = data?.data;
+  const status: Record<string, any> = data?.data || {};
+
+  useEffect(() => {
+    if (status?.activeEntry) {
+      try {
+        localStorage.setItem('clickbit-admin-timeclock', JSON.stringify({ ts: Date.now(), data: status.activeEntry }));
+      } catch {
+        // ignore
+      }
+    }
+  }, [status?.activeEntry]);
+
+  const activeEntry = status?.activeEntry || activeEntryCache;
+  const clockedIn = !!activeEntry;
+  const isOnBreak = activeEntry?.isOnBreak ?? false;
+
+  const durationSeconds = useMemo(() => {
+    if (!activeEntry || activeEntry.isOnBreak) return 0;
+    const start = activeEntry.clock_in_time || activeEntry.clockInTime;
+    if (!start) return 0;
+    const started = new Date(start).getTime();
+    const breakSeconds = (activeEntry.total_break_minutes || activeEntry.totalBreakMinutes || 0) * 60;
+    return Math.max(0, Math.floor((now - started) / 1000) - breakSeconds);
+  }, [now, activeEntry]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['time-clock-status', token] });
@@ -63,15 +163,32 @@ export default function AdminHrTimeClockPage() {
       }
       return clockIn(token, body);
     },
-    onSuccess: refresh,
+    onSuccess: () => {
+      toast.success('Clocked in');
+      refresh();
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to clock in');
+    },
   });
 
   const clockOutMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (body: Record<string, unknown>) => {
       if (!token) throw new Error('No token');
-      return clockOut(token, location ? { latitude: String(location.latitude), longitude: String(location.longitude), address: location.address } : {});
+      return clockOut(token, body);
     },
-    onSuccess: refresh,
+    onSuccess: (res: any) => {
+      const msg = res?.data?.formattedDuration ? `Clocked out. Total: ${res.data.formattedDuration}` : 'Clocked out';
+      toast.success(msg);
+      setSummaryOpen(false);
+      setSelectedTasks({});
+      setAdHocItems([]);
+      setSessionNotes('');
+      refresh();
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to clock out');
+    },
   });
 
   const breakStartMutation = useMutation({
@@ -95,86 +212,202 @@ export default function AdminHrTimeClockPage() {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy });
         setLocating(false);
       },
       () => setLocating(false),
+      { enableHighAccuracy: true },
     );
   };
 
-  const activeCount = (activeData?.data || []).length;
-  const onBreakCount = (activeData?.data || []).filter((e: any) => e.is_on_break).length;
+  const activeEmployees = (activeData?.data || []) as any[];
+  const activeCount = activeEmployees.length;
+  const onBreakCount = activeEmployees.filter((e) => e.is_on_break).length;
 
   const statCards = [
-    { label: 'Clocked In', value: status?.clockedIn ? 'Yes' : 'No', icon: Clock, accent: status?.clockedIn ? ('success' as const) : undefined },
-    { label: 'On Break', value: status?.isOnBreak ? 'Yes' : 'No', icon: Coffee, accent: status?.isOnBreak ? ('warning' as const) : undefined },
-    { label: 'Today Worked', value: formatDuration(status?.todaySummary?.totalMinutes), icon: Clock },
-    { label: 'Breaks', value: formatDuration(status?.todaySummary?.breakMinutes), icon: Coffee },
+    { label: 'Current Time', value: formatTime(new Date(now)), icon: Clock },
+    { label: 'Status', value: clockedIn ? (isOnBreak ? 'On Break' : 'Clocked In') : 'Clocked Out', icon: Clock, accent: clockedIn ? (isOnBreak ? ('warning' as const) : ('success' as const)) : undefined },
+    { label: "Today's Hours", value: Number(status?.todayHours || 0).toFixed(2), icon: Timer },
+    { label: 'This Week', value: Number(status?.weeklyHours || 0).toFixed(2), icon: Calendar },
     ...(isManager ? [{ label: 'Active Employees', value: activeCount, icon: Users, accent: activeCount ? ('primary' as const) : undefined }] : []),
     ...(isManager ? [{ label: 'On Break (team)', value: onBreakCount, icon: Coffee, accent: onBreakCount ? ('warning' as const) : undefined }] : []),
   ];
 
-  const activeEntry = status?.activeEntry;
+  const openWorkSummary = async () => {
+    if (!activeEntry) return;
+    if (durationSeconds < 15 * 60) {
+      clockOutMutation.mutate({});
+      return;
+    }
+    setSummaryOpen(true);
+    setFetchingTasks(true);
+    try {
+      const tasks = await fetchMyTasks(token!, false);
+      setMyTasks(tasks);
+      const pre: Record<number, WorkSelection> = {};
+      tasks.filter((t) => t.status === 'in_progress').forEach((t) => {
+        pre[Number(t.id)] = { selected: true, hours: '', note: '' };
+      });
+      setSelectedTasks(pre);
+    } catch {
+      setMyTasks([]);
+    } finally {
+      setFetchingTasks(false);
+    }
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const params: Record<string, string | number> = { search: query, limit: 10 };
+      if (user?.id) params.assigned_to = Number(user.id);
+      const result = await fetchTasks(token!, params);
+      setSearchResults(result.data || []);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addAdHocItem = () => {
+    setAdHocItems((prev) => [...prev, { description: '', hours: '' }]);
+  };
+
+  const submitClockOut = () => {
+    const hasTask = Object.values(selectedTasks).some((t) => t.selected);
+    const hasAdhoc = adhocItems.some((i) => i.description.trim() && Number(i.hours) > 0);
+    if (!hasTask && !hasAdhoc) {
+      toast.error('Please select at least one task or add a work item');
+      return;
+    }
+
+    const workItems: any[] = [];
+    Object.entries(selectedTasks).forEach(([taskId, sel]) => {
+      if (sel.selected && Number(sel.hours) > 0) {
+        workItems.push({ task_id: String(taskId), description: sel.note || '', hours_spent: String(sel.hours) });
+      }
+    });
+    adhocItems.forEach((item) => {
+      if (item.description.trim() && Number(item.hours) > 0) {
+        workItems.push({
+          task_id: item.task_id ? String(item.task_id) : undefined,
+          description: item.description.trim(),
+          hours_spent: String(item.hours),
+        });
+      }
+    });
+
+    const body: Record<string, unknown> = { work_items: workItems, session_notes: sessionNotes };
+    if (location) {
+      body.latitude = String(location.latitude);
+      body.longitude = String(location.longitude);
+      body.address = location.address;
+    }
+    clockOutMutation.mutate(body);
+  };
+
+  const statusColor = clockedIn ? (isOnBreak ? 'bg-yellow-500' : 'bg-green-500') : 'bg-gray-400';
 
   return (
-    <PageShell title="Time Clock" icon={Clock} description="Clock in and out, track breaks, and view today's summary.">
+    <PageShell title="Time Clock" icon={Clock} description="Clock in and out, track breaks, and manage the team's active sessions.">
       <StatCards cards={statCards} />
 
       <Card>
         <CardHeader>
-          <CardTitle>Status</CardTitle>
+          <CardTitle>Current Session</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {error && <div className="text-destructive">Failed to load time clock status.</div>}
-          {isLoading && <div className="text-muted-foreground">Loading...</div>}
+          {isLoading && <Skeleton className="h-20" />}
 
           {!isLoading && status && (
             <>
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant={status.clockedIn ? 'default' : 'secondary'}>{status.clockedIn ? 'Clocked In' : 'Clocked Out'}</Badge>
-                {status.isOnBreak && <Badge variant="outline">On Break</Badge>}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-3 w-3 rounded-full ${statusColor} ${clockedIn && !isOnBreak ? 'animate-pulse' : ''}`} />
+                    <span className="font-medium">
+                      {clockedIn ? (isOnBreak ? 'On Break' : 'Clocked In') : 'Clocked Out'}
+                    </span>
+                    {status?.employee?.name && (
+                      <span className="text-sm text-muted-foreground">— {status.employee.name}</span>
+                    )}
+                  </div>
+                  {activeEntry && (
+                    <div className="text-sm text-muted-foreground">
+                      Started {formatDateTime(activeEntry.clock_in_time || activeEntry.clockInTime)}
+                      {activeEntry.clock_in_address || activeEntry.clockInAddress ? ` — ${activeEntry.clock_in_address || activeEntry.clockInAddress}` : ''}
+                    </div>
+                  )}
+                </div>
+                {clockedIn && (
+                  <div className="text-center sm:text-right">
+                    <div className="text-4xl font-mono font-bold">{formatDurationSeconds(durationSeconds)}</div>
+                    <div className="text-xs text-muted-foreground">Current session</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
                 {location && (
                   <Badge variant="outline" className="gap-1">
-                    <MapPin className="h-3 w-3" /> {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                    <MapPin className="h-3 w-3" />
+                    {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
+                    {location.address ? ` — ${location.address}` : ''}
+                    {typeof location.accuracy === 'number' && ` (±${Math.round(location.accuracy)}m)`}
+                  </Badge>
+                )}
+                {status?.todayShift && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Shift {status.todayShift.start_time} - {status.todayShift.end_time}
+                    {status.todayShift.location ? ` at ${status.todayShift.location}` : ''}
                   </Badge>
                 )}
               </div>
 
-              {activeEntry && (
-                <div className="text-sm text-muted-foreground">
-                  Active entry since {new Date(activeEntry.clock_in_time).toLocaleString()}
-                  {activeEntry.clock_in_address ? ` — ${activeEntry.clock_in_address}` : ''}
-                </div>
-              )}
-
               <div className="flex flex-wrap gap-2">
-                <Button onClick={captureLocation} variant="outline" disabled={locating}>
+                <Button onClick={captureLocation} variant="outline" disabled={locating} size="sm">
                   <MapPin className="mr-2 h-4 w-4" />
                   {locating ? 'Locating...' : location ? 'Update Location' : 'Capture Location'}
                 </Button>
 
-                {!status.clockedIn ? (
-                  <Button onClick={() => clockInMutation.mutate()} disabled={clockInMutation.isPending}>
-                    <Play className="mr-2 h-4 w-4" /> Clock In
+                {!clockedIn ? (
+                  <Button onClick={() => clockInMutation.mutate()} disabled={clockInMutation.isPending} size="sm">
+                    {clockInMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    Clock In
                   </Button>
                 ) : (
-                  <Button onClick={() => clockOutMutation.mutate()} disabled={clockOutMutation.isPending} variant="destructive">
-                    <Square className="mr-2 h-4 w-4" /> Clock Out
+                  <Button onClick={openWorkSummary} disabled={clockOutMutation.isPending} variant="destructive" size="sm">
+                    {clockOutMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+                    Clock Out
                   </Button>
                 )}
 
-                {status.clockedIn && !status.isOnBreak && (
-                  <Button onClick={() => breakStartMutation.mutate()} disabled={breakStartMutation.isPending} variant="outline">
+                {clockedIn && !isOnBreak && (
+                  <Button onClick={() => breakStartMutation.mutate()} disabled={breakStartMutation.isPending} variant="outline" size="sm">
                     <Coffee className="mr-2 h-4 w-4" /> Start Break
                   </Button>
                 )}
 
-                {status.clockedIn && status.isOnBreak && (
-                  <Button onClick={() => breakEndMutation.mutate()} disabled={breakEndMutation.isPending} variant="default">
+                {clockedIn && isOnBreak && (
+                  <Button onClick={() => breakEndMutation.mutate()} disabled={breakEndMutation.isPending} variant="default" size="sm">
                     <Coffee className="mr-2 h-4 w-4" /> End Break
                   </Button>
                 )}
               </div>
+
+              {activeEntry && (activeEntry.total_break_minutes || activeEntry.totalBreakMinutes) > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Total break time: {activeEntry.total_break_minutes || activeEntry.totalBreakMinutes} minutes
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -183,14 +416,16 @@ export default function AdminHrTimeClockPage() {
       {isManager && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Active Employees</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" /> Active Employees
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {loadingActive && <Skeleton className="h-20" />}
-            {!loadingActive && activeData?.data?.length === 0 && (
+            {!loadingActive && activeEmployees.length === 0 && (
               <p className="text-sm text-muted-foreground">No one is currently clocked in.</p>
             )}
-            {!loadingActive && activeData?.data && activeData.data.length > 0 && (
+            {!loadingActive && activeEmployees.length > 0 && (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -202,11 +437,11 @@ export default function AdminHrTimeClockPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeData.data.map((entry: any) => (
+                  {activeEmployees.map((entry: any) => (
                     <TableRow key={entry.id}>
                       <TableCell className="font-medium">{entry.employee_name}</TableCell>
-                      <TableCell>{new Date(entry.clock_in_time).toLocaleString()}</TableCell>
-                      <TableCell>{entry.formatted_duration}</TableCell>
+                      <TableCell>{formatDateTime(entry.clock_in_time)}</TableCell>
+                      <TableCell>{entry.formatted_duration || formatDurationSeconds(entry.duration_minutes ? entry.duration_minutes * 60 : 0)}</TableCell>
                       <TableCell>
                         {entry.is_on_break ? (
                           <Badge variant="outline" className="bg-yellow-100 text-yellow-800">On Break</Badge>
@@ -214,7 +449,7 @@ export default function AdminHrTimeClockPage() {
                           <Badge variant="default">Active</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{entry.department}</TableCell>
+                      <TableCell>{entry.department || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -223,6 +458,167 @@ export default function AdminHrTimeClockPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" /> End of Day Summary
+            </DialogTitle>
+            <DialogDescription>Record what you worked on before clocking out.</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-5 py-2">
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Your Assigned Tasks</h4>
+              {fetchingTasks ? (
+                <Skeleton className="h-20" />
+              ) : myTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No active tasks assigned to you.</p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {myTasks.map((task) => {
+                    const taskId = Number(task.id);
+                    const state = selectedTasks[taskId] || { selected: false, hours: '', note: '' };
+                    return (
+                      <div
+                        key={taskId}
+                        className={`rounded-lg border p-3 transition-colors ${state.selected ? 'border-primary bg-primary/5' : 'border-border'}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={state.selected}
+                            onChange={(e) => setSelectedTasks((prev) => ({ ...prev, [taskId]: { ...state, selected: e.target.checked } }))}
+                            className="mt-1 h-4 w-4 rounded border-input"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium truncate">{task.title}</p>
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {task.status?.replace('_', ' ')}
+                              </Badge>
+                            </div>
+                            {(task.crmProject?.name || task.project?.title) && <p className="text-xs text-muted-foreground truncate">{task.crmProject?.name || task.project?.title}</p>}
+                            {state.selected && (
+                              <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                                <Input
+                                  type="number"
+                                  step="0.25"
+                                  min="0"
+                                  placeholder="Hours"
+                                  value={state.hours}
+                                  onChange={(e) => setSelectedTasks((prev) => ({ ...prev, [taskId]: { ...state, hours: e.target.value } }))}
+                                  className="w-24"
+                                />
+                                <Input
+                                  placeholder="What did you do? (optional)"
+                                  value={state.note}
+                                  onChange={(e) => setSelectedTasks((prev) => ({ ...prev, [taskId]: { ...state, note: e.target.value } }))}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Other Work</h4>
+              <div className="space-y-2">
+                {adhocItems.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        placeholder="Search tasks or type a description"
+                        value={item.description}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAdHocItems((prev) => prev.map((it, i) => (i === idx ? { ...it, description: val, task_id: undefined } : it)));
+                          setActiveAdhocIndex(idx);
+                          if (val.length >= 2) handleSearch(val);
+                        }}
+                        onFocus={() => {
+                          if (item.description.length >= 2) {
+                            setActiveAdhocIndex(idx);
+                            handleSearch(item.description);
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setActiveAdhocIndex(null), 200)}
+                      />
+                      {activeAdhocIndex === idx && (searchResults.length > 0 || searching) && (
+                        <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow-lg max-h-40 overflow-y-auto">
+                          {searching ? (
+                            <div className="p-3 text-sm text-center text-muted-foreground">Searching...</div>
+                          ) : (
+                            searchResults.map((task) => (
+                              <button
+                                key={task.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => {
+                                  setAdHocItems((prev) => prev.map((it, i) => (i === idx ? { ...it, description: task.title || '', task_id: Number(task.id) } : it)));
+                                  setSearchResults([]);
+                                  setActiveAdhocIndex(null);
+                                }}
+                              >
+                                <div className="font-medium truncate">{task.title}</div>
+                                {(task.crmProject?.name || task.project?.title) && <div className="text-xs text-muted-foreground truncate">{task.crmProject?.name || task.project?.title}</div>}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      placeholder="Hrs"
+                      className="w-24"
+                      value={item.hours}
+                      onChange={(e) => setAdHocItems((prev) => prev.map((it, i) => (i === idx ? { ...it, hours: e.target.value } : it)))}
+                    />
+                    <Button variant="ghost" size="icon" onClick={() => setAdHocItems((prev) => prev.filter((_, i) => i !== idx))}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={addAdHocItem}>
+                  <Plus className="mr-2 h-4 w-4" /> Add Work Item
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Label>Session Notes (optional)</Label>
+              <Textarea
+                value={sessionNotes}
+                onChange={(e) => setSessionNotes(e.target.value)}
+                placeholder="Any general notes about today's work..."
+                rows={2}
+              />
+            </div>
+
+            <div className="rounded-md bg-muted p-3 text-sm flex items-center justify-between">
+              <span className="text-muted-foreground">Clocked duration:</span>
+              <span className="font-medium">{formatDurationSeconds(durationSeconds)}</span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSummaryOpen(false)}>Cancel</Button>
+            <Button onClick={submitClockOut} disabled={clockOutMutation.isPending} variant="destructive">
+              {clockOutMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+              Submit & Clock Out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

@@ -17,6 +17,8 @@ import {
   ParseIntPipe,
   Optional,
   Inject,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
@@ -41,8 +43,8 @@ export class TasksController {
   }
 
   @Get('tasks')
-  async findAll(@Query() query: any, @Res({ passthrough: true }) _res: Response) {
-    const result = await this.service.findAll(query);
+  async findAll(@Query() query: any, @Req() req: RequestWithUser, @Res({ passthrough: true }) _res: Response) {
+    const result = await this.service.findAll({ ...query, user: req.user });
     return { success: true, ...result };
   }
 
@@ -105,27 +107,49 @@ export class TasksController {
     return this.service.getProjectActivity(projectId, query);
   }
 
-  @Get('tasks/:id')
-  async getTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
-    return this.service.getTask(id, req.user);
+  // Recurring tasks — static routes before generic :id
+  @Get('recurring-tasks')
+  @Roles('admin', 'manager')
+  async getRecurringTasks(@Query() query: any) {
+    return this.service.getRecurringTasks(query);
   }
 
-  @Put('tasks/:id')
-  @Roles('admin', 'manager', 'employee')
-  async updateTask(
+  @Get('recurring-tasks/:id')
+  @Roles('admin', 'manager')
+  async getRecurringTask(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getRecurringTask(id);
+  }
+
+  @Post('recurring-tasks')
+  @Roles('admin', 'manager')
+  @HttpCode(201)
+  async createRecurringTask(@Body() body: any, @Req() req: RequestWithUser) {
+    return this.service.createRecurringTask(body, req.user);
+  }
+
+  @Put('recurring-tasks/:id')
+  @Roles('admin', 'manager')
+  async updateRecurringTask(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: any,
     @Req() req: RequestWithUser,
   ) {
-    return this.service.updateTask(id, body, req.user);
+    return this.service.updateRecurringTask(id, body, req.user);
   }
 
-  @Delete('tasks/:id')
+  @Delete('recurring-tasks/:id')
   @Roles('admin', 'manager')
-  async deleteTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
-    return this.service.deleteTask(id, req.user);
+  async deleteRecurringTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.deleteRecurringTask(id, req.user);
   }
 
+  @Patch('recurring-tasks/:id/toggle')
+  @Roles('admin', 'manager')
+  async toggleRecurringTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.toggleRecurringTask(id, req.user);
+  }
+
+  // Task-specific sub-routes before generic tasks/:id
   @Patch('tasks/:id/assign')
   @Roles('admin', 'manager')
   async assignTask(
@@ -140,10 +164,12 @@ export class TasksController {
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: any,
+    @Req() req: RequestWithUser,
     @Res({ passthrough: true }) _res: Response,
   ) {
+    await this.service.getTask(id, req.user);
     const task = await this.service.prisma.project_tasks.update({
-      where: { id },
+      where: { id, deleted_at: null },
       data: {
         status: body.status,
         completed_at: body.status === 'completed' ? new Date() : null,
@@ -218,44 +244,107 @@ export class TasksController {
     return this.service.additionalAssignees(id, body, req.user);
   }
 
-  @Get('recurring-tasks')
-  @Roles('admin', 'manager')
-  async getRecurringTasks(@Query() query: any) {
-    return this.service.getRecurringTasks(query);
+  // Microtasks
+  @Get('tasks/:id/microtasks')
+  async getMicrotasks(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    await this.service.getTask(id, req.user);
+    const microtasks = await this.service.prisma.task_microtasks.findMany({
+      where: { project_task_id: id },
+      include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
+      orderBy: { position: 'asc' },
+    });
+    return { success: true, microtasks };
   }
 
-  @Get('recurring-tasks/:id')
-  @Roles('admin', 'manager')
-  async getRecurringTask(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getRecurringTask(id);
+  @Post('tasks/:id/microtasks')
+  async createMicrotask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { title?: string; is_mandatory?: boolean },
+    @Req() req: RequestWithUser,
+  ) {
+    await this.service.getTask(id, req.user);
+    if (!body.title?.trim()) throw new BadRequestException('Title is required');
+    const maxPos = await this.service.prisma.task_microtasks.aggregate({ _max: { position: true }, where: { project_task_id: id } });
+    const microtask = await this.service.prisma.task_microtasks.create({
+      data: {
+        project_task_id: id,
+        title: body.title.trim(),
+        position: (maxPos._max.position || 0) + 1,
+        is_mandatory: body.is_mandatory !== false,
+      },
+    });
+    return { success: true, microtask };
   }
 
-  @Post('recurring-tasks')
-  @Roles('admin', 'manager')
-  @HttpCode(201)
-  async createRecurringTask(@Body() body: any, @Req() req: RequestWithUser) {
-    return this.service.createRecurringTask(body, req.user);
+  @Put('tasks/:id/microtasks/:microtaskId')
+  async updateMicrotask(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('microtaskId', ParseIntPipe) microtaskId: number,
+    @Body() body: { title?: string; is_mandatory?: boolean },
+    @Req() req: RequestWithUser,
+  ) {
+    await this.service.getTask(id, req.user);
+    const existing = await this.service.prisma.task_microtasks.findUnique({ where: { id: microtaskId } });
+    if (!existing || existing.project_task_id !== id) throw new NotFoundException('Microtask not found');
+    const updates: any = {};
+    if (body.title !== undefined) updates.title = body.title.trim();
+    if (body.is_mandatory !== undefined) updates.is_mandatory = body.is_mandatory;
+    const microtask = await this.service.prisma.task_microtasks.update({
+      where: { id: microtaskId },
+      data: updates,
+    });
+    return { success: true, microtask };
   }
 
-  @Put('recurring-tasks/:id')
-  @Roles('admin', 'manager')
-  async updateRecurringTask(
+  @Put('tasks/:id/microtasks/:microtaskId/toggle')
+  async toggleMicrotask(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('microtaskId', ParseIntPipe) microtaskId: number,
+    @Req() req: RequestWithUser,
+  ) {
+    await this.service.getTask(id, req.user);
+    const existing = await this.service.prisma.task_microtasks.findUnique({ where: { id: microtaskId } });
+    if (!existing || existing.project_task_id !== id) throw new NotFoundException('Microtask not found');
+    const isCompleted = !existing.is_completed;
+    const microtask = await this.service.prisma.task_microtasks.update({
+      where: { id: microtaskId },
+      data: { is_completed: isCompleted, completed_at: isCompleted ? new Date() : null, completed_by: isCompleted ? req.user.id : null },
+    });
+    return { success: true, microtask };
+  }
+
+  @Delete('tasks/:id/microtasks/:microtaskId')
+  async deleteMicrotask(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('microtaskId', ParseIntPipe) microtaskId: number,
+    @Req() req: RequestWithUser,
+  ) {
+    await this.service.getTask(id, req.user);
+    const existing = await this.service.prisma.task_microtasks.findUnique({ where: { id: microtaskId } });
+    if (!existing || existing.project_task_id !== id) throw new NotFoundException('Microtask not found');
+    await this.service.prisma.task_microtasks.delete({ where: { id: microtaskId } });
+    return { success: true, message: 'Microtask deleted' };
+  }
+
+  // Generic task routes — keep last so specific sub-routes win
+  @Get('tasks/:id')
+  async getTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.getTask(id, req.user);
+  }
+
+  @Put('tasks/:id')
+  @Roles('admin', 'manager', 'employee')
+  async updateTask(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: any,
     @Req() req: RequestWithUser,
   ) {
-    return this.service.updateRecurringTask(id, body, req.user);
+    return this.service.updateTask(id, body, req.user);
   }
 
-  @Delete('recurring-tasks/:id')
+  @Delete('tasks/:id')
   @Roles('admin', 'manager')
-  async deleteRecurringTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
-    return this.service.deleteRecurringTask(id, req.user);
-  }
-
-  @Patch('recurring-tasks/:id/toggle')
-  @Roles('admin', 'manager')
-  async toggleRecurringTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
-    return this.service.toggleRecurringTask(id, req.user);
+  async deleteTask(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser) {
+    return this.service.deleteTask(id, req.user);
   }
 }

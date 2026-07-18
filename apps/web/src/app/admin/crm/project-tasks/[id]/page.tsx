@@ -367,14 +367,18 @@ export default function ProjectTaskDetailPage() {
                     <div className="flex items-center gap-2">
                       <UserIcon className="h-4 w-4 text-muted-foreground" />
                       <span>Customer:</span>
-                      <span>{task.customer.name}</span>
+                      <span>
+                        {(task.customer as any).first_name && (task.customer as any).last_name
+                          ? `${(task.customer as any).first_name} ${(task.customer as any).last_name}`
+                          : task.customer.name || (task.customer as any).email || '-'}
+                      </span>
                     </div>
                   )}
-                  {task.project && (
+                  {task.project && (!task.crmProject || task.project.id !== task.crmProject.id) && (
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span>Deal:</span>
-                      <Link href={`/admin/crm/deals/${task.project.id}`} className="hover:underline text-primary truncate">{task.project.title}</Link>
+                      <span>Project:</span>
+                      <Link href={`/admin/crm/deals/${task.project.id}`} className="hover:underline text-primary truncate">{task.project.title || (task.project as any).project_number || (task.project as any).deal_number}</Link>
                     </div>
                   )}
                   <div className="flex items-center gap-2">

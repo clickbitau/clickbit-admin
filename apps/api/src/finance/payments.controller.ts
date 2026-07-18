@@ -20,19 +20,19 @@ export class PaymentsController {
     return res.json(await this.paymentsService.findAll(query as unknown as Record<string, unknown>));
   }
 
-  @Get(':id')
-  @Roles('admin', 'manager')
-  async findOne(@Param('id') id: string, @Res() res: Response) {
-    setNoCache(res);
-    return res.json(await this.paymentsService.findOne(id));
-  }
-
   @Get('stats')
   @Roles('admin', 'manager')
   async getStats(@Query() query: PaymentDateRangeDto, @Res() res: Response) {
     setNoCache(res);
     const data = await this.paymentsService.getStats(query);
     return res.json({ success: true, data });
+  }
+
+  @Get(':id')
+  @Roles('admin', 'manager')
+  async findOne(@Param('id') id: string, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.paymentsService.findOne(id));
   }
 
   @Post()
