@@ -67,7 +67,7 @@ export default function AdminHrTimeOffPage() {
           placeholder="Search time off..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="max-w-sm"
+          className="sm:max-w-sm"
         />
         <select
           value={status}

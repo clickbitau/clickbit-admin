@@ -293,6 +293,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             );
           }
 
+          const sectionHref = section.href || section.links[0]?.href || '/admin';
+
           return (
             <div key={section.id} className="mb-1">
               <div
@@ -302,24 +304,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                     : 'text-foreground/80 hover:nm-raised-sm hover:text-foreground'
                 }`}
               >
-                {section.href ? (
-                  <Link
-                    href={section.href}
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2.5 flex-1 min-w-0"
-                  >
-                    <SectionIcon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{section.label}</span>
-                  </Link>
-                ) : (
-                  <button
-                    onClick={() => toggleSection(section.id)}
-                    className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
-                  >
-                    <SectionIcon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{section.label}</span>
-                  </button>
-                )}
+                <Link
+                  href={sectionHref}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2.5 flex-1 min-w-0"
+                >
+                  <SectionIcon className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{section.label}</span>
+                </Link>
                 {section.links.length > 0 && (
                   <button
                     onClick={(e) => { e.preventDefault(); toggleSection(section.id); }}

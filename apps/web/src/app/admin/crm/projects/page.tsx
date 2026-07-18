@@ -315,7 +315,7 @@ export default function ProjectsPage() {
             <Inbox className="h-8 w-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">No projects found</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 sm:max-w-sm mx-auto">
             Get started by creating your first project to track work and progress.
           </p>
           <Button onClick={() => { setEditing(null); setFormOpen(true); }}>

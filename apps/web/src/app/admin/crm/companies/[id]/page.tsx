@@ -63,7 +63,7 @@ export default function CompanyDetailPage() {
     >
       <CompanyHeader company={company} />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Total Revenue</p><p className="text-xl font-bold">{formatCurrency(Number(company.total_revenue ?? 0))}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Projects</p><p className="text-xl font-bold">{company.total_projects ?? 0}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Tasks</p><p className="text-xl font-bold">{company.total_tasks ?? 0}</p></CardContent></Card>

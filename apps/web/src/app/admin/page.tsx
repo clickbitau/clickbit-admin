@@ -152,7 +152,7 @@ function TabSwitcher({ active, onChange }: { active: string; onChange: (id: stri
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[...Array(8)].map((_, i) => (
           <Skeleton key={i} className="h-28 rounded-2xl" />
         ))}
@@ -262,7 +262,7 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
             My Work
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
               label="My Tasks"
               value={data.myTaskStats.total}
@@ -286,7 +286,7 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
 
       <SiteMonitoringCards />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {cards.map((c) => (
           <StatCard key={c.label} {...c} />
         ))}
@@ -294,7 +294,7 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
 
       <div className="nm-raised p-4 sm:p-5">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 sm:mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { to: '/admin/crm/leads/new', label: 'New Lead', icon: Mail, color: 'bg-[#1FBBD2]/10 text-[#1FBBD2]' },
             { to: '/admin/finance/invoices/new', label: 'New Invoice', icon: Receipt, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
@@ -346,7 +346,7 @@ function HRTab({ data, loading }: { data?: HrDashboardData; loading: boolean }) 
         <div className="flex justify-end">
           <Skeleton className="h-10 w-32" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
             <Skeleton key={i} className="h-28 rounded-2xl" />
           ))}
@@ -435,7 +435,7 @@ function HRTab({ data, loading }: { data?: HrDashboardData; loading: boolean }) 
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {hrCards.map((c) => (
           <StatCard key={c.label} {...c} />
         ))}
@@ -632,7 +632,7 @@ function FinanceTab({
         <div className="flex justify-end">
           <Skeleton className="h-10 w-40" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
             <Skeleton key={i} className="h-28 rounded-2xl" />
           ))}
@@ -726,7 +726,7 @@ function FinanceTab({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {finCards.map((c) => (
           <StatCard key={c.label} {...c} />
         ))}

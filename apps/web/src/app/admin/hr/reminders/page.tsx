@@ -46,7 +46,7 @@ export default function AdminHrRemindersPage() {
           setSearch(e.target.value);
           setPage(1);
         }}
-        className="max-w-sm"
+        className="sm:max-w-sm"
       />
 
       <Card>
