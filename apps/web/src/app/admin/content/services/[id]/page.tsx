@@ -19,7 +19,10 @@ export default function AdminServiceDetailPage() {
         { key: 'slug', label: 'Slug', type: 'text' },
         { key: 'category', label: 'Category', type: 'text' },
         { key: 'description', label: 'Description', type: 'textarea' },
-        { key: 'status', label: 'Status', type: 'select', options: ['draft', 'published', 'archived'] },
+        { key: 'header_image', label: 'Header image', type: 'image' },
+        { key: 'features', label: 'Features', type: 'json' },
+        { key: 'pricing', label: 'Pricing', type: 'json' },
+        { key: 'sections', label: 'Sections', type: 'json' },
         { key: 'is_popular', label: 'Popular', type: 'checkbox' },
         { key: 'is_active', label: 'Active', type: 'checkbox' },
       ]}

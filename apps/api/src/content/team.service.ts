@@ -20,6 +20,14 @@ export class TeamService {
     return this.prisma.teams.findMany({ orderBy: [{ display_order: 'asc' }, { id: 'asc' }] });
   }
 
+  async statsAdmin() {
+    const [total, active] = await this.prisma.$transaction([
+      this.prisma.teams.count(),
+      this.prisma.teams.count({ where: { is_active: true } }),
+    ]);
+    return { total, active, inactive: total - active };
+  }
+
   async create(dto: Record<string, unknown>) {
     const data: any = {
       name: stringValue(dto.name),

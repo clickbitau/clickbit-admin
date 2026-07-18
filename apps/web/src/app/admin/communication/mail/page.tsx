@@ -1,9 +1,9 @@
 'use client';
-import Link from 'next/link';
-import { Mail as MailIcon, Plus } from 'lucide-react';
-import { PageShell } from '@/components/design-system/PageShell';
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import { Mail as MailIcon, Plus, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { PageShell } from '@/components/design-system/PageShell';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,10 @@ export default function AdminCommunicationMailPage() {
   const queryClient = useQueryClient();
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string>('INBOX');
+  const [expandedMessage, setExpandedMessage] = useState<string | null>(null);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [messageSearch, setMessageSearch] = useState('');
   const [form, setForm] = useState({ email: '', username: '', password: '', display_name: '', preset: '' });
   const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body_text: '' });
 
@@ -51,6 +55,27 @@ export default function AdminCommunicationMailPage() {
     queryFn: async () => { if (!token) throw new Error('No token'); return fetchMailTemplates(token); },
     enabled: !!token,
   });
+
+  const filteredAccounts = useMemo(() => {
+    const rows = accounts?.data ?? [];
+    if (!accountSearch.trim()) return rows;
+    const q = accountSearch.trim().toLowerCase();
+    return rows.filter((a) => (a.email || '').toLowerCase().includes(q) || (a.display_name || '').toLowerCase().includes(q));
+  }, [accounts, accountSearch]);
+
+  const filteredTemplates = useMemo(() => {
+    const rows = templates?.data ?? [];
+    if (!templateSearch.trim()) return rows;
+    const q = templateSearch.trim().toLowerCase();
+    return rows.filter((t) => (t.name || '').toLowerCase().includes(q) || (t.subject || '').toLowerCase().includes(q));
+  }, [templates, templateSearch]);
+
+  const filteredMessages = useMemo(() => {
+    const rows = messages?.data ?? [];
+    if (!messageSearch.trim()) return rows;
+    const q = messageSearch.trim().toLowerCase();
+    return rows.filter((m) => (m.subject || '').toLowerCase().includes(q) || (m.from_address || '').toLowerCase().includes(q) || (m.from_name || '').toLowerCase().includes(q));
+  }, [messages, messageSearch]);
 
   const addAccount = useMutation({
     mutationFn: () => createMailAccount(token!, { ...form, preset: form.preset || undefined } as unknown as Partial<MailAccount>),
@@ -91,15 +116,19 @@ export default function AdminCommunicationMailPage() {
               </select>
               <Button onClick={() => form.email && form.password && addAccount.mutate()} disabled={addAccount.isPending}>Add</Button>
             </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)} placeholder="Search accounts..." className="pl-9" />
+            </div>
             {loadingAccounts ? <Skeleton className="h-16 w-full" /> : (
               <div className="divide-y">
-                {accounts?.data?.map((a: MailAccount) => (
-                  <div key={a.id} className="flex items-center justify-between gap-2 py-2">
-                    <button onClick={() => { setSelectedAccount(a.id); setSelectedFolder('INBOX'); }} className={`text-sm hover:underline truncate text-left ${selectedAccount === a.id ? 'font-semibold' : ''}`}>{a.email}</button>
+                {filteredAccounts.map((a: MailAccount) => (
+                  <div key={a.id} className={`flex items-center justify-between gap-2 py-2 px-2 rounded-lg ${selectedAccount === a.id ? 'nm-inset-sm' : ''}`}>
+                    <button onClick={() => { setSelectedAccount(a.id); setSelectedFolder('INBOX'); }} className="text-sm hover:underline truncate text-left">{a.email}</button>
                     <Button variant="destructive" size="sm" onClick={() => removeAccount.mutate(a.id)}>Delete</Button>
                   </div>
                 ))}
-                {!accounts?.data?.length && <div className="text-muted-foreground">No accounts.</div>}
+                {!filteredAccounts.length && <div className="text-muted-foreground">No accounts.</div>}
               </div>
             )}
           </CardContent>
@@ -113,14 +142,18 @@ export default function AdminCommunicationMailPage() {
               <Input placeholder="Subject" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} className="w-full sm:max-w-xs" />
               <Button onClick={() => templateForm.name && addTemplate.mutate()} disabled={addTemplate.isPending}>Add</Button>
             </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={templateSearch} onChange={(e) => setTemplateSearch(e.target.value)} placeholder="Search templates..." className="pl-9" />
+            </div>
             <div className="divide-y">
-              {templates?.data?.map((t: EmailTemplate) => (
+              {filteredTemplates.map((t: EmailTemplate) => (
                 <div key={t.id} className="flex items-center justify-between gap-2 py-2">
                   <div className="text-sm truncate">{t.name} &middot; {t.subject}</div>
                   <Button variant="destructive" size="sm" onClick={() => removeTemplate.mutate(t.id)}>Delete</Button>
                 </div>
               ))}
-              {!templates?.data?.length && <div className="text-muted-foreground">No templates.</div>}
+              {!filteredTemplates.length && <div className="text-muted-foreground">No templates.</div>}
             </div>
           </CardContent>
         </Card>
@@ -129,21 +162,35 @@ export default function AdminCommunicationMailPage() {
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
           <CardTitle>Messages</CardTitle>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <select value={selectedFolder} onChange={(e) => setSelectedFolder(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={messageSearch} onChange={(e) => setMessageSearch(e.target.value)} placeholder="Search messages..." className="pl-9" />
+            </div>
+            <select value={selectedFolder} onChange={(e) => setSelectedFolder(e.target.value)} className="w-full sm:w-auto rounded-md border bg-background px-3 py-2 text-sm">
               {folders?.data?.map((f: MailFolder) => <option key={f.path} value={f.path}>{f.name}</option>)}
             </select>
           </div>
         </CardHeader>
         <CardContent>
           <div className="divide-y">
-            {messages?.data?.map((m: CachedEmail) => (
+            {filteredMessages.map((m: CachedEmail) => (
               <div key={m.id} className="py-2">
-                <div className="text-sm font-medium">{m.subject || '(no subject)'}</div>
-                <div className="text-xs text-muted-foreground">{m.from_name || m.from_address} &middot; {m.date ? new Date(m.date).toLocaleString() : ''}</div>
+                <button onClick={() => setExpandedMessage(expandedMessage === m.id ? null : m.id)} className="w-full text-left flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{m.subject || '(no subject)'}</div>
+                    <div className="text-xs text-muted-foreground">{m.from_name || m.from_address} &middot; {m.date ? new Date(m.date).toLocaleString() : ''}</div>
+                  </div>
+                  {expandedMessage === m.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+                {expandedMessage === m.id && (
+                  <div className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap border-l-2 pl-3 py-1">
+                    {m.text_body || m.html_body || 'No content.'}
+                  </div>
+                )}
               </div>
             ))}
-            {!messages?.data?.length && <div className="text-muted-foreground">No messages.</div>}
+            {!filteredMessages.length && <div className="text-muted-foreground">No messages.</div>}
           </div>
         </CardContent>
       </Card>

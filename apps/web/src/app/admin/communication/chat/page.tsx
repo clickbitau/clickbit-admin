@@ -1,5 +1,5 @@
 'use client';
-import { MessageSquare as MessageSquareIcon, Plus } from 'lucide-react';
+import { MessageSquare as MessageSquareIcon, Plus, Hash, AtSign } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWorkspaces, fetchChannels, fetchDirectMessages, fetchMessagesForChannel, fetchMessagesForDm, sendMessage, fetchChatParticipants } from '@/lib/api';
+import { fetchWorkspaces, fetchChannels, fetchDirectMessages, fetchMessagesForChannel, fetchMessagesForDm, sendMessage } from '@/lib/api';
 import type { Channel, DirectMessage, Message, Workspace } from '@/types/communication';
 
 type Conversation = { kind: 'channel'; id: number; name: string } | { kind: 'dm'; id: number; name: string };
@@ -86,21 +86,27 @@ export default function AdminCommunicationChatPage() {
               {workspaces?.data?.map((w: Workspace) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </CardHeader>
-          <CardContent className="space-y-4 overflow-auto">
+          <CardContent className="space-y-2 overflow-auto">
             {loadingWorkspaces ? <Skeleton className="h-8 w-full" /> : (
               <>
                 <div className="text-sm font-medium text-muted-foreground">Channels</div>
-                {channels?.data?.map((c: Channel) => (
-                  <button key={c.id} onClick={() => setConversation({ kind: 'channel', id: c.id, name: c.name })} className="block w-full text-left text-sm hover:underline">
-                    # {c.name}
-                  </button>
-                ))}
+                {channels?.data?.map((c: Channel) => {
+                  const active = conversation?.kind === 'channel' && conversation.id === c.id;
+                  return (
+                    <button key={c.id} onClick={() => setConversation({ kind: 'channel', id: c.id, name: c.name })} className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${active ? 'nm-inset-sm font-medium' : 'hover:nm-raised-sm'}`}>
+                      <Hash className="h-3.5 w-3.5 text-muted-foreground" /> {c.name}
+                    </button>
+                  );
+                })}
                 <div className="text-sm font-medium text-muted-foreground pt-2">Direct messages</div>
-                {dms?.data?.map((d: DirectMessage) => (
-                  <button key={d.id} onClick={() => setConversation({ kind: 'dm', id: d.id, name: d.name || `DM ${d.id}` })} className="block w-full text-left text-sm hover:underline">
-                    {d.name || `DM ${d.id}`}
-                  </button>
-                ))}
+                {dms?.data?.map((d: DirectMessage) => {
+                  const active = conversation?.kind === 'dm' && conversation.id === d.id;
+                  return (
+                    <button key={d.id} onClick={() => setConversation({ kind: 'dm', id: d.id, name: d.name || `DM ${d.id}` })} className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${active ? 'nm-inset-sm font-medium' : 'hover:nm-raised-sm'}`}>
+                      <AtSign className="h-3.5 w-3.5 text-muted-foreground" /> {d.name || `DM ${d.id}`}
+                    </button>
+                  );
+                })}
               </>
             )}
           </CardContent>

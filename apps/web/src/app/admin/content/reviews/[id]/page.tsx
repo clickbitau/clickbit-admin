@@ -21,8 +21,11 @@ export default function AdminReviewDetailPage() {
         { key: 'position', label: 'Position', type: 'text' },
         { key: 'rating', label: 'Rating', type: 'number' },
         { key: 'review_text', label: 'Review text', type: 'textarea' },
+        { key: 'service_type', label: 'Service type', type: 'text' },
+        { key: 'project_type', label: 'Project type', type: 'text' },
         { key: 'status', label: 'Status', type: 'select', options: ['pending', 'approved', 'rejected'] },
         { key: 'is_featured', label: 'Featured', type: 'checkbox' },
+        { key: 'display_order', label: 'Display order', type: 'number' },
       ]}
     />
   );

@@ -16,6 +16,20 @@ export class MarketingController {
     return this.marketingService.findAllAdmin(query);
   }
 
+  @Get('admin/stats')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  adminStats() {
+    return this.marketingService.statsAdmin();
+  }
+
+  @Get('admin/:id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  adminOne(@Param('id', ParseIntPipe) id: number) {
+    return this.marketingService.findOneAdmin(id);
+  }
+
   @Post('admin')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('admin', 'manager')
