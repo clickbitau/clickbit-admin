@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -31,7 +30,20 @@ function getStatusIcon(status: string) {
     case 'paused':
       return <Pause className="h-4 w-4 text-amber-500" />;
     default:
-      return <AlertTriangle className="h-4 w-4 text-gray-400" />;
+      return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
+  }
+}
+
+function statusGlow(status: string) {
+  switch (status) {
+    case 'up':
+      return 'ring-emerald-400/60';
+    case 'down':
+      return 'ring-red-400/60';
+    case 'paused':
+      return 'ring-amber-400/60';
+    default:
+      return 'ring-muted-foreground/30';
   }
 }
 
@@ -102,155 +114,140 @@ export function SiteMonitoringCards() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Activity className="h-4 w-4" /> Site Monitoring
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-20 w-full" />
-        </CardContent>
-      </Card>
+      <div className="nm-raised p-4 sm:p-5">
+        <div className="flex items-center gap-2 text-base font-semibold mb-3">
+          <Activity className="h-4 w-4" /> Site Monitoring
+        </div>
+        <Skeleton className="h-24 w-full rounded-xl" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Activity className="h-4 w-4" /> Site Monitoring
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">Failed to load monitored sites.</p>
-        </CardContent>
-      </Card>
+      <div className="nm-raised p-4 sm:p-5">
+        <div className="flex items-center gap-2 text-base font-semibold mb-3">
+          <Activity className="h-4 w-4" /> Site Monitoring
+        </div>
+        <p className="text-sm text-destructive">Failed to load monitored sites.</p>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 gap-3">
-        <CardTitle className="flex items-center gap-2 text-base">
+    <div className="nm-raised p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
           <Activity className="h-4 w-4" /> Site Monitoring
-        </CardTitle>
+        </h3>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2 text-sm">
-            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+            <span className="nm-raised-sm inline-flex items-center gap-1 px-2 py-1 text-emerald-600 dark:text-emerald-400">
               {stats.up} up
             </span>
             {stats.down > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 text-red-700 dark:bg-red-900/30 dark:text-red-400 animate-pulse">
+              <span className="nm-raised-sm inline-flex items-center gap-1 px-2 py-1 text-red-600 dark:text-red-400 animate-pulse">
                 {stats.down} down
               </span>
             )}
             {stats.paused > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              <span className="nm-raised-sm inline-flex items-center gap-1 px-2 py-1 text-amber-600 dark:text-amber-400">
                 {stats.paused} paused
               </span>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={refreshing} title="Refresh">
+          <Button variant="ghost" size="icon" className="nm-interactive rounded-lg" onClick={handleRefresh} disabled={refreshing} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
           {sites.length > 0 && (
-            <Button variant="ghost" size="icon" onClick={handleClearAll} disabled={clearAll.isPending} title="Clear all sites">
+            <Button variant="ghost" size="icon" className="nm-interactive rounded-lg" onClick={handleClearAll} disabled={clearAll.isPending} title="Clear all sites">
               <Trash2 className="h-4 w-4" />
             </Button>
           )}
         </div>
-      </CardHeader>
-      <CardContent>
-        {sites.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Globe className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm font-medium">No sites monitored</p>
-            <p className="text-xs">Sites will appear here when Uptime Kuma sends webhook notifications.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-1">
-            {sites.map((site) => (
-              <div
-                key={site.id}
-                className={`rounded-xl border-l-4 p-3 ${
-                  site.status === 'down'
-                    ? 'border-red-500 bg-red-50/50 dark:bg-red-900/10'
-                    : site.status === 'up'
-                      ? 'border-emerald-500'
-                      : 'border-amber-500'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="relative flex-shrink-0">
-                      {getStatusIcon(site.status)}
-                      {site.status === 'down' && (
-                        <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="truncate text-sm font-semibold">{site.name}</h4>
-                      {site.url ? (
-                        <a
-                          href={site.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block truncate text-xs text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {site.url}
-                        </a>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">No URL provided</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end flex-shrink-0">
-                    {site.status === 'down' && getDowntimeDuration(site) ? (
-                      <span className="text-xs font-medium text-red-600 dark:text-red-400">
-                        Down {getDowntimeDuration(site)}
+      </div>
+
+      {sites.length === 0 ? (
+        <div className="text-center py-8 nm-inset-sm rounded-xl text-muted-foreground">
+          <Globe className="h-8 w-8 mx-auto mb-2" />
+          <p className="text-sm font-medium">No sites monitored</p>
+          <p className="text-xs">Sites will appear here when Uptime Kuma sends webhook notifications.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto pr-1">
+          {sites.map((site) => (
+            <div
+              key={site.id}
+              className={`nm-raised-sm p-3 ring-1 ${statusGlow(site.status)} transition-all hover:-translate-y-0.5`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="relative flex-shrink-0">
+                    {getStatusIcon(site.status)}
+                    {site.status === 'down' && (
+                      <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
                       </span>
-                    ) : (
-                      <span className="text-xs capitalize text-muted-foreground">{site.status}</span>
                     )}
-                    {site.url && (
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="truncate text-sm font-semibold">{site.name}</h4>
+                    {site.url ? (
                       <a
                         href={site.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 text-muted-foreground hover:text-primary"
+                        className="block truncate text-xs text-primary hover:underline"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <ExternalLink className="h-3 w-3" />
+                        {site.url}
                       </a>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No URL provided</p>
                     )}
                   </div>
                 </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <select
-                    value={site.status}
-                    onChange={(e) => updateStatus.mutate({ id: site.id, status: e.target.value })}
-                    className="h-7 rounded-md border bg-background px-2 text-xs"
-                  >
-                    <option value="up">Up</option>
-                    <option value="down">Down</option>
-                    <option value="paused">Paused</option>
-                    <option value="unknown">Unknown</option>
-                  </select>
-                  <span className="text-xs text-muted-foreground truncate">
-                    {site.lastMessage ? `Last: ${site.lastMessage}` : `Updated ${formatDate(site.updatedAt)}`}
-                  </span>
+                <div className="flex flex-col items-end flex-shrink-0">
+                  {site.status === 'down' && getDowntimeDuration(site) ? (
+                    <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                      Down {getDowntimeDuration(site)}
+                    </span>
+                  ) : (
+                    <span className="text-xs capitalize text-muted-foreground">{site.status}</span>
+                  )}
+                  {site.url && (
+                    <a
+                      href={site.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 text-muted-foreground hover:text-primary"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  value={site.status}
+                  onChange={(e) => updateStatus.mutate({ id: site.id, status: e.target.value })}
+                  className="h-8 rounded-lg bg-background px-2 text-xs nm-interactive border-0"
+                >
+                  <option value="up">Up</option>
+                  <option value="down">Down</option>
+                  <option value="paused">Paused</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+                <span className="text-xs text-muted-foreground truncate">
+                  {site.lastMessage ? `Last: ${site.lastMessage}` : `Updated ${formatDate(site.updatedAt)}`}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
