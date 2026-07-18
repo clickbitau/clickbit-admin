@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -189,10 +190,56 @@ export class AuthService {
     return this.sanitizeProfile(profile);
   }
 
-  trustedDevices() { return { devices: [] }; }
-  trustDevice(_body: any) { return { success: true, message: 'Trusted device saved' }; }
-  checkTrust(_body: any) { return { trusted: false }; }
-  removeTrustedDevice(_id: string) { return { success: true, message: 'Device removed' }; }
+  private async cleanExpiredTrustedDevices(userId: number) {
+    await this.prisma.trusted_devices.deleteMany({
+      where: { user_id: userId, expires_at: { lt: new Date() } },
+    });
+  }
+
+  async trustDevice(user: any, dto: { deviceName?: string; deviceInfo?: string }) {
+    await this.cleanExpiredTrustedDevices(user.id);
+    const token = randomBytes(32).toString('hex');
+    const deviceInfo = dto.deviceName || dto.deviceInfo || 'Unknown device';
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const trusted = await this.prisma.trusted_devices.create({
+      data: {
+        user_id: user.id,
+        token,
+        device_info: deviceInfo,
+        expires_at: expiresAt,
+      },
+    });
+    return { success: true, data: { id: trusted.id, token: trusted.token, expiresAt: trusted.expires_at } };
+  }
+
+  async checkTrust(user: any, dto: { token: string }) {
+    if (!dto.token) throw new BadRequestException('Trust token is required');
+    await this.cleanExpiredTrustedDevices(user.id);
+    const trusted = await this.prisma.trusted_devices.findFirst({
+      where: { user_id: user.id, token: dto.token, expires_at: { gte: new Date() } },
+    });
+    if (!trusted) return { success: true, data: { valid: false } };
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.prisma.trusted_devices.update({ where: { id: trusted.id }, data: { expires_at: expiresAt } });
+    return { success: true, data: { valid: true, id: trusted.id, expiresAt } };
+  }
+
+  async trustedDevices(user: any) {
+    await this.cleanExpiredTrustedDevices(user.id);
+    const devices = await this.prisma.trusted_devices.findMany({
+      where: { user_id: user.id },
+      orderBy: { created_at: 'desc' },
+    });
+    return { success: true, data: { devices } };
+  }
+
+  async removeTrustedDevice(user: any, id: string) {
+    const parsedId = Number(id);
+    if (!parsedId) throw new BadRequestException('Invalid device id');
+    const result = await this.prisma.trusted_devices.deleteMany({ where: { id: parsedId, user_id: user.id } });
+    if (result.count === 0) throw new NotFoundException('Device not found');
+    return { success: true, message: 'Device removed' };
+  }
 
   async oauthCallback(body: any) {
     const publicClient = this.ensurePublic();

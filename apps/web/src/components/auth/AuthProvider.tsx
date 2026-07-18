@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
+import { checkTrust, trustDevice } from '@/lib/api';
 
 interface UserProfile {
   id: number;
@@ -39,7 +40,7 @@ interface AuthContextValue {
   setToken: (token: string, refreshToken?: string) => void;
   clearToken: () => void;
   login: (email: string, password: string) => Promise<{ user: UserProfile; accessToken: string; refreshToken: string; requiresMfa?: boolean }>;
-  completeMfa: (factorId: string, code: string) => Promise<void>;
+  completeMfa: (factorId: string, code: string, trustDevice?: boolean) => Promise<void>;
   cancelMfa: () => void;
   register: (data: RegisterData) => Promise<{ message: string }>;
   logout: () => Promise<void>;
@@ -59,6 +60,7 @@ interface RegisterData {
 
 const TOKEN_KEY = 'clickbit:access_token';
 const REFRESH_KEY = 'clickbit:refresh_token';
+const TRUST_TOKEN_KEY = 'clickbit:trust_token';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -155,6 +157,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = data?.data;
         if (!result?.accessToken) throw new Error('Login failed');
         if (result.requiresMfa) {
+          const storedTrust = typeof window !== 'undefined' ? localStorage.getItem(TRUST_TOKEN_KEY) : null;
+          if (storedTrust) {
+            try {
+              const trust = await checkTrust(result.accessToken, storedTrust);
+              if (trust.data?.valid) {
+                setToken(result.accessToken, result.refreshToken);
+                if (result.user) setUser(result.user);
+                router.replace(getDashboardPath(result.user?.role));
+                return result;
+              }
+            } catch {
+              // fall through to MFA
+            }
+          }
           setMfaRequired(true);
           setMfaFactors(result.factors || []);
           setMfaToken(result.accessToken);
@@ -177,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const completeMfa = useCallback(
-    async (factorId: string, code: string) => {
+    async (factorId: string, code: string, rememberDevice = false) => {
       if (!mfaToken || !mfaRefreshToken || !supabase) throw new Error('MFA session not available');
       setLoading(true);
       setError(null);
@@ -191,6 +207,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: me } = await axios.get('/api/auth/me', { headers: { Authorization: `Bearer ${data.access_token}` } });
         if (me?.data?.user) {
           setUser(me.data.user);
+          if (rememberDevice) {
+            try {
+              const trusted = await trustDevice(data.access_token);
+              if (typeof window !== 'undefined' && trusted.data?.token) {
+                localStorage.setItem(TRUST_TOKEN_KEY, trusted.data.token);
+              }
+            } catch {
+              // non-fatal
+            }
+          }
           router.replace(getDashboardPath(me.data.user.role));
         }
       } catch (err: any) {

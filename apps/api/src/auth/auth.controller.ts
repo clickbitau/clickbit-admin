@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Optional, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { PasskeysService } from './passkeys.service';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { RequestWithUser } from '../types/request-with-user';
 import {
@@ -19,7 +20,10 @@ import {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @Optional() private readonly passkeysService?: PasskeysService,
+  ) {}
 
   @Post('register')
   async register(@Body() body: RegisterDto) { return this.authService.register(body || {}); }
@@ -62,18 +66,19 @@ export class AuthController {
 
   @Post('trust-device')
   @UseGuards(SupabaseAuthGuard)
-  trustDevice(@Body() body: TrustDeviceDto) { return this.authService.trustDevice(body || {}); }
+  trustDevice(@Req() req: RequestWithUser, @Body() body: TrustDeviceDto) { return this.authService.trustDevice(req.user, body || {}); }
 
   @Post('check-trust')
-  checkTrust(@Body() body: CheckTrustDto) { return this.authService.checkTrust(body || {}); }
+  @UseGuards(SupabaseAuthGuard)
+  checkTrust(@Req() req: RequestWithUser, @Body() body: CheckTrustDto) { return this.authService.checkTrust(req.user, body || {}); }
 
   @Get('trusted-devices')
   @UseGuards(SupabaseAuthGuard)
-  trustedDevices() { return this.authService.trustedDevices(); }
+  trustedDevices(@Req() req: RequestWithUser) { return this.authService.trustedDevices(req.user); }
 
   @Delete('trusted-devices/:id')
   @UseGuards(SupabaseAuthGuard)
-  removeTrustedDevice(@Param('id') id: string) { return this.authService.removeTrustedDevice(id); }
+  removeTrustedDevice(@Req() req: RequestWithUser, @Param('id') id: string) { return this.authService.removeTrustedDevice(req.user, id); }
 
   @Get('verify-email')
   async verifyEmailGet(@Query() query: any, @Res() res: any) {
@@ -101,4 +106,27 @@ export class AuthController {
 
   @Post('social-login')
   socialLogin(@Body() body: SocialLoginDto) { return this.authService.socialLogin(body || {}); }
+
+  // Passkeys
+  @Post('passkeys/register-options')
+  @UseGuards(SupabaseAuthGuard)
+  passkeyRegisterOptions(@Req() req: RequestWithUser) { return this.passkeysService!.generateRegistrationOptions(req.user); }
+
+  @Post('passkeys/register')
+  @UseGuards(SupabaseAuthGuard)
+  passkeyRegister(@Req() req: RequestWithUser, @Body() body: any) { return this.passkeysService!.verifyRegistration(req.user, body); }
+
+  @Get('passkeys')
+  @UseGuards(SupabaseAuthGuard)
+  listPasskeys(@Req() req: RequestWithUser) { return this.passkeysService!.listPasskeys(req.user); }
+
+  @Delete('passkeys/:id')
+  @UseGuards(SupabaseAuthGuard)
+  deletePasskey(@Req() req: RequestWithUser, @Param('id') id: string) { return this.passkeysService!.deletePasskey(req.user, Number(id)); }
+
+  @Post('passkeys/login-options')
+  passkeyLoginOptions() { return this.passkeysService!.generateLoginOptions(); }
+
+  @Post('passkeys/login')
+  passkeyLogin(@Body() body: any) { return this.passkeysService!.verifyLogin(body); }
 }
