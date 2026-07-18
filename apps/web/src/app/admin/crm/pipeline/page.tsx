@@ -101,6 +101,23 @@ function getStageTotal(stage: PipelineStage) {
   return leadValue + dealValue;
 }
 
+function getStageWeightedTotal(stage: PipelineStage) {
+  const stageProb = stage.probability ?? 0;
+  const leadWeighted =
+    stage.leads?.reduce((sum, l) => {
+      const lead = l as CrmLead;
+      const prob = Number(lead.probability) || stageProb;
+      return sum + (Number(lead.estimated_value) || 0) * (prob / 100);
+    }, 0) ?? 0;
+  const dealWeighted =
+    stage.deals?.reduce((sum, d) => {
+      const deal = d as Deal;
+      const prob = Number(deal.probability) || stageProb;
+      return sum + (Number(deal.value) || 0) * (prob / 100);
+    }, 0) ?? 0;
+  return leadWeighted + dealWeighted;
+}
+
 function getItemValue(item: BoardItem) {
   if (item.type === 'lead') return Number(item.estimated_value || 0);
   return Number(item.value || 0);
@@ -597,9 +614,20 @@ export default function PipelinePage() {
                   </div>
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{stage.probability ?? 0}%</span>
                 </div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">
-                  {formatCurrency(getStageTotal(stage), selectedPipeline?.currency)}
-                </p>
+                <div className="mt-2 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.min(stage.probability ?? 0, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    {formatCurrency(getStageTotal(stage), selectedPipeline?.currency)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    weighted {formatCurrency(getStageWeightedTotal(stage), selectedPipeline?.currency)}
+                  </p>
+                </div>
               </div>
               <CardContent className="flex-1 space-y-3 overflow-y-auto p-3">
                 {stage.items.map((item) => (
@@ -844,6 +872,13 @@ function BoardCard({
         {value > 0 && (
           <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(value, itemCurrency)}</div>
         )}
+
+        <div className="h-1 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full bg-primary"
+            style={{ width: `${Math.min(item.probability ?? stage.probability ?? 0, 100)}%` }}
+          />
+        </div>
 
         <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
           {isLead && lead?.company_name && (

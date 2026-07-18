@@ -209,8 +209,12 @@ export class LeadsService {
     }
 
     const updateData: Record<string, unknown> = {};
-    if (dto.stage_id) updateData.stage_id = dto.stage_id;
+    if (dto.stage_id) {
+      updateData.stage_id = dto.stage_id;
+      updateData.stage_entered_at = new Date();
+    }
     if (dto.position !== undefined) updateData.position = dto.position;
+    if (stage && stage.probability !== undefined) updateData.probability = stage.probability;
 
     await this.prisma.crm_leads.update({
       where: { id },
@@ -388,16 +392,41 @@ export class LeadsService {
 
     const totalLeads = stages.reduce((sum, s) => sum + ((s.leads as unknown[]).length || 0), 0);
     const totalDeals = stages.reduce((sum, s) => sum + ((s.deals as unknown[]).length || 0), 0);
+
+    const stageProbability = new Map<number, number>();
+    for (const stage of pipeline.crm_pipeline_stages) {
+      stageProbability.set(stage.id, toNumber(stage.probability));
+    }
+
     const totalValue = stages.reduce((sum, s) => {
       const leadValue = (s.leads as Array<{ estimated_value?: unknown }>).reduce((a, l) => a + toNumber(l.estimated_value), 0);
       const dealValue = (s.deals as Array<{ value?: unknown }>).reduce((a, d) => a + toNumber(d.value), 0);
       return sum + leadValue + dealValue;
     }, 0);
 
+    const weightedValue = stages.reduce((sum, s) => {
+      const stageProb = stageProbability.get(s.id) || 0;
+      const leadWeighted = (s.leads as Array<{ estimated_value?: unknown; probability?: unknown }>).reduce(
+        (a, l) => {
+          const prob = toNumber(l.probability) || stageProb;
+          return a + toNumber(l.estimated_value) * (prob / 100);
+        },
+        0,
+      );
+      const dealWeighted = (s.deals as Array<{ value?: unknown; probability?: unknown }>).reduce(
+        (a, d) => {
+          const prob = toNumber(d.probability) || stageProb;
+          return a + toNumber(d.value) * (prob / 100);
+        },
+        0,
+      );
+      return sum + leadWeighted + dealWeighted;
+    }, 0);
+
     return {
       pipeline: { id: pipeline.id, name: pipeline.name, currency: pipeline.currency },
       stages,
-      stats: { totalLeads, totalDeals, totalValue, weightedValue: totalValue },
+      stats: { totalLeads, totalDeals, totalValue, weightedValue },
     };
   }
 
