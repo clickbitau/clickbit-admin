@@ -270,10 +270,22 @@ export class ChatService {
   }
 
   private mapWorkspace(w: any) {
-    return { ...w, members: w.workspace_members, owner: w.profiles, workspace_members: undefined, profiles: undefined };
+    return {
+      ...w,
+      members: (w.workspace_members || []).map((m: any) => ({ ...m, user: m.profiles, profiles: undefined })),
+      owner: w.profiles,
+      workspace_members: undefined,
+      profiles: undefined,
+    };
   }
 
   private mapDm(d: any) {
-    return { ...d, participants: d.direct_message_participants, company: d.companies, direct_message_participants: undefined, companies: undefined };
+    return {
+      ...d,
+      participants: (d.direct_message_participants || []).map((p: any) => ({ ...p, user: p.profiles, profiles: undefined })),
+      company: d.companies,
+      direct_message_participants: undefined,
+      companies: undefined,
+    };
   }
 }
