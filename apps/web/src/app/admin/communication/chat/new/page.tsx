@@ -84,7 +84,7 @@ export default function AdminNewChatPage() {
         </Button>
       }
     >
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(['workspace', 'channel', 'dm'] as Tab[]).map((t) => (
           <Button key={t} variant={tab === t ? 'default' : 'outline'} size="sm" onClick={() => setTab(t)}>
             {t === 'dm' ? 'Direct Message' : t[0].toUpperCase() + t.slice(1)}
@@ -160,7 +160,7 @@ function DmForm({ participants, loadingParticipants, onSubmit, loading }: { part
           {loadingParticipants ? <Skeleton className="h-24 w-full" /> : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-auto border rounded-md p-2">
               {participants.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm">
+                <label key={p.id} className="flex items-start gap-2 text-sm break-words">
                   <input type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, p.id] : selected.filter((id) => id !== p.id))} />
                   {p.first_name} {p.last_name} ({p.email})
                 </label>
