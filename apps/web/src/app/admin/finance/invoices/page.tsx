@@ -1,5 +1,5 @@
 'use client';
-import { DollarSign as DollarSignIcon, Plus } from 'lucide-react';
+import { DollarSign as DollarSignIcon, Plus, FileText } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useMemo, useState } from 'react';
@@ -8,10 +8,21 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { InvoiceTable } from '@/components/finance/InvoiceTable';
 import { StatCards } from '@/components/design-system/StatCards';
-import { fetchInvoices, fetchInvoiceStats, fetchContacts, sendInvoice, downloadInvoicePdf, voidInvoice, markInvoicePaid, deleteInvoice } from '@/lib/api';
+import { fetchInvoices, fetchInvoiceStats, fetchContacts, sendInvoice, downloadInvoicePdf, voidInvoice, markInvoicePaid, deleteInvoice, recordInvoicePayment } from '@/lib/api';
+import { formatCurrency } from '@/lib/format';
+import type { Invoice } from '@/types/finance';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useDebounce } from '@/lib/useDebounce';
@@ -39,6 +50,9 @@ export default function AdminFinanceInvoicesPage() {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [copiedLinkId, setCopiedLinkId] = useState<string | number | null>(null);
+  const [recordDialogOpen, setRecordDialogOpen] = useState(false);
+  const [recordInvoice, setRecordInvoice] = useState<Invoice | null>(null);
+  const [recordAmount, setRecordAmount] = useState('');
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
@@ -106,6 +120,17 @@ export default function AdminFinanceInvoicesPage() {
     onError: () => toast.error('Failed to delete invoice'),
   });
 
+  const recordMutation = useMutation({
+    mutationFn: ({ id, amount }: { id: number; amount: number }) => recordInvoicePayment(token!, id, { amount, method: 'manual' }),
+    onSuccess: () => {
+      onSuccess('Payment recorded');
+      setRecordDialogOpen(false);
+      setRecordInvoice(null);
+      setRecordAmount('');
+    },
+    onError: () => toast.error('Failed to record payment'),
+  });
+
   const handleDownload = async (invoice: any) => {
     try {
       const blob = await downloadInvoicePdf(token!, invoice.id);
@@ -139,20 +164,21 @@ export default function AdminFinanceInvoicesPage() {
   const statItems = useMemo(() => {
     if (!stats) return [];
     return [
-      { label: 'Total', value: stats.total, icon: DollarSignIcon, filter: '' },
-      { label: 'Paid', value: stats.paid, icon: DollarSignIcon, accent: 'success' as const, filter: 'paid' },
-      { label: 'Outstanding', value: totalUnpaid, icon: DollarSignIcon, accent: 'warning' as const, filter: 'outstanding' },
-      { label: 'Overdue', value: stats.overdue, icon: DollarSignIcon, accent: 'destructive' as const, filter: 'overdue' },
-      { label: 'Draft', value: stats.draft, icon: DollarSignIcon, filter: 'draft' },
-      { label: 'Sent', value: stats.sent, icon: DollarSignIcon, filter: 'sent' },
-      { label: 'Viewed', value: stats.viewed, icon: DollarSignIcon, filter: 'viewed' },
-      { label: 'Partial', value: stats.partial, icon: DollarSignIcon, filter: 'partial' },
+      { label: 'Total', value: stats.total, sub: formatCurrency(stats.totalAmount || 0), icon: DollarSignIcon, filter: '' },
+      { label: 'Paid', value: stats.paid, sub: formatCurrency(stats.paidAmount || 0), icon: DollarSignIcon, accent: 'success' as const, filter: 'paid' },
+      { label: 'Outstanding', value: totalUnpaid, sub: formatCurrency(stats.outstandingAmount || 0), icon: DollarSignIcon, accent: 'warning' as const, filter: 'outstanding' },
+      { label: 'Overdue', value: stats.overdue, sub: formatCurrency(stats.overdueAmount || 0), icon: DollarSignIcon, accent: 'destructive' as const, filter: 'overdue' },
+      { label: 'Draft', value: stats.draft, sub: formatCurrency(stats.draftAmount || 0), icon: DollarSignIcon, filter: 'draft' },
+      { label: 'Sent', value: stats.sent, sub: formatCurrency(stats.sentAmount || 0), icon: DollarSignIcon, filter: 'sent' },
+      { label: 'Viewed', value: stats.viewed, sub: formatCurrency(stats.viewedAmount || 0), icon: DollarSignIcon, filter: 'viewed' },
+      { label: 'Partial', value: stats.partial, sub: formatCurrency(stats.partialAmount || 0), icon: DollarSignIcon, filter: 'partial' },
     ];
   }, [stats, totalUnpaid]);
 
   const handleStatClick = (filter?: string) => {
     if (filter === 'outstanding') {
-      setStatus('sent');
+      setStatus('sent,viewed,partial');
+      setDocumentType('');
     } else if (filter !== undefined) {
       setStatus(filter);
     }
@@ -169,9 +195,30 @@ export default function AdminFinanceInvoicesPage() {
     setPage(1);
   };
 
+  const tabConfig = [
+    { key: 'all', label: 'All', status: '', docType: '' },
+    { key: 'invoices', label: 'Invoices', status: '', docType: 'invoice' },
+    { key: 'estimates', label: 'Estimates', status: '', docType: 'estimate' },
+    { key: 'draft', label: 'Draft', status: 'draft', docType: '' },
+    { key: 'sent-due', label: 'Sent / Due', status: 'sent,viewed', docType: '' },
+    { key: 'paid', label: 'Paid', status: 'paid', docType: '' },
+    { key: 'partial', label: 'Partial', status: 'partial', docType: '' },
+    { key: 'overdue', label: 'Overdue', status: 'overdue', docType: '' },
+    { key: 'voided', label: 'Voided', status: 'cancelled', docType: '' },
+  ];
+
+  const activeTab = tabConfig.find((t) => t.status === status && t.docType === documentType)?.key || 'all';
+
+  const handleTabClick = (tab: typeof tabConfig[0]) => {
+    setStatus(tab.status);
+    setDocumentType(tab.docType);
+    setPage(1);
+  };
+
   const statCards = statItems.map((s) => ({
     label: s.label,
     value: statsLoading ? '...' : s.value,
+    sub: s.sub,
     icon: s.icon,
     accent: s.accent,
     onClick: s.filter !== undefined ? () => handleStatClick(s.filter) : undefined,
@@ -184,9 +231,49 @@ export default function AdminFinanceInvoicesPage() {
       title="Invoices"
       icon={DollarSignIcon}
       description="Invoices, estimates and quotes"
-      actions={<Button asChild><Link href="/admin/finance/invoices/new"><Plus className="mr-2 h-4 w-4" /> New Invoice</Link></Button>}
+      actions={
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/finance/invoices/new?document_type=estimate"><FileText className="mr-2 h-4 w-4" /> New Estimate</Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/admin/finance/invoices/new"><Plus className="mr-2 h-4 w-4" /> New Invoice</Link>
+          </Button>
+        </div>
+      }
     >
       <StatCards cards={statCards} />
+
+      <div className="border-b">
+        <nav className="flex space-x-1 overflow-x-auto pb-px -mb-px">
+          {tabConfig.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const count = tab.key === 'all'
+              ? pagination.total
+              : tab.status && stats
+                ? (tab.status.includes(',') ? tab.status.split(',').reduce((sum, k) => sum + (stats[k] || 0), 0) : stats[tab.status])
+                : undefined;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => handleTabClick(tab)}
+                className={`shrink-0 py-2.5 px-3 border-b-2 text-sm font-medium transition-colors whitespace-nowrap ${
+                  isActive
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                }`}
+              >
+                {tab.label}
+                {count !== undefined && count > 0 && (
+                  <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
       <div className="flex flex-wrap gap-3">
         <Input
@@ -263,6 +350,11 @@ export default function AdminFinanceInvoicesPage() {
               onDelete={(i) => {
                 if (window.confirm('Delete this invoice?')) deleteMutation.mutate(i.id);
               }}
+              onRecordPayment={(i) => {
+                setRecordInvoice(i);
+                setRecordAmount(String(i.amount_due ?? i.total_amount ?? ''));
+                setRecordDialogOpen(true);
+              }}
               copiedLinkId={copiedLinkId}
             />
           )}
@@ -282,6 +374,47 @@ export default function AdminFinanceInvoicesPage() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={recordDialogOpen} onOpenChange={setRecordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+            <DialogDescription>
+              Record a payment for {recordInvoice?.invoice_number || recordInvoice?.package_code || `invoice #${recordInvoice?.id}`}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="amount">Amount</Label>
+            <Input
+              id="amount"
+              type="number"
+              step="0.01"
+              value={recordAmount}
+              onChange={(e) => setRecordAmount(e.target.value)}
+              placeholder="0.00"
+              autoFocus
+            />
+            {recordInvoice && (
+              <p className="text-xs text-muted-foreground">
+                Total: {formatCurrency(recordInvoice.total_amount, recordInvoice.currency)} · Due: {formatCurrency(recordInvoice.amount_due, recordInvoice.currency)}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecordDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const amount = parseFloat(recordAmount);
+                if (!amount || amount <= 0 || !recordInvoice) return;
+                recordMutation.mutate({ id: recordInvoice.id, amount });
+              }}
+              disabled={recordMutation.isPending}
+            >
+              {recordMutation.isPending ? 'Saving...' : 'Record Payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

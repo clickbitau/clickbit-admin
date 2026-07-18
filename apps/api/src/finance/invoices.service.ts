@@ -288,29 +288,73 @@ export class InvoicesService {
   }
 
   async getStats() {
-    const rows = await this.invoices.groupBy({
-      by: ['status'],
+    const rows = await this.invoices.findMany({
       where: { deleted_at: null },
-      _count: { status: true },
-    });
-
-    const stats: Record<string, number> = { total: 0, draft: 0, sent: 0, viewed: 0, partial: 0, paid: 0, cancelled: 0, expired: 0, overdue: 0 };
-    for (const row of rows) {
-      const key = row.status || 'unknown';
-      if (stats[key] !== undefined) stats[key] = row._count.status;
-      stats.total += row._count.status;
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-    const overdueCount = await this.invoices.count({
-      where: {
-        deleted_at: null,
-        status: { in: ['sent', 'viewed'] },
-        valid_until: { lt: new Date(today) },
+      select: {
+        status: true,
+        document_type: true,
+        total_amount: true,
+        amount_paid: true,
+        amount_due: true,
+        valid_until: true,
+        due_date: true,
       },
     });
-    stats.overdue = overdueCount;
-    stats.expired = overdueCount;
+
+    const stats: Record<string, number> = {
+      total: 0,
+      draft: 0,
+      sent: 0,
+      viewed: 0,
+      partial: 0,
+      paid: 0,
+      cancelled: 0,
+      expired: 0,
+      overdue: 0,
+      totalAmount: 0,
+      paidAmount: 0,
+      outstandingAmount: 0,
+      overdueAmount: 0,
+      draftAmount: 0,
+      sentAmount: 0,
+      viewedAmount: 0,
+      partialAmount: 0,
+    };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const isOverdue = (row: { valid_until?: Date | null; due_date?: Date | null }) => {
+      if (row.valid_until && new Date(row.valid_until) < today) return true;
+      if (row.due_date && new Date(row.due_date) < today) return true;
+      return false;
+    };
+
+    for (const row of rows) {
+      const key = row.status || 'unknown';
+      if (stats[key] !== undefined) stats[key] = (stats[key] || 0) + 1;
+      stats.total += 1;
+
+      const total = parseNumber(row.total_amount);
+      const paid = parseNumber(row.amount_paid);
+      const due = parseNumber(row.amount_due);
+
+      stats.totalAmount += total;
+      if (row.status === 'paid') stats.paidAmount += total;
+      if (row.status === 'partial') stats.paidAmount += paid;
+      if (['sent', 'viewed', 'partial'].includes(row.status || '')) stats.outstandingAmount += due;
+      if (row.status === 'draft') stats.draftAmount += total;
+      if (row.status === 'sent') stats.sentAmount += total;
+      if (row.status === 'viewed') stats.viewedAmount += total;
+      if (row.status === 'partial') stats.partialAmount += total;
+
+      if (['sent', 'viewed', 'partial'].includes(row.status || '') && isOverdue(row)) {
+        stats.overdue += 1;
+        stats.overdueAmount += due;
+      }
+    }
+
+    stats.expired = stats.overdue;
 
     return stats;
   }
@@ -326,9 +370,17 @@ export class InvoicesService {
     const status = query.status as string | undefined;
     if (status) {
       if (status === 'overdue') {
-        const today = new Date().toISOString().split('T')[0];
-        where.status = { in: ['sent', 'viewed'] };
-        where.valid_until = { lt: new Date(today) };
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        where.AND = [
+          { status: { in: ['sent', 'viewed', 'partial'] } },
+          {
+            OR: [
+              { valid_until: { lt: today } },
+              { due_date: { lt: today } },
+            ],
+          },
+        ];
       } else if (status.includes(',')) {
         where.status = { in: status.split(',') };
       } else {

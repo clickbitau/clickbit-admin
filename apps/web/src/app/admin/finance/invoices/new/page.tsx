@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -22,8 +22,10 @@ const taxTypes = ['gst_included', 'gst_calculated', 'no_gst'];
 export default function AdminNewInvoicePage() {
   const { token } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialDocType = (searchParams?.get('document_type') as 'invoice' | 'estimate' | 'quote' | 'package') || 'invoice';
   const [form, setForm] = useState<Partial<Invoice>>({
-    document_type: 'invoice',
+    document_type: initialDocType,
     tax_type: 'gst_included',
     tax_rate: 10,
     currency: 'AUD',
