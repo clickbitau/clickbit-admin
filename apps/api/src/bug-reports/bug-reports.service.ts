@@ -149,10 +149,13 @@ export class BugReportsService {
       include: bugReportInclude,
     });
 
-    const pipelineResult = await this.pipeline.startPipeline(bugReport, {
-      autoMerge: !safeRequireApproval,
-      requireApproval: safeRequireApproval,
-    });
+    let pipelineResult: any = { skipped: true, reason: 'Devin not configured' };
+    if (this.pipeline.isDevinConfigured()) {
+      pipelineResult = await this.pipeline.startPipeline(bugReport, {
+        autoMerge: !safeRequireApproval,
+        requireApproval: safeRequireApproval,
+      });
+    }
 
     const updated = await this.prisma.bug_reports.findUnique({ where: { id: bugReport.id }, include: bugReportInclude });
     return { success: true, data: normalize(updated || bugReport), pipeline: pipelineResult };
