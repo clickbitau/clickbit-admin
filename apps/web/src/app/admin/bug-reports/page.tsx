@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bug, Plus, RefreshCw, AlertCircle } from 'lucide-react';
+import { Bug, Plus, RefreshCw, AlertCircle, Search, X } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { fetchBugReports, fetchBugReportStats, syncBugReports, fetchBugReportConfig } from '@/lib/api';
+import { fetchBugReports, fetchBugReportStats, syncBugReports, fetchBugReportConfig, fetchBugReportRepos } from '@/lib/api';
 import { useDebounce } from '@/lib/useDebounce';
 import { formatDate } from '@/lib/format';
 import type { BugReport, BugReportListResponse, BugReportStats } from '@/types/bug-reports';
@@ -66,6 +66,7 @@ export default function AdminBugReportsPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState('all');
   const [category, setCategory] = useState('all');
+  const [targetRepo, setTargetRepo] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 25;
@@ -80,6 +81,15 @@ export default function AdminBugReportsPage() {
     enabled: !!token,
   });
 
+  const reposQuery = useQuery({
+    queryKey: ['bug-report-repos', token],
+    queryFn: async () => {
+      if (!token) throw new Error('No token');
+      return fetchBugReportRepos(token);
+    },
+    enabled: !!token,
+  });
+
   const statsQuery = useQuery<{ success: boolean; data: BugReportStats }>({
     queryKey: ['bug-report-stats', token],
     queryFn: async () => {
@@ -90,12 +100,13 @@ export default function AdminBugReportsPage() {
   });
 
   const listQuery = useQuery<BugReportListResponse>({
-    queryKey: ['bug-reports', token, status, category, debouncedSearch, page],
+    queryKey: ['bug-reports', token, status, category, targetRepo, debouncedSearch, page],
     queryFn: async () => {
       if (!token) throw new Error('No token');
       const params: Record<string, string | number> = { limit, offset: (page - 1) * limit };
       if (status !== 'all') params.status = status;
       if (category !== 'all') params.category = category;
+      if (targetRepo !== 'all') params.target_repo = targetRepo;
       if (debouncedSearch) params.search = debouncedSearch;
       return fetchBugReports(token, params);
     },
@@ -115,6 +126,7 @@ export default function AdminBugReportsPage() {
   const stats = statsQuery.data?.data;
   const reports = listQuery.data?.data ?? [];
   const total = listQuery.data?.total ?? 0;
+  const repos = reposQuery.data?.data ?? [];
 
   const statCards = stats
     ? [
@@ -129,6 +141,16 @@ export default function AdminBugReportsPage() {
     configQuery.data?.data?.github?.configured || configQuery.data?.data?.devin?.configured;
 
   const categories = ['invoice', 'dashboard', 'login', 'crm', 'hr', 'payments', 'other', 'mobile', 'deploy'];
+
+  function resetFilters() {
+    setStatus('all');
+    setCategory('all');
+    setTargetRepo('all');
+    setSearch('');
+    setPage(1);
+  }
+
+  const activeFilters = (status !== 'all' ? 1 : 0) + (category !== 'all' ? 1 : 0) + (targetRepo !== 'all' ? 1 : 0) + (search ? 1 : 0);
 
   return (
     <PageShell
@@ -161,32 +183,42 @@ export default function AdminBugReportsPage() {
 
       {stats && <StatCards cards={statCards} />}
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-        <Input
-          placeholder="Search bug reports..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="sm:max-w-sm"
-        />
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search bug reports..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="pl-9"
+            />
+          </div>
           <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               {statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={category} onValueChange={(v) => { setCategory(v); setPage(1); }}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Category" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All categories</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
+              {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={targetRepo} onValueChange={(v) => { setTargetRepo(v); setPage(1); }}>
+            <SelectTrigger className="w-[220px]"><SelectValue placeholder="Target repo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All repos</SelectItem>
+              {repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {activeFilters > 0 && (
+            <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
+              <X className="mr-1 h-4 w-4" /> Clear ({activeFilters})
+            </Button>
+          )}
         </div>
       </div>
 

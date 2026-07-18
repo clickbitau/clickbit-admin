@@ -2198,6 +2198,10 @@ export async function fetchBugReportConfig(token: string): Promise<{ success: bo
   return (await api.get('/api/bug-reports/config', { headers: authHeaders(token) })).data;
 }
 
+export async function fetchBugReportRepos(token: string): Promise<{ success: boolean; data: { id: string; name: string; description?: string }[] }> {
+  return (await api.get('/api/bug-reports/repos', { headers: authHeaders(token) })).data;
+}
+
 export async function fetchBugReportPrDetails(token: string, id: string | number): Promise<{ success: boolean; data: Record<string, unknown> }> {
   return (await api.get(`/api/bug-reports/${id}/pr-details`, { headers: authHeaders(token) })).data;
 }
