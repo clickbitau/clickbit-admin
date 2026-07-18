@@ -77,8 +77,8 @@ export default function AdminCommunicationChatPage() {
       icon={MessageSquareIcon}
       actions={<Button asChild><Link href="/admin/communication/chat/new"><Plus className="mr-1 h-4 w-4" /> New</Link></Button>}
     >
-      <div className="grid gap-4 md:grid-cols-[300px_1fr]">
-        <Card className="h-[calc(100vh-12rem)]">
+      <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+        <Card className="h-[50vh] md:h-[calc(100vh-12rem)]">
           <CardHeader>
             <CardTitle>Conversations</CardTitle>
             <select value={selectedWorkspace ?? ''} onChange={(e) => setSelectedWorkspace(Number(e.target.value))} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
@@ -106,7 +106,7 @@ export default function AdminCommunicationChatPage() {
           </CardContent>
         </Card>
 
-        <Card className="h-[calc(100vh-12rem)] flex flex-col">
+        <Card className="h-[50vh] md:h-[calc(100vh-12rem)] flex flex-col">
           <CardHeader>
             <CardTitle>{conversation ? conversation.name : 'Select a conversation'}</CardTitle>
           </CardHeader>
@@ -114,7 +114,7 @@ export default function AdminCommunicationChatPage() {
             {loadingMessages ? <Skeleton className="h-8 w-full" /> : (
               (messages?.messages || []).map((m: Message) => (
                 <div key={m.id} className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium">{m.author ? `${m.author.first_name} ${m.author.last_name}` : `User ${m.user_id}`}</span>
                     <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString()}</span>
                   </div>
@@ -126,9 +126,9 @@ export default function AdminCommunicationChatPage() {
           </CardContent>
           {conversation && (
             <CardContent className="border-t pt-4">
-              <div className="flex gap-2">
-                <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message..." onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) send.mutate(); }} />
-                <Button onClick={() => draft.trim() && send.mutate()} disabled={send.isPending}>Send</Button>
+              <div className="flex flex-wrap gap-2">
+                <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message..." onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) send.mutate(); }} className="flex-1" />
+                <Button onClick={() => draft.trim() && send.mutate()} disabled={send.isPending} className="w-full sm:w-auto">Send</Button>
               </div>
             </CardContent>
           )}

@@ -83,8 +83,8 @@ export default function AdminCommunicationMailPage() {
           <CardHeader><CardTitle>Email Accounts</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value, username: e.target.value })} className="max-w-xs" />
-              <Input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="max-w-xs" />
+              <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value, username: e.target.value })} className="w-full sm:max-w-xs" />
+              <Input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full sm:max-w-xs" />
               <select value={form.preset} onChange={(e) => setForm({ ...form, preset: e.target.value })} className="rounded-md border bg-background px-3 py-2 text-sm">
                 <option value="">Preset</option>
                 {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
@@ -94,8 +94,8 @@ export default function AdminCommunicationMailPage() {
             {loadingAccounts ? <Skeleton className="h-16 w-full" /> : (
               <div className="divide-y">
                 {accounts?.data?.map((a: MailAccount) => (
-                  <div key={a.id} className="flex items-center justify-between py-2">
-                    <button onClick={() => { setSelectedAccount(a.id); setSelectedFolder('INBOX'); }} className={`text-sm hover:underline ${selectedAccount === a.id ? 'font-semibold' : ''}`}>{a.email}</button>
+                  <div key={a.id} className="flex items-center justify-between gap-2 py-2">
+                    <button onClick={() => { setSelectedAccount(a.id); setSelectedFolder('INBOX'); }} className={`text-sm hover:underline truncate text-left ${selectedAccount === a.id ? 'font-semibold' : ''}`}>{a.email}</button>
                     <Button variant="destructive" size="sm" onClick={() => removeAccount.mutate(a.id)}>Delete</Button>
                   </div>
                 ))}
@@ -109,14 +109,14 @@ export default function AdminCommunicationMailPage() {
           <CardHeader><CardTitle>Templates</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              <Input placeholder="Name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} className="max-w-xs" />
-              <Input placeholder="Subject" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} className="max-w-xs" />
+              <Input placeholder="Name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} className="w-full sm:max-w-xs" />
+              <Input placeholder="Subject" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} className="w-full sm:max-w-xs" />
               <Button onClick={() => templateForm.name && addTemplate.mutate()} disabled={addTemplate.isPending}>Add</Button>
             </div>
             <div className="divide-y">
               {templates?.data?.map((t: EmailTemplate) => (
-                <div key={t.id} className="flex items-center justify-between py-2">
-                  <div className="text-sm">{t.name} &middot; {t.subject}</div>
+                <div key={t.id} className="flex items-center justify-between gap-2 py-2">
+                  <div className="text-sm truncate">{t.name} &middot; {t.subject}</div>
                   <Button variant="destructive" size="sm" onClick={() => removeTemplate.mutate(t.id)}>Delete</Button>
                 </div>
               ))}
@@ -127,10 +127,10 @@ export default function AdminCommunicationMailPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
           <CardTitle>Messages</CardTitle>
-          <div className="flex gap-2">
-            <select value={selectedFolder} onChange={(e) => setSelectedFolder(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <select value={selectedFolder} onChange={(e) => setSelectedFolder(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
               {folders?.data?.map((f: MailFolder) => <option key={f.path} value={f.path}>{f.name}</option>)}
             </select>
           </div>
