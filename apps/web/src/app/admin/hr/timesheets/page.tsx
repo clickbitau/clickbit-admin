@@ -5,12 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  Calendar, CheckCircle, Clock, Coffee, Copy, Download, Edit, Eye, FileClock, Gift, MapPin,
-  Play, Plus, Send, Square, Trash2, Umbrella, User, XCircle, ChevronLeft, ChevronRight,
+  Calendar, CheckCircle, Clock, Coffee, Copy, Download, Edit, Eye, FileClock, Gift, Loader2, MapPin,
+  Play, Plus, Send, Square, Trash2, Umbrella, User, UserMinus, XCircle, ChevronLeft, ChevronRight,
   DollarSign, Search, X
 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
-import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,10 +104,10 @@ function formatForInput(dateStr?: string | null) {
 }
 
 function formatWeekRange(start: Date, end: Date) {
-  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-  const s = start.toLocaleDateString('en-AU', opts);
-  const e = end.toLocaleDateString('en-AU', { ...opts, year: 'numeric' });
-  return `${s} — ${e}`;
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const s = start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  const e = end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  return sameYear ? `${s} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} ${end.getFullYear()}` : `${s} — ${e}`;
 }
 
 function getWorkSchedule(emp: Employee) {
@@ -159,6 +158,37 @@ function employeeDisplayName(emp?: Employee | null) {
   const user = emp.user as any;
   const full = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
   return full || user?.email || emp.name || `Employee ${emp.id}`;
+}
+
+function formatShortDate(date: Date) {
+  return `${date.getDate()}/${date.getMonth() + 1}`;
+}
+
+function getScheduleTime(emp: Employee, dayIndex: number) {
+  const sched = getWorkSchedule(emp)?.[DAY_NAMES[dayIndex]];
+  if (sched?.enabled && sched.start && sched.end) return `${sched.start.slice(0, 5)} – ${sched.end.slice(0, 5)}`;
+  return '';
+}
+
+function statusDotClass(status: string) {
+  switch (status) {
+    case 'active': return 'bg-green-500';
+    case 'completed': return 'bg-blue-500';
+    case 'approved': return 'bg-emerald-500';
+    case 'rejected': return 'bg-red-500';
+    case 'edited': return 'bg-yellow-500';
+    default: return 'bg-gray-400';
+  }
+}
+
+function BreakTimer({ start }: { start: string }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => tick((t) => t + 1), 30000);
+    return () => clearInterval(iv);
+  }, []);
+  const mins = Math.floor((Date.now() - new Date(start).getTime()) / 60000);
+  return <span className="text-[10px] text-yellow-600 dark:text-yellow-400">({mins}m)</span>;
 }
 
 export default function AdminHrTimesheetsPage() {
@@ -373,12 +403,20 @@ export default function AdminHrTimesheetsPage() {
 
   useEffect(() => { setListPage(1); }, [statusFilter, employeeFilter, currentWeekStart]);
 
+  const scheduleTotalMins = scheduleRows.reduce((s, r) => s + r.totalMinutes, 0);
+  const scheduleExpectedMins = scheduleRows.reduce((s, r) => s + r.expectedMinutes, 0);
+  const scheduleBreakMins = scheduleRows.reduce((s, r) => s + r.totalBreak, 0);
+  const scheduleTotalHours = scheduleTotalMins / 60;
+  const scheduleExpectedHours = scheduleExpectedMins / 60;
+  const scheduleDiffHours = scheduleTotalHours - scheduleExpectedHours;
+
   const statCards = [
-    { label: 'Total Hours', value: Number(summary.totalHours || 0).toFixed(2), icon: Clock },
-    { label: 'Break Hours', value: Number(summary.totalBreakHours || 0).toFixed(2), icon: Coffee },
-    { label: 'Entries', value: summary.entriesCount ?? 0, icon: FileClock },
-    { label: 'Pending Approvals', value: summary.pendingApprovals ?? 0, icon: Calendar, accent: summary.pendingApprovals ? ('warning' as const) : undefined },
-    ...(isManager ? [{ label: 'Est. Pay', value: `$${Number(summary.totalEstimatedPay || 0).toFixed(2)}`, icon: DollarSign }] : []),
+    { label: 'Total Hours', value: scheduleTotalHours.toFixed(1), icon: Clock, color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' },
+    { label: 'Expected Hours', value: scheduleExpectedHours.toFixed(1), icon: Calendar, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300' },
+    { label: 'Difference', value: `${scheduleDiffHours >= 0 ? '+' : ''}${scheduleDiffHours.toFixed(1)}h`, icon: scheduleDiffHours >= 0 ? CheckCircle : XCircle, color: scheduleDiffHours >= 0 ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300' },
+    { label: 'Total Breaks', value: formatMinsAsHours(scheduleBreakMins), icon: Coffee, color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300' },
+    { label: 'Pending Approvals', value: summary.pendingApprovals ?? 0, icon: FileClock, color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300' },
+    ...(isManager ? [{ label: 'Est. Pay', value: `$${Number(summary.totalEstimatedPay || 0).toFixed(2)}`, icon: DollarSign, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300' }] : []),
   ];
 
   // Handlers
@@ -557,7 +595,22 @@ export default function AdminHrTimesheetsPage() {
         </div>
       }
     >
-      <StatCards cards={statCards} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        {statCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.label} className="nm-raised p-4 flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${card.color}`}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">{card.label}</p>
+                <p className="text-xl font-bold">{card.value}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       <Tabs value={view} onValueChange={(v) => setView(v as 'schedule' | 'list')}>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -598,79 +651,226 @@ export default function AdminHrTimesheetsPage() {
         </div>
 
         <TabsContent value="schedule" className="mt-4">
-          <Card>
-            <CardHeader>
+          <Card className="nm-raised">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <CardTitle>Weekly Schedule</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {allLoading && <div className="text-muted-foreground">Loading...</div>}
-              {!allLoading && (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-[180px]">Employee</TableHead>
-                        {weekDates.map((d, i) => (
-                          <TableHead key={i} className="text-center min-w-[120px]">{DAY_LABELS[i]}<br /><span className="text-[10px] text-muted-foreground">{toISODate(d)}</span></TableHead>
-                        ))}
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="text-right">Expected</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scheduleRows.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={10} className="text-center text-muted-foreground">No employees or entries for this week.</TableCell>
-                        </TableRow>
-                      )}
-                      {scheduleRows.map((row) => (
-                        <TableRow key={row.employee.id}>
-                          <TableCell>
-                            <div className="font-medium">{employeeDisplayName(row.employee)}</div>
-                            <div className="flex gap-1 mt-1">
-                              <Button size="sm" variant="ghost" onClick={() => { const next = new Set(hiddenIds); next.add(row.employee.id); persistHidden(next); }}><X className="h-3 w-3" /></Button>
-                              <Button size="sm" variant="ghost" onClick={() => handleQuickSignIn(row.employee.id)} disabled={!isManager}><Play className="h-3 w-3" /></Button>
-                            </div>
-                          </TableCell>
-                          {weekDates.map((d) => {
-                            const ds = toISODate(d);
-                            const cell = row.days[ds];
-                            const active = cell.entries.find((e: TimeEntry) => !e.clock_out_time);
-                            return (
-                              <TableCell key={ds} className="p-1 align-top">
-                                <div className="min-h-[80px] rounded-md bg-muted/30 p-1.5 space-y-1">
-                                  {cell.holiday && <Badge variant="outline" className="text-[10px] bg-red-100 text-red-800"><Gift className="mr-1 h-3 w-3" />{cell.holiday.name}</Badge>}
-                                  {cell.timeOff && <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-800"><Umbrella className="mr-1 h-3 w-3" />{getLeaveTypeLabel(cell.timeOff.leave_type)}</Badge>}
-                                  {cell.shifts.map((s: Shift) => (
-                                    <button key={s.id} onClick={() => openShiftModal(undefined, undefined, s)} className="block w-full text-left">
-                                      <Badge className={`text-[10px] text-white ${getShiftStatusColor(s.status)}`}>{s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}</Badge>
-                                    </button>
-                                  ))}
-                                  {cell.totalMinutes > 0 && (
-                                    <button onClick={() => { setEmployeeFilter(String(row.employee.id)); setView('list'); }} className="block w-full text-left">
-                                      <Badge variant="default" className="text-[10px]">{(cell.totalMinutes / 60).toFixed(1)}h</Badge>
-                                      {active && <span className="text-[10px] text-yellow-600 block">on break/active</span>}
-                                    </button>
-                                  )}
-                                  <Button size="sm" variant="ghost" className="h-6 text-[10px] px-1" onClick={() => openShiftModal(row.employee.id, ds)}><Plus className="h-3 w-3 mr-1" /> Shift</Button>
-                                </div>
-                              </TableCell>
-                            );
-                          })}
-                          <TableCell className="text-right font-semibold">{formatMinsAsHours(row.totalMinutes)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatMinsAsHours(row.expectedMinutes)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              {hiddenIds.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Hidden employees:</span>
+                  {employees.filter((e) => hiddenIds.has(e.id)).map((e) => (
+                    <Badge key={e.id} variant="outline" className="cursor-pointer" onClick={() => { const next = new Set(hiddenIds); next.delete(e.id); persistHidden(next); }}>
+                      {employeeDisplayName(e)} <X className="ml-1 h-3 w-3" />
+                    </Badge>
+                  ))}
                 </div>
               )}
-              {hiddenIds.size > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="text-sm text-muted-foreground">Hidden employees:</span>
-                  {employees.filter((e) => hiddenIds.has(e.id)).map((e) => (
-                    <Badge key={e.id} variant="outline" className="cursor-pointer" onClick={() => { const next = new Set(hiddenIds); next.delete(e.id); persistHidden(next); }}>{employeeDisplayName(e)} <X className="ml-1 h-3 w-3" /></Badge>
-                  ))}
+            </CardHeader>
+            <CardContent>
+              {allLoading && scheduleRows.length === 0 ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : scheduleRows.length === 0 ? (
+                <div className="text-center py-16">
+                  <Clock className="h-16 w-16 mx-auto mb-4 text-muted-foreground/40" />
+                  <p className="text-lg font-medium">No timesheet data this week</p>
+                  <p className="text-sm text-muted-foreground mt-1">Employees will appear here once they clock in.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  {allLoading && (
+                    <div className="absolute right-4 top-4 z-20 rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-primary shadow">
+                      Updating week...
+                    </div>
+                  )}
+                  <table className="w-full min-w-[1000px]">
+                    <thead>
+                      <tr className="bg-muted/40">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-52 sticky left-0 bg-background z-10">Employee</th>
+                        {weekDates.map((d, i) => {
+                          const isToday = toISODate(d) === toISODate(new Date());
+                          return (
+                            <th key={i} className={`px-2 py-3 text-center text-sm font-medium min-w-[120px] ${isToday ? 'bg-teal-50/30 dark:bg-teal-900/10' : ''}`}>
+                              <div className={isToday ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-muted-foreground'}>{DAY_LABELS[i]}</div>
+                              <div className="text-[10px] text-muted-foreground">{formatShortDate(d)}</div>
+                            </th>
+                          );
+                        })}
+                        <th className="px-3 py-3 text-center text-sm font-medium text-muted-foreground w-24">Total</th>
+                        <th className="px-3 py-3 text-center text-sm font-medium text-muted-foreground w-24">Expected</th>
+                        <th className="px-3 py-3 text-center text-sm font-medium text-muted-foreground w-24">Diff</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/30">
+                      {scheduleRows.map((row) => {
+                        const activeEntry = entries.find((e: TimeEntry) => e.employee_id === row.employee.id && !e.clock_out_time);
+                        const diffMins = row.totalMinutes - row.expectedMinutes;
+                        const empUser = (row.employee as any)?.user;
+                        const empName = employeeDisplayName(row.employee);
+                        return (
+                          <tr key={row.employee.id} className="hover:bg-primary/[0.03] transition-colors">
+                            <td className="px-4 py-3 sticky left-0 bg-background z-10 align-top">
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  {empUser?.avatar ? (
+                                    <img src={empUser.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                      <User className="w-4 h-4 text-primary" />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate max-w-[140px]">{empName}</p>
+                                    {row.totalBreak > 0 && <p className="text-[10px] text-muted-foreground">Break {formatMinsAsHours(row.totalBreak)}</p>}
+                                  </div>
+                                </div>
+                                {isManager && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {activeEntry ? (
+                                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" onClick={() => handleQuickSignOut(activeEntry)}>
+                                        <Square className="h-3 w-3 mr-1" /> Sign Out
+                                      </Button>
+                                    ) : (
+                                      <Button size="sm" variant="ghost" className="h-7 text-xs text-emerald-600" onClick={() => handleQuickSignIn(row.employee.id)}>
+                                        <Play className="h-3 w-3 mr-1" /> Sign In
+                                      </Button>
+                                    )}
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => { const next = new Set(hiddenIds); next.add(row.employee.id); persistHidden(next); }}>
+                                      <UserMinus className="h-3 w-3 mr-1" /> Hide
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            {weekDates.map((d, i) => {
+                              const ds = toISODate(d);
+                              const cell = row.days[ds];
+                              const isToday = ds === toISODate(new Date());
+                              const todayMid = new Date(new Date().setHours(0, 0, 0, 0));
+                              const isPast = d.getTime() < todayMid.getTime() && !isToday;
+                              const isFuture = d.getTime() > todayMid.getTime() && !isToday;
+                              const scheduleStr = getScheduleTime(row.employee, i);
+                              const active = cell.entries.find((e: TimeEntry) => !e.clock_out_time);
+                              const hasGps = (entry: TimeEntry) => {
+                                if (entry.gps_coordinates) {
+                                  try { return JSON.parse(entry.gps_coordinates).length > 0; } catch { return false; }
+                                }
+                                return !!entry.clock_in_address || !!entry.clock_out_address;
+                              };
+                              return (
+                                <td key={ds} className={`p-1 align-top min-w-[120px] ${isToday ? 'bg-teal-50/20 dark:bg-teal-900/5' : ''}`}>
+                                  <div className="min-h-[90px] rounded-lg nm-inset-sm p-1.5 space-y-1">
+                                    {cell.holiday && (
+                                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/20 text-[10px] text-amber-700 dark:text-amber-300 font-medium">
+                                        <Gift className="h-2.5 w-2.5" /> {cell.holiday.name}
+                                      </div>
+                                    )}
+                                    {cell.timeOff && (
+                                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 text-[10px] text-orange-700 dark:text-orange-300">
+                                        <Umbrella className="h-2.5 w-2.5" /> {getLeaveTypeLabel(cell.timeOff.leave_type)}
+                                      </div>
+                                    )}
+                                    {cell.shifts.map((s: Shift) => (
+                                      <button key={s.id} onClick={() => openShiftModal(undefined, undefined, s)} className="block w-full text-left">
+                                        <div className="text-xs px-1.5 py-1 rounded text-white" style={{ backgroundColor: s.color || '#3B82F6', borderLeft: `3px solid ${s.color || '#3B82F6'}` }}>
+                                          <div className="font-medium">{s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}</div>
+                                          {s.location && <div className="text-[9px] opacity-90 truncate">{s.location}</div>}
+                                          <div className="text-[9px] opacity-80 capitalize">{s.status}</div>
+                                        </div>
+                                      </button>
+                                    ))}
+                                    {cell.entries.map((entry: TimeEntry) => {
+                                      const onBreak = entry.is_on_break && !entry.clock_out_time;
+                                      return (
+                                        <div key={entry.id} className="group p-1.5 rounded-lg text-xs nm-inset-sm border border-transparent hover:border-primary/20 cursor-pointer transition-all" onClick={() => openDetail(entry)}>
+                                          <div className="flex items-center gap-1 mb-0.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${statusDotClass(entry.status)}`}></span>
+                                            <span className="font-medium">{formatTimeOnly(entry.clock_in_time)}</span>
+                                          </div>
+                                          {entry.clock_out_time ? (
+                                            <div className="text-muted-foreground">→ {formatTimeOnly(entry.clock_out_time)}</div>
+                                          ) : onBreak ? (
+                                            <div className="text-yellow-600 dark:text-yellow-400 font-medium flex items-center gap-1">
+                                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></span>
+                                              On Break
+                                              {entry.break_start_time && <BreakTimer start={entry.break_start_time} />}
+                                            </div>
+                                          ) : (
+                                            <div className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
+                                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                              Active
+                                            </div>
+                                          )}
+                                          {entry.total_minutes ? (
+                                            <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                                              {formatMinsAsHours(entry.total_minutes)}
+                                              {entry.break_minutes ? <span className="text-purple-400"> | {entry.break_minutes}m brk</span> : null}
+                                              {hasGps(entry) && <MapPin className="h-2.5 w-2.5 text-primary flex-shrink-0" />}
+                                            </div>
+                                          ) : null}
+                                          {entry.clock_out_time && (entry.work_items_count === 0 || entry.work_items_count === undefined) && entry.status !== 'active' && (
+                                            <div className="flex items-center gap-0.5 mt-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1 py-0.5 rounded">
+                                              No Tasks
+                                            </div>
+                                          )}
+                                          {isManager && (entry.status === 'completed' || entry.status === 'edited') && !entry.approved_by && (
+                                            <div className="hidden group-hover:flex items-center gap-1 mt-1 pt-1 border-t border-border/50">
+                                              <button onClick={(e) => { e.stopPropagation(); approve.mutate(entry.id); }} className="flex-1 text-center py-0.5 bg-emerald-500 text-white rounded text-[10px] hover:brightness-110">
+                                                <CheckCircle className="h-3 w-3 mx-auto" />
+                                              </button>
+                                              <button onClick={(e) => { e.stopPropagation(); reject.mutate(entry.id); }} className="flex-1 text-center py-0.5 bg-red-500 text-white rounded text-[10px] hover:brightness-110">
+                                                <XCircle className="h-3 w-3 mx-auto" />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {cell.entries.length === 0 && cell.shifts.length === 0 && !cell.timeOff && !cell.holiday && (
+                                      <>
+                                        {scheduleStr && (isPast) ? (
+                                          <div className="p-1.5 rounded-lg text-xs nm-inset-sm border border-amber-500/30 cursor-pointer hover:shadow-md transition-all" onClick={() => { setManualForm({ employee_id: String(row.employee.id), date: ds, clock_in_time: '09:00', clock_out_time: '17:00', break_minutes: '0', reason: '' }); setManualOpen(true); }}>
+                                            <div className="text-amber-600 dark:text-amber-400 text-[10px] font-medium">No entry</div>
+                                            <div className="text-amber-400 dark:text-amber-500 text-[10px]">{scheduleStr}</div>
+                                            {isManager && <div className="text-amber-600 dark:text-amber-300 text-[10px] mt-0.5">+ Add hours</div>}
+                                          </div>
+                                        ) : scheduleStr && (isFuture || isToday) ? (
+                                          <div className="p-1.5 rounded-lg text-xs border border-dashed border-border nm-inset-sm cursor-pointer hover:shadow-md transition-all" onClick={() => openShiftModal(row.employee.id, ds)}>
+                                            <div className="text-muted-foreground text-[10px]">{scheduleStr}</div>
+                                            {isManager && <div className="text-muted-foreground text-[10px]">Default · click to create</div>}
+                                          </div>
+                                        ) : null}
+                                      </>
+                                    )}
+                                    {isManager && (isFuture || isToday) && (
+                                      <button onClick={() => openShiftModal(row.employee.id, ds)} className="w-full p-1 text-center text-muted-foreground hover:text-primary opacity-0 hover:opacity-100 transition-all">
+                                        <Plus className="h-3 w-3 mx-auto" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                            <td className="px-3 py-3 text-center align-middle">
+                              <span className="text-sm font-bold">{formatMinsAsHours(row.totalMinutes)}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center align-middle">
+                              <span className="text-sm text-muted-foreground">{formatMinsAsHours(row.expectedMinutes)}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center align-middle">
+                              {row.expectedMinutes > 0 ? (
+                                <span className={`text-sm font-medium ${diffMins >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  {diffMins >= 0 ? '+' : ''}{formatMinsAsHours(Math.abs(diffMins))}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </CardContent>
