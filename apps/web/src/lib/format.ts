@@ -45,6 +45,18 @@ export function daysUntil(value: string | Date | undefined | null): string {
   return `${diff}d`;
 }
 
+export function formatDistanceToNow(value: string | Date | undefined | null): string {
+  if (!value) return '';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return '';
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return formatDate(value);
+}
+
 export function formatDuration(totalSeconds?: number | null): string {
   if (totalSeconds === undefined || totalSeconds === null || Number.isNaN(totalSeconds) || totalSeconds <= 0) return '';
   const hours = Math.floor(totalSeconds / 3600);
