@@ -7,11 +7,11 @@ import Link from 'next/link';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { fetchInvoiceStats, fetchPaymentStats, fetchExpenseStats, fetchInvoices, fetchPayments, fetchExpenses } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { Badge } from '@/components/ui/badge';
 import type { Invoice, Payment, Expense, InvoiceStats, PaymentStats, ExpenseStats } from '@/types/finance';
 
 function currentMonthRange() {
@@ -20,6 +20,26 @@ function currentMonthRange() {
   const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { from: first.toISOString().split('T')[0], to: last.toISOString().split('T')[0] };
 }
+
+const invoiceStatusColors: Record<string, string> = {
+  draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  sent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  viewed: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  partial: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  overdue: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  cancelled: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  expired: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+};
+
+const expenseStatusColors: Record<string, string> = {
+  draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  paid: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  reimbursed: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+};
 
 export default function AdminFinanceDashboardPage() {
   const { token } = useAuth();
@@ -62,9 +82,9 @@ export default function AdminFinanceDashboardPage() {
   const isLoading = invoiceStats.isLoading || paymentStats.isLoading || expenseStats.isLoading;
 
   const statCards = [
-    { label: 'Outstanding Invoices', value: isLoading ? '...' : outstandingAmount, icon: FileText, accent: 'warning' as const },
-    { label: 'Payments Received', value: isLoading ? '...' : formatCurrency(Number(paidAmount)), icon: CreditCard, accent: 'success' as const },
-    { label: 'Expenses', value: isLoading ? '...' : formatCurrency(Number(expenseAmount)), icon: TrendingDown, accent: 'destructive' as const },
+    { label: 'Outstanding Invoices', value: isLoading ? '...' : outstandingAmount, sub: formatCurrency(stats?.outstandingAmount || 0), icon: FileText, accent: 'warning' as const },
+    { label: 'Payments Received', value: isLoading ? '...' : formatCurrency(Number(paidAmount)), sub: `${pstats?.completedCount || 0} completed`, icon: CreditCard, accent: 'success' as const },
+    { label: 'Expenses', value: isLoading ? '...' : formatCurrency(Number(expenseAmount)), sub: `${estats?.total_count || 0} total`, icon: TrendingDown, accent: 'destructive' as const },
     { label: 'Net Profit', value: isLoading ? '...' : formatCurrency(profit), icon: profit >= 0 ? TrendingUp : TrendingDown, accent: profit >= 0 ? ('success' as const) : ('destructive' as const) },
   ];
 
@@ -78,7 +98,7 @@ export default function AdminFinanceDashboardPage() {
           <Button asChild variant="outline" size="sm"><Link href="/admin/finance/invoices">Invoices</Link></Button>
           <Button asChild variant="outline" size="sm"><Link href="/admin/finance/payments">Payments</Link></Button>
           <Button asChild variant="outline" size="sm"><Link href="/admin/finance/expenses">Expenses</Link></Button>
-          <Button asChild size="sm"><Link href="/admin/finance/invoices/new"><Plus className="mr-1 h-4 w-4" /> New invoice</Link></Button>
+          <Button asChild size="sm"><Link href="/admin/finance/invoices/new"><Plus className="mr-1 h-4 w-4" /> New Invoice</Link></Button>
         </div>
       }
     >
@@ -143,14 +163,14 @@ export default function AdminFinanceDashboardPage() {
           <div className="grid gap-6 lg:grid-cols-3">
             <RecentCard title="Recent Invoices" link="/admin/finance/invoices" isLoading={invoices.isLoading}>
               {invoiceList.map((i) => (
-                <Link key={i.id} href={`/admin/finance/invoices/${i.id}`} className="flex items-center justify-between rounded border p-2 hover:bg-primary/5 text-sm">
+                <Link key={i.id} href={`/admin/finance/invoices/${i.id}`} className="nm-raised-sm p-3 flex items-center justify-between hover:bg-primary/5 text-sm transition-colors">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{i.invoice_number || i.title}</p>
                     <p className="text-xs text-muted-foreground truncate">{i.client_name || i.client_email}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="font-medium">{formatCurrency(i.total_amount ?? i.total)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(i.due_date)}</p>
+                    <Badge variant="outline" className={`text-[10px] ${invoiceStatusColors[i.status || 'draft'] || ''}`}>{i.status || 'draft'}</Badge>
                   </div>
                 </Link>
               ))}
@@ -158,12 +178,12 @@ export default function AdminFinanceDashboardPage() {
 
             <RecentCard title="Recent Payments" link="/admin/finance/payments" isLoading={payments.isLoading}>
               {paymentList.map((p) => (
-                <Link key={p.id} href={`/admin/finance/payments/${p.id}`} className="flex items-center justify-between rounded border p-2 hover:bg-primary/5 text-sm">
+                <Link key={p.id} href={`/admin/finance/payments/${p.transaction_id || p.id}`} className="nm-raised-sm p-3 flex items-center justify-between hover:bg-primary/5 text-sm transition-colors">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{p.transaction_id || `Payment ${p.id}`}</p>
                     <p className="text-xs text-muted-foreground truncate">{p.payment_method || p.status}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="font-medium">{formatCurrency(p.amount)}</p>
                     <p className="text-xs text-muted-foreground">{formatDate(p.payment_date)}</p>
                   </div>
@@ -173,14 +193,14 @@ export default function AdminFinanceDashboardPage() {
 
             <RecentCard title="Recent Expenses" link="/admin/finance/expenses" isLoading={expenses.isLoading}>
               {expenseList.map((e) => (
-                <Link key={e.id} href={`/admin/finance/expenses/${e.id}`} className="flex items-center justify-between rounded border p-2 hover:bg-primary/5 text-sm">
+                <Link key={e.id} href={`/admin/finance/expenses/${e.id}`} className="nm-raised-sm p-3 flex items-center justify-between hover:bg-primary/5 text-sm transition-colors">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{e.expense_number || e.category || `Expense ${e.id}`}</p>
                     <p className="text-xs text-muted-foreground truncate">{e.description || e.status}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="font-medium">{formatCurrency(e.total_amount ?? e.amount)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(e.expense_date)}</p>
+                    <Badge variant="outline" className={`text-[10px] ${expenseStatusColors[e.status || 'draft'] || ''}`}>{e.status || 'draft'}</Badge>
                   </div>
                 </Link>
               ))}
@@ -194,15 +214,13 @@ export default function AdminFinanceDashboardPage() {
 
 function DashboardCard({ title, icon: Icon, link, isLoading, children }: { title: string; icon: any; link: string; isLoading?: boolean; children: React.ReactNode }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-base font-medium flex items-center gap-2"><Icon className="h-4 w-4" /> {title}</CardTitle>
+    <div className="nm-raised p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base font-medium flex items-center gap-2"><Icon className="h-4 w-4" /> {title}</h3>
         <Link href={link} className="text-xs text-primary hover:underline flex items-center">View <ArrowRight className="ml-1 h-3 w-3" /></Link>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? <Skeleton className="h-20 w-full" /> : children}
-      </CardContent>
-    </Card>
+      </div>
+      {isLoading ? <Skeleton className="h-20 w-full" /> : children}
+    </div>
   );
 }
 
@@ -218,14 +236,12 @@ function StatusItem({ label, value, accent }: { label: string; value: number; ac
 
 function RecentCard({ title, link, isLoading, children }: { title: string; link: string; isLoading?: boolean; children: React.ReactNode }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-base font-medium">{title}</CardTitle>
+    <div className="nm-raised p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base font-medium">{title}</h3>
         <Link href={link} className="text-xs text-primary hover:underline flex items-center">View all <ArrowRight className="ml-1 h-3 w-3" /></Link>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {isLoading ? <Skeleton className="h-20 w-full" /> : children}
-      </CardContent>
-    </Card>
+      </div>
+      {isLoading ? <Skeleton className="h-20 w-full" /> : <div className="space-y-2">{children}</div>}
+    </div>
   );
 }
