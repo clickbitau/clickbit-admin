@@ -49,6 +49,8 @@ import {
   Trash2,
   Calendar,
   GripVertical,
+  Tags,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -107,17 +109,21 @@ export default function ProjectTasksPage() {
   const [assigneeId, setAssigneeId] = useState('');
   const [projectId, setProjectId] = useState('');
   const [subprojectId, setSubprojectId] = useState('');
+  const [viewScope, setViewScope] = useState<'all' | 'my' | 'unassigned'>('all');
+  const [hideCompleted, setHideCompleted] = useState(false);
 
   const queryParams = useMemo(() => {
-    const params: Record<string, string | number> = { page, limit: 25 };
+    const params: Record<string, string | number | boolean> = { page, limit: 25 };
     if (debouncedSearch) params.search = debouncedSearch;
     if (status) params.status = status;
     if (priority) params.priority = priority;
     if (assigneeId) params.assigned_to = assigneeId;
     if (projectId) params.crm_project_id = projectId;
     if (subprojectId) params.subproject_id = subprojectId;
+    if (viewScope !== 'all') params.view_scope = viewScope;
+    if (hideCompleted) params.hide_completed = true;
     return params;
-  }, [page, debouncedSearch, status, priority, assigneeId, projectId, subprojectId]);
+  }, [page, debouncedSearch, status, priority, assigneeId, projectId, subprojectId, viewScope, hideCompleted]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', queryParams],
@@ -222,12 +228,27 @@ export default function ProjectTasksPage() {
 
   function renderTaskMeta(task: ProjectTask) {
     const progress = microtaskProgress(task.microtasks ?? []);
+    const tags = Array.isArray(task.tags) ? task.tags.filter(Boolean) : [];
     return (
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
         {task.crmProject && (
-          <span className="truncate max-w-[140px]">{task.crmProject.name || task.crmProject.project_number}</span>
+          <Link
+            href={`/admin/crm/projects/${task.crmProject.id}`}
+            className="truncate max-w-[140px] hover:text-foreground hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {task.crmProject.name || task.crmProject.project_number}
+          </Link>
         )}
-        {task.subproject && <span className="truncate max-w-[120px]">· {task.subproject.name}</span>}
+        {task.subproject && (
+          <Link
+            href={`/admin/crm/subprojects/${task.subproject.id}`}
+            className="truncate max-w-[120px] hover:text-foreground hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            · {task.subproject.name}
+          </Link>
+        )}
         {task.due_date && (
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
@@ -254,6 +275,18 @@ export default function ProjectTasksPage() {
           <span className="flex items-center gap-1">
             <CheckSquare className="h-3 w-3" />
             {progress}%
+          </span>
+        )}
+        {(task as any).is_recurring && (
+          <span className="flex items-center gap-1 text-blue-600" title="Recurring task">
+            <RefreshCw className="h-3 w-3" />
+          </span>
+        )}
+        {tags.length > 0 && (
+          <span className="flex items-center gap-1">
+            <Tags className="h-3 w-3" />
+            {tags.slice(0, 3).join(', ')}
+            {tags.length > 3 && ` +${tags.length - 3}`}
           </span>
         )}
         {(task.task_comments?.length ?? 0) > 0 && (
@@ -394,8 +427,8 @@ export default function ProjectTasksPage() {
     >
       <StatCards cards={statCards} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-        <div className="relative">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+        <div className="relative sm:col-span-2">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search tasks..."
@@ -418,6 +451,14 @@ export default function ProjectTasksPage() {
             {PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={viewScope} onValueChange={(v) => { setViewScope(v as 'all' | 'my' | 'unassigned'); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Scope" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All tasks</SelectItem>
+            <SelectItem value="my">My tasks</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
           <SelectTrigger>
             <SelectValue placeholder={loadingAssignees ? 'Loading...' : 'Assignee'} />
@@ -433,12 +474,13 @@ export default function ProjectTasksPage() {
           <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="">All projects</SelectItem>
+            <SelectItem value="none">No project</SelectItem>
             {(projects?.projects ?? []).map((p: CrmProject) => (
               <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId}>
+        <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId || projectId === 'none'}>
           <SelectTrigger><SelectValue placeholder="Subproject" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="">All subprojects</SelectItem>
@@ -447,6 +489,15 @@ export default function ProjectTasksPage() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant={hideCompleted ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setHideCompleted((prev) => !prev); setPage(1); }}
+          className="w-full"
+        >
+          <CheckSquare className="mr-2 h-4 w-4" />
+          {hideCompleted ? 'Completed hidden' : 'Hide completed'}
+        </Button>
       </div>
 
       {view === 'kanban' ? (

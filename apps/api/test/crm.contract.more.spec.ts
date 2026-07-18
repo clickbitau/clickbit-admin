@@ -420,6 +420,7 @@ describe('CRM backend endpoint contracts', () => {
 
     const buildPrisma = () => ({
       project_tasks: {
+        findUnique: jest.fn().mockResolvedValue(taskRow),
         findMany: jest.fn().mockResolvedValue([taskRow]),
         count: jest.fn().mockResolvedValue(1),
         groupBy: jest.fn().mockResolvedValue([{ status: 'in_progress', _count: { status: 1 } }]),
@@ -433,7 +434,7 @@ describe('CRM backend endpoint contracts', () => {
 
     it('GET /api/tasks returns { data, stats, pagination }', async () => {
       const controller = new TasksController(buildPrisma() as any);
-      const result = await controller.findAll({}, resMock);
+      const result = await controller.findAll({}, { user: { id: 3, role: 'employee' } } as any, resMock);
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('stats');
       expect(result).toHaveProperty('pagination');
@@ -445,7 +446,7 @@ describe('CRM backend endpoint contracts', () => {
 
     it('PATCH /api/projects/tasks/:id/status returns { data }', async () => {
       const controller = new TasksController(buildPrisma() as any);
-      const result = await controller.updateStatus(9, { status: 'completed', actual_hours: 2 }, resMock);
+      const result = await controller.updateStatus(9, { status: 'completed', actual_hours: 2 }, { user: { id: 3, role: 'employee' } } as any, resMock);
       expect(result).toHaveProperty('data');
       expect(result.data).toMatchObject({ status: 'completed' });
     });

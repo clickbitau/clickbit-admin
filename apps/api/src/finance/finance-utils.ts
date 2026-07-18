@@ -112,7 +112,7 @@ export const expenseInclude = {
   deals: { select: { id: true, name: true } },
   crm_projects: { select: { id: true, name: true, project_number: true } },
   crm_subprojects: { select: { id: true, name: true } },
-  receipt_records: true,
+  receipts_records: true,
 } as const;
 
 export function mapExpense(expense: ExpenseWithRelations) {
@@ -130,7 +130,7 @@ export function mapExpense(expense: ExpenseWithRelations) {
     deal: e.deals,
     crmProject: e.crm_projects,
     crmSubproject: e.crm_subprojects,
-    linkedReceipts: e.receipt_records,
+    linkedReceipts: e.receipts_records,
     amount: parseNumber(e.amount),
     tax_amount: parseNumber(e.tax_amount),
     total_amount: parseNumber(e.total_amount),
@@ -141,7 +141,7 @@ export function mapExpense(expense: ExpenseWithRelations) {
     profiles_expenses_created_byToprofiles: undefined,
     profiles_expenses_approved_byToprofiles: undefined,
     profiles_expenses_reimbursed_toToprofiles: undefined,
-    receipt_records: undefined,
+    receipts_records: undefined,
     invoices: undefined,
     deals: undefined,
   };

@@ -652,13 +652,21 @@ export async function createProjectTask(
   projectId: string | number,
   data: Partial<ProjectTask>,
 ): Promise<ProjectTask> {
-  const response = await api.post(`/api/crm/projects-new/${projectId}/tasks`, data, {
+  const response = await api.post<{ success: boolean; task: ProjectTask }>(`/api/crm/projects-new/${projectId}/tasks`, data, {
     headers: authHeaders(token),
   });
-  return extractSingle<ProjectTask>(response, 'data');
+  return extractSingle<ProjectTask>(response, 'task');
 }
 
 // ─── Tasks (standalone / all projects) ───────────────────────────────────────
+
+export async function fetchMyTasks(token: string, includeCompleted = false): Promise<ProjectTask[]> {
+  const response = await api.get<{ success: boolean; tasks: ProjectTask[] }>('/api/tasks/my-tasks', {
+    params: { include_completed: includeCompleted },
+    headers: authHeaders(token),
+  });
+  return response.data.tasks ?? [];
+}
 
 export async function fetchTasks(
   token: string,
@@ -669,13 +677,13 @@ export async function fetchTasks(
 }
 
 export async function fetchTask(token: string, id: string | number): Promise<ProjectTask> {
-  const response = await api.get<{ success: boolean; data: ProjectTask }>(`/api/tasks/${id}`, { headers: authHeaders(token) });
-  return extractSingle<ProjectTask>(response, 'data');
+  const response = await api.get<{ success: boolean; task: ProjectTask }>(`/api/tasks/${id}`, { headers: authHeaders(token) });
+  return extractSingle<ProjectTask>(response, 'task');
 }
 
 export async function updateTask(token: string, id: string | number, data: Partial<ProjectTask>): Promise<ProjectTask> {
-  const response = await api.put<{ success: boolean; data: ProjectTask }>(`/api/tasks/${id}`, data, { headers: authHeaders(token) });
-  return extractSingle<ProjectTask>(response, 'data');
+  const response = await api.put<{ success: boolean; task: ProjectTask }>(`/api/tasks/${id}`, data, { headers: authHeaders(token) });
+  return extractSingle<ProjectTask>(response, 'task');
 }
 
 export async function deleteTask(token: string, id: string | number): Promise<void> {

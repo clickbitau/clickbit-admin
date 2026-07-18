@@ -36,7 +36,7 @@ export class ProjectTasksService {
       project_phases: { select: { id: true, name: true, position: true, status: true } },
       crm_projects: { select: { id: true, project_number: true, name: true } },
       crm_subprojects: { select: { id: true, name: true } },
-      contacts: { select: { id: true, name: true, email: true, avatar_url: true } },
+      contacts: { select: { id: true, first_name: true, last_name: true, email: true, avatar_url: true } },
       profiles_project_tasks_assigned_toToprofiles: {
         select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
       },
@@ -44,6 +44,7 @@ export class ProjectTasksService {
         select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
       },
       task_microtasks: { orderBy: { position: 'asc' } },
+      task_comments: { include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } }, orderBy: { created_at: 'desc' } },
       recurring_task_configs: { select: { id: true, title: true, frequency: true } },
       deals: { select: { id: true, deal_number: true, title: true } },
       project_tasks: { select: { id: true, title: true, status: true } },
@@ -68,7 +69,13 @@ export class ProjectTasksService {
       ? { id: t.crm_projects.id, name: t.crm_projects.name, project_number: t.crm_projects.project_number }
       : null;
     const subproject = t.crm_subprojects ? { id: t.crm_subprojects.id, name: t.crm_subprojects.name } : null;
-    const customer = t.contacts ? { ...t.contacts, avatar: t.contacts.avatar_url } : null;
+    const customer = t.contacts
+      ? {
+          ...t.contacts,
+          name: `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim() || t.contacts.email,
+          avatar: t.contacts.avatar_url,
+        }
+      : null;
     const parentTask = t.project_tasks ? { id: t.project_tasks.id, title: t.project_tasks.title, status: t.project_tasks.status } : null;
     const subTasks = Array.isArray(t.other_project_tasks) ? t.other_project_tasks : [];
     const phase = t.project_phases ? { id: t.project_phases.id, name: t.project_phases.name, position: t.project_phases.position, status: t.project_phases.status } : null;
@@ -126,9 +133,13 @@ export class ProjectTasksService {
 
   private buildWhere(query: Record<string, unknown>, base: any = {}) {
     const where: any = { deleted_at: null, ...base };
-    const { status, priority, assigned_to, crm_project_id, subproject_id, customer_id, search, view_scope, user } = query as any;
+    const { status, priority, assigned_to, crm_project_id, subproject_id, customer_id, search, view_scope, user, hide_completed } = query as any;
 
-    if (status && status !== 'all') where.status = status;
+    if (status && status !== 'all') {
+      where.status = status;
+    } else if (hide_completed === 'true' || hide_completed === true) {
+      where.status = { not: 'completed' };
+    }
     if (priority && priority !== 'all') where.priority = priority;
     if (assigned_to && assigned_to !== 'all') {
       const ids = typeof assigned_to === 'string' && assigned_to.includes(',')
@@ -136,12 +147,16 @@ export class ProjectTasksService {
         : [Number(assigned_to)];
       where.assigned_to = ids.length === 1 ? ids[0] : { in: ids };
     }
-    if (crm_project_id && crm_project_id !== 'all') where.crm_project_id = Number(crm_project_id);
+    if (crm_project_id && crm_project_id !== 'all') {
+      where.crm_project_id = crm_project_id === 'none' ? null : Number(crm_project_id);
+    }
     if (subproject_id && subproject_id !== 'all') where.subproject_id = Number(subproject_id);
     if (customer_id && customer_id !== 'all') where.customer_id = Number(customer_id);
 
     if (view_scope === 'my' && user) {
       where.assigned_to = user.id;
+    } else if (view_scope === 'unassigned') {
+      where.assigned_to = null;
     }
 
     if (search) {
@@ -180,10 +195,16 @@ export class ProjectTasksService {
     const limit = Math.min(100, Math.max(1, Number((query as any).limit ?? 25)));
     const where = this.buildWhere(query);
 
-    where.OR = [
+    const phaseFilter = [
       { phase_id: null },
       { project_phases: { status: { not: 'not_started' } } },
     ];
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, { OR: phaseFilter }];
+      delete where.OR;
+    } else {
+      where.OR = phaseFilter;
+    }
 
     const [tasks, total] = await Promise.all([
       this.prisma.project_tasks.findMany({
