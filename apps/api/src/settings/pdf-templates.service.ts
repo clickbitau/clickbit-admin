@@ -3,6 +3,20 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const KEY = 'pdf_templates';
 
+function normalizeTemplateData(data: any) {
+  const type = data.template_type || data.type || 'invoice';
+  return {
+    name: data.name,
+    description: data.description ?? '',
+    template_type: type,
+    html: data.html ?? '',
+    css: data.css ?? '',
+    header: data.header ?? data.header_html ?? '',
+    footer: data.footer ?? data.footer_html ?? '',
+    is_default: data.is_default,
+  };
+}
+
 @Injectable()
 export class PdfTemplatesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -28,6 +42,61 @@ export class PdfTemplatesService {
     }
   }
 
+  private getSampleData(): Record<string, any> {
+    return {
+      invoice_number: 'INV-0001',
+      quote_number: 'QT-0001',
+      date: new Date().toISOString().split('T')[0],
+      due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      client_name: 'Sample Client',
+      client_email: 'client@example.com',
+      company_name: 'ClickBit Pty Ltd',
+      company_address: '19 Drysdale Approach, Baldivis WA 6171',
+      company_phone: '02 7229 9577',
+      company_email: 'info@clickbit.com.au',
+      items: [
+        { description: 'Sample service', quantity: 1, unit_price: 100, amount: 100 },
+        { description: 'Additional work', quantity: 2, unit_price: 50, amount: 100 },
+      ],
+      subtotal: 200,
+      tax: 20,
+      total: 220,
+      amount_due: 220,
+      notes: 'Sample notes',
+      payment_terms: '7 days',
+      employee_name: 'Jane Employee',
+      pay_period: '01 Jul 2026 - 15 Jul 2026',
+      gross_pay: 2500,
+      net_pay: 2100,
+      tax_deduction: 400,
+    };
+  }
+
+  private renderPreviewHtml(template: { header?: string; html?: string; footer?: string; css?: string }) {
+    let html = (template.header || '') + (template.html || '') + (template.footer || '');
+    const css = template.css || '';
+    const sample = this.getSampleData();
+
+    for (const [key, value] of Object.entries(sample)) {
+      const placeholder = `{{${key}}}`;
+      if (html.includes(placeholder)) {
+        if (Array.isArray(value)) {
+          const rows = value
+            .map((item) => {
+              const cells = typeof item === 'object' ? Object.values(item) : [item];
+              return `<tr>${cells.map((v) => `<td>${v}</td>`).join('')}</tr>`;
+            })
+            .join('');
+          html = html.split(placeholder).join(`<table>${rows}</table>`);
+        } else {
+          html = html.split(placeholder).join(String(value ?? ''));
+        }
+      }
+    }
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${html}</body></html>`;
+  }
+
   async findAll(templateType?: string) {
     let templates = await this.getTemplates();
     if (templateType) templates = templates.filter((t: any) => t.template_type === templateType);
@@ -36,15 +105,11 @@ export class PdfTemplatesService {
 
   async create(data: any) {
     const templates = await this.getTemplates();
+    const normalized = normalizeTemplateData(data);
     const template = {
       id: Date.now(),
-      name: data.name,
-      template_type: data.template_type || 'invoice',
-      html: data.html || '',
-      css: data.css || '',
-      header: data.header || '',
-      footer: data.footer || '',
-      is_default: templates.filter((t: any) => t.template_type === data.template_type).length === 0,
+      ...normalized,
+      is_default: data.is_default ?? templates.filter((t: any) => t.template_type === normalized.template_type).length === 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -57,7 +122,8 @@ export class PdfTemplatesService {
     const templates = await this.getTemplates();
     const idx = templates.findIndex((t: any) => t.id === id);
     if (idx === -1) throw new NotFoundException('Template not found');
-    templates[idx] = { ...templates[idx], ...data, updated_at: new Date().toISOString() };
+    const normalized = normalizeTemplateData({ ...templates[idx], ...data });
+    templates[idx] = { ...templates[idx], ...normalized, updated_at: new Date().toISOString() };
     await this.saveTemplates(templates);
     return { template: templates[idx] };
   }
@@ -96,47 +162,11 @@ export class PdfTemplatesService {
     const templates = await this.getTemplates();
     const template = templates.find((t: any) => t.id === id);
     if (!template) throw new NotFoundException('Template not found');
+    return { success: true, preview_html: this.renderPreviewHtml(template), template };
+  }
 
-    const sample: Record<string, any> = {
-      invoice_number: 'INV-0001',
-      quote_number: 'QT-0001',
-      date: new Date().toISOString().split('T')[0],
-      due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      client_name: 'Sample Client',
-      client_email: 'client@example.com',
-      company_name: 'ClickBit Pty Ltd',
-      items: [
-        { description: 'Sample service', quantity: 1, unit_price: 100, amount: 100 },
-        { description: 'Additional work', quantity: 2, unit_price: 50, amount: 100 },
-      ],
-      subtotal: 200,
-      tax: 20,
-      total: 220,
-      notes: 'Sample notes',
-      payment_terms: '7 days',
-    };
-
-    let html = (template.header || '') + (template.html || '') + (template.footer || '');
-    const css = template.css || '';
-
-    for (const [key, value] of Object.entries(sample)) {
-      const placeholder = `{{${key}}}`;
-      if (html.includes(placeholder)) {
-        if (Array.isArray(value)) {
-          const rows = value
-            .map((item) => {
-              const cells = typeof item === 'object' ? Object.values(item) : [item];
-              return `<tr>${cells.map((v) => `<td>${v}</td>`).join('')}</tr>`;
-            })
-            .join('');
-          html = html.split(placeholder).join(`<table>${rows}</table>`);
-        } else {
-          html = html.split(placeholder).join(String(value ?? ''));
-        }
-      }
-    }
-
-    html = `<style>${css}</style>${html}`;
-    return { success: true, preview_html: html, template };
+  previewWithData(data: any) {
+    const normalized = normalizeTemplateData(data);
+    return { success: true, preview_html: this.renderPreviewHtml(normalized) };
   }
 }

@@ -44,4 +44,9 @@ export class PdfTemplatesController {
   async preview(@Param('id', ParseIntPipe) id: number) {
     return this.pdfTemplatesService.preview(id);
   }
+
+  @Post('preview')
+  previewWithData(@Body() body: any) {
+    return this.pdfTemplatesService.previewWithData(body || {});
+  }
 }

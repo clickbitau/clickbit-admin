@@ -2143,7 +2143,7 @@ export async function fetchAnalyticsEvents(token: string, type: string, period?:
 // ─── PDF Templates ───────────────────────────────────────────────────────────
 
 export async function fetchPdfTemplates(token: string, type?: string): Promise<PdfTemplate[]> {
-  return (await api.get('/api/settings/pdf-templates', { params: type ? { type } : undefined, headers: authHeaders(token) })).data;
+  return (await api.get('/api/settings/pdf-templates', { params: type ? { type } : undefined, headers: authHeaders(token) })).data.templates;
 }
 
 export async function createPdfTemplate(token: string, data: Partial<PdfTemplate>) {
@@ -2166,8 +2166,15 @@ export async function clonePdfTemplate(token: string, id: string | number) {
   return (await api.post(`/api/settings/pdf-templates/${id}/clone`, {}, { headers: authHeaders(token) })).data;
 }
 
-export async function previewPdfTemplate(token: string, id: string | number): Promise<Blob> {
-  return (await api.post(`/api/settings/pdf-templates/${id}/preview`, {}, { headers: authHeaders(token), responseType: 'blob' })).data;
+export async function previewPdfTemplate(token: string, id: string | number): Promise<{ success: boolean; preview_html: string; template: PdfTemplate }> {
+  return (await api.post(`/api/settings/pdf-templates/${id}/preview`, {}, { headers: authHeaders(token) })).data;
+}
+
+export async function previewPdfTemplateWithData(
+  token: string,
+  data: Partial<PdfTemplate>,
+): Promise<{ success: boolean; preview_html: string }> {
+  return (await api.post('/api/settings/pdf-templates/preview', data, { headers: authHeaders(token) })).data;
 }
 
 // ─── Bug Reports ─────────────────────────────────────────────────────────────
