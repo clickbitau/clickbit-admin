@@ -31,6 +31,8 @@ export interface TimeEntry {
   clock_out_notes?: string | null;
   notes?: string | null;
   break_minutes?: number;
+  is_on_break?: boolean | null;
+  break_start_time?: string | null;
   total_minutes?: number | null;
   overtime_minutes?: number | null;
   status: 'active' | 'completed' | 'approved' | 'rejected' | 'edited';

@@ -1985,6 +1985,22 @@ export async function createManualTimesheet(token: string, data: Record<string, 
   return (await api.post('/api/hr/timesheets/manual', data, { headers: authHeaders(token) })).data;
 }
 
+export async function editTimesheet(token: string, id: string | number, data: Record<string, unknown>) {
+  return (await api.put(`/api/hr/timesheets/${id}/edit`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchTimesheetTasks(token: string, id: string | number): Promise<{ success: boolean; data: any[]; workItems?: any[] }> {
+  return (await api.get(`/api/hr/timesheets/${id}/tasks`, { headers: authHeaders(token) })).data;
+}
+
+export async function addTimesheetWorkItem(token: string, id: string | number, data: { task_id: number; actual_hours?: number }) {
+  return (await api.post(`/api/hr/timesheets/${id}/work-items`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function removeTimesheetWorkItem(token: string, id: string | number, itemId: string | number) {
+  return (await api.delete(`/api/hr/timesheets/${id}/work-items/${itemId}`, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchShifts(
   token: string,
   params?: Record<string, string | number | boolean | undefined>,
@@ -2015,6 +2031,10 @@ export async function publishShifts(token: string, shiftIds: number[]) {
 
 export async function copyShiftsWeek(token: string, source: string, target: string, employeeIds?: number[]) {
   return (await api.post('/api/hr/shifts/copy-week', { source_week_start: source, target_week_start: target, employee_ids: employeeIds }, { headers: authHeaders(token) })).data;
+}
+
+export async function batchCreateShifts(token: string, data: Record<string, unknown>) {
+  return (await api.post('/api/hr/shifts/batch', data, { headers: authHeaders(token) })).data;
 }
 
 export async function confirmShift(token: string, id: string | number) {
