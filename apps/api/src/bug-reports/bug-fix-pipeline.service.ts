@@ -26,6 +26,10 @@ export class BugFixPipelineService {
     private readonly github: GithubService,
   ) {}
 
+  isDevinConfigured(): boolean {
+    return this.devin.isConfigured();
+  }
+
   // -------------------------------------------------------------------------
   // Pipeline lifecycle
   // -------------------------------------------------------------------------
