@@ -516,7 +516,7 @@ export default function AdminHrTimesheetsPage() {
   const handleAddTask = (task: ProjectTask, hours?: string) => {
     const actual = hours ? Number(hours) : undefined;
     if (Number.isNaN(actual)) return;
-    addTimesheetWorkItem(token!, detailEntry!.id, { task_id: task.id, actual_hours: actual }).then(() => openDetail(detailEntry!));
+    addTimesheetWorkItem(token!, detailEntry!.id, { task_id: task.id, hours_spent: actual }).then(() => openDetail(detailEntry!));
   };
 
   const handleQuickSignIn = (employeeId: number) => {
