@@ -569,6 +569,7 @@ export interface OrderItem {
 export interface Order {
   id: number;
   order_number?: string;
+  guest_email?: string;
   status?: string;
   payment_status?: string;
   subtotal?: number | string;
@@ -583,5 +584,6 @@ export interface Order {
   shipped_at?: string;
   delivered_at?: string;
   order_items?: OrderItem[];
+  contacts?: { email?: string } | null;
   created_at?: string;
 }

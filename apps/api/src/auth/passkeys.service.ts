@@ -18,8 +18,16 @@ import type { Profile } from '@clickbit/shared';
 
 function rpConfig(config: ConfigService) {
   const rpName = config.get<string>('WEBAUTHN_RP_NAME') || 'ClickBit';
-  const rpID = config.get<string>('WEBAUTHN_RP_ID') || 'localhost';
-  const origin = (config.get<string>('WEBAUTHN_ORIGIN') || config.get<string>('FRONTEND_URL') || `https://${rpID}`).replace(/\/$/, '');
+  const origin = (config.get<string>('WEBAUTHN_ORIGIN') || config.get<string>('FRONTEND_URL') || 'https://localhost').replace(/\/$/, '');
+  let rpID = config.get<string>('WEBAUTHN_RP_ID') || '';
+  if (!rpID && origin) {
+    try {
+      rpID = new URL(origin).hostname;
+    } catch {
+      rpID = 'localhost';
+    }
+  }
+  if (!rpID) rpID = 'localhost';
   return { rpName, rpID, origin };
 }
 
@@ -31,10 +39,52 @@ function challengeOrThrow(body: any): string {
 
 @Injectable()
 export class PasskeysService {
+  private tablesEnsured = false;
+
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {}
+
+  private async ensureTables() {
+    if (this.tablesEnsured) return;
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS "passkeys" (
+        id SERIAL NOT NULL,
+        user_id INTEGER NOT NULL,
+        credential_id VARCHAR(255) NOT NULL,
+        friendly_name VARCHAR(255),
+        credential_public_key BYTEA NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0,
+        transports TEXT,
+        user_agent VARCHAR(500),
+        last_used_at TIMESTAMPTZ(6),
+        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMPTZ(6),
+        CONSTRAINT passkeys_pkey PRIMARY KEY (id),
+        CONSTRAINT passkeys_credential_id_key UNIQUE (credential_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS "passkeys_user_id_idx" ON "passkeys"(user_id)`,
+      `CREATE INDEX IF NOT EXISTS "passkeys_credential_id_idx" ON "passkeys"(credential_id)`,
+      `CREATE TABLE IF NOT EXISTS "passkey_challenges" (
+        id UUID NOT NULL DEFAULT gen_random_uuid(),
+        user_id INTEGER,
+        challenge VARCHAR(255) NOT NULL,
+        type VARCHAR(20) NOT NULL,
+        expires_at TIMESTAMPTZ(6) NOT NULL,
+        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT passkey_challenges_pkey PRIMARY KEY (id),
+        CONSTRAINT passkey_challenges_challenge_key UNIQUE (challenge)
+      )`,
+      `CREATE INDEX IF NOT EXISTS "passkey_challenges_challenge_idx" ON "passkey_challenges"(challenge)`,
+      `CREATE INDEX IF NOT EXISTS "passkey_challenges_expires_at_idx" ON "passkey_challenges"(expires_at)`,
+    ];
+    for (const stmt of statements) {
+      await this.prisma.$executeRawUnsafe(stmt);
+    }
+    this.tablesEnsured = true;
+  }
 
   private async saveChallenge(userId: number | null, challenge: string, type: 'registration' | 'login') {
     await this.prisma.passkey_challenges.create({
@@ -71,6 +121,7 @@ export class PasskeysService {
   }
 
   async generateRegistrationOptions(user: Profile) {
+    await this.ensureTables();
     const { rpName, rpID } = rpConfig(this.config);
     const existing = await this.prisma.passkeys.findMany({
       where: { user_id: user.id, deleted_at: null },
@@ -97,6 +148,7 @@ export class PasskeysService {
   }
 
   async verifyRegistration(user: Profile, body: any) {
+    await this.ensureTables();
     const { rpID, origin } = rpConfig(this.config);
     const record = await this.consumeChallenge(challengeOrThrow(body), 'registration');
     if (record.user_id !== user.id) throw new UnauthorizedException('Challenge does not belong to this user');
@@ -138,6 +190,7 @@ export class PasskeysService {
   }
 
   async generateLoginOptions() {
+    await this.ensureTables();
     const { rpID } = rpConfig(this.config);
     const opts: GenerateAuthenticationOptionsOpts = {
       rpID,
@@ -150,6 +203,7 @@ export class PasskeysService {
   }
 
   async verifyLogin(body: any) {
+    await this.ensureTables();
     const { rpID, origin } = rpConfig(this.config);
     const record = await this.consumeChallenge(challengeOrThrow(body), 'login');
 
@@ -202,6 +256,7 @@ export class PasskeysService {
   }
 
   async listPasskeys(user: Profile) {
+    await this.ensureTables();
     const rows = await this.prisma.passkeys.findMany({
       where: { user_id: user.id, deleted_at: null },
       orderBy: { created_at: 'desc' },
@@ -220,6 +275,7 @@ export class PasskeysService {
   }
 
   async deletePasskey(user: Profile, id: number) {
+    await this.ensureTables();
     const passkey = await this.prisma.passkeys.findFirst({ where: { id, user_id: user.id, deleted_at: null } });
     if (!passkey) throw new NotFoundException('Passkey not found');
     await this.prisma.passkeys.update({ where: { id }, data: { deleted_at: new Date() } });

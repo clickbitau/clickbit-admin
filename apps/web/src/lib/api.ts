@@ -1019,6 +1019,25 @@ export async function fetchExpenseStats(token: string, params?: { start_date?: s
   return (await api.get<{ success: boolean; data: ExpenseStats }>('/api/expenses/stats', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchAdminOrders(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: Order[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } }> {
+  return (await api.get('/api/admin/orders', { params, headers: authHeaders(token) })).data;
+}
+
+export async function fetchAdminOrder(token: string, id: string | number): Promise<{ success: boolean; data: Order }> {
+  return (await api.get(`/api/admin/orders/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateAdminOrderStatus(token: string, id: string | number, status: string): Promise<{ success: boolean; data: Order }> {
+  return (await api.put(`/api/admin/orders/${id}/status`, { status }, { headers: authHeaders(token) })).data;
+}
+
+export async function deleteAdminOrder(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/admin/orders/${id}`, { headers: authHeaders(token) })).data;
+}
+
 // ─── HR ────────────────────────────────────────────────────────────────────
 
 export async function fetchHrDashboard(token: string): Promise<{ success: boolean; data: HrDashboardData }> {
