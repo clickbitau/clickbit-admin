@@ -19,7 +19,7 @@ import { Pagination } from '@/components/design-system/Pagination';
 import { fetchCompanies } from '@/lib/api';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
-import { Building2, Users, TrendingUp, Briefcase, Search, X, Plus, RefreshCw } from 'lucide-react';
+import { Building2, Users, TrendingUp, Briefcase, Search, X, Plus, RefreshCw, LayoutGrid, Table2 } from 'lucide-react';
 
 const LIFECYCLE_STAGES = [
   { value: 'subscriber', label: 'Subscriber' },
@@ -47,6 +47,7 @@ export default function AdminCrmCompaniesPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('updated_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid');
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -117,6 +118,22 @@ export default function AdminCrmCompaniesPage() {
       description="Manage business accounts and organization relationships"
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center border rounded-md overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-2.5 py-2 ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+              title="Grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-2.5 py-2 ${viewMode === 'table' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+              title="Table view"
+            >
+              <Table2 className="h-4 w-4" />
+            </button>
+          </div>
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -220,7 +237,7 @@ export default function AdminCrmCompaniesPage() {
         </p>
       )}
 
-      <CompanyTable companies={companies} loading={isLoading} />
+      <CompanyTable companies={companies} loading={isLoading} viewMode={viewMode} onChange={() => refetch()} />
 
       <Pagination
         currentPage={pagination.currentPage}
