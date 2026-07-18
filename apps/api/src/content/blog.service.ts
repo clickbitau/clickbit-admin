@@ -76,9 +76,11 @@ export class BlogService {
     const where: any = { deleted_at: null };
     const status = stringValue(query.status);
     const author = numberValue(query.author, 0) || undefined;
+    const category = stringValue(query.category);
     const search = stringValue(query.search);
     if (status && status !== 'all') where.status = status;
     if (author) where.author_id = author;
+    if (category) where.categories = { contains: category, mode: 'insensitive' };
     if (search) where.OR = [{ title: { contains: search, mode: 'insensitive' } }, { content: { contains: search, mode: 'insensitive' } }, { excerpt: { contains: search, mode: 'insensitive' } }];
     const limit = numberValue(query.limit, 50);
     const offset = numberValue(query.offset, 0);
@@ -120,13 +122,15 @@ export class BlogService {
   }
 
   async stats() {
-    const [total, published, draft, featured] = await this.prisma.$transaction([
+    const [total, published, draft, scheduled, archived, featured] = await this.prisma.$transaction([
       this.prisma.blog_posts.count({ where: { deleted_at: null } }),
       this.prisma.blog_posts.count({ where: { deleted_at: null, status: 'published' } }),
       this.prisma.blog_posts.count({ where: { deleted_at: null, status: 'draft' } }),
+      this.prisma.blog_posts.count({ where: { deleted_at: null, status: 'scheduled' } }),
+      this.prisma.blog_posts.count({ where: { deleted_at: null, status: 'archived' } }),
       this.prisma.blog_posts.count({ where: { deleted_at: null, featured: true } }),
     ]);
-    return { total, published, draft, featured };
+    return { total, published, draft, scheduled, archived, featured };
   }
 
   private buildBlogData(dto: Record<string, unknown>, authorId?: number, partial = false) {
