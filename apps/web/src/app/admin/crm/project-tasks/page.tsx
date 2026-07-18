@@ -1,7 +1,7 @@
 'use client';
-import { PageShell } from '@/components/design-system/PageShell';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -15,34 +15,103 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
-import { fetchTasks, fetchAssignees, updateTaskStatus } from '@/lib/api';
-import { formatDate } from '@/lib/format';
-import type { ProjectTask, User } from '@/types/crm';
+import {
+  fetchTasks,
+  fetchAssignees,
+  fetchProjects,
+  fetchProjectSubprojects,
+  updateTask,
+  updateTaskStatus,
+  deleteTask,
+  duplicateTask,
+} from '@/lib/api';
+import { formatDate, daysUntil } from '@/lib/format';
+import type { ProjectTask, User, CrmProject, CrmSubproject } from '@/types/crm';
 import Link from 'next/link';
-import { Plus, Search, FolderKanban as FolderKanbanIcon } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  List,
+  LayoutGrid,
+  FolderKanban,
+  Clock,
+  CheckSquare,
+  MessageSquare,
+  Paperclip,
+  MoreHorizontal,
+  Copy,
+  Trash2,
+  Calendar,
+  GripVertical,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+const STATUSES = [
+  { key: 'todo', label: 'To Do' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'review', label: 'Review' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'blocked', label: 'Blocked' },
+];
+
+const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
+
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'todo':
+      return 'border-l-gray-400';
+    case 'in_progress':
+      return 'border-l-blue-500';
+    case 'review':
+      return 'border-l-purple-500';
+    case 'completed':
+      return 'border-l-emerald-500';
+    case 'blocked':
+      return 'border-l-red-500';
+    default:
+      return 'border-l-muted-foreground';
+  }
+}
+
+function microtaskProgress(microtasks: { is_completed?: boolean }[]) {
+  if (!microtasks.length) return null;
+  const done = microtasks.filter((m) => m.is_completed).length;
+  return Math.round((done / microtasks.length) * 100);
+}
 
 export default function ProjectTasksPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const isManager = user?.role === 'admin' || user?.role === 'manager';
+
+  const [view, setView] = useState<'list' | 'kanban'>('list');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
+  const [priority, setPriority] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [subprojectId, setSubprojectId] = useState('');
 
   const queryParams = useMemo(() => {
     const params: Record<string, string | number> = { page, limit: 25 };
     if (debouncedSearch) params.search = debouncedSearch;
     if (status) params.status = status;
+    if (priority) params.priority = priority;
     if (assigneeId) params.assigned_to = assigneeId;
+    if (projectId) params.crm_project_id = projectId;
+    if (subprojectId) params.subproject_id = subprojectId;
     return params;
-  }, [page, debouncedSearch, status, assigneeId]);
+  }, [page, debouncedSearch, status, priority, assigneeId, projectId, subprojectId]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', queryParams],
@@ -50,96 +119,375 @@ export default function ProjectTasksPage() {
     enabled: !!token,
   });
 
-  const { data: assignees } = useQuery({
+  const { data: assignees, isLoading: loadingAssignees } = useQuery({
     queryKey: ['assignees'],
     queryFn: () => fetchAssignees(token!),
     enabled: !!token,
   });
 
-  useRealtimeRefresh(['project_tasks', 'crm_projects'], ['tasks'], { enabled: !!token });
+  const { data: projects } = useQuery({
+    queryKey: ['crm-projects', { limit: 100 }],
+    queryFn: () => fetchProjects(token!, { limit: 100 }),
+    enabled: !!token,
+  });
+
+  const { data: subprojects } = useQuery({
+    queryKey: ['subprojects', projectId],
+    queryFn: () => fetchProjectSubprojects(token!, Number(projectId)),
+    enabled: !!token && !!projectId,
+  });
+
+  useRealtimeRefresh(['project_tasks'], ['tasks'], { enabled: !!token });
+
+  useEffect(() => {
+    setSubprojectId('');
+    setPage(1);
+  }, [projectId]);
 
   const tasks = data?.data ?? [];
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 };
-  const stats = data?.stats ?? { total: 0, todo: 0, in_progress: 0, review: 0, completed: 0, blocked: 0 };
+  const stats = useMemo(() => data?.stats ?? { total: 0, todo: 0, in_progress: 0, review: 0, completed: 0, blocked: 0, totalEstimatedHours: 0, totalActualHours: 0 }, [data?.stats]);
 
-  const statCards = [
-    { label: 'Total', value: stats.total },
-    { label: 'To Do', value: stats.todo },
-    { label: 'In Progress', value: stats.in_progress },
-    { label: 'Completed', value: stats.completed },
-  ];
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<ProjectTask> }) => updateTask(token!, id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success('Task updated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update task'),
+  });
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) => updateTaskStatus(token!, id, { status }),
+    mutationFn: ({ id, status, actual_hours }: { id: number; status: string; actual_hours?: number }) =>
+      updateTaskStatus(token!, id, { status, actual_hours }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     onError: (err: Error) => toast.error(err.message || 'Failed'),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteTask(token!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success('Task deleted');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete task'),
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: (id: number) => duplicateTask(token!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success('Task duplicated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to duplicate'),
+  });
+
+  const statCards = useMemo(
+    () => [
+      { label: 'Total', value: stats.total, icon: FolderKanban },
+      { label: 'To Do', value: stats.todo, icon: List, accent: 'secondary' as const, onClick: () => { setStatus('todo'); setPage(1); } },
+      { label: 'In Progress', value: stats.in_progress, icon: Clock, accent: 'primary' as const, onClick: () => { setStatus('in_progress'); setPage(1); } },
+      { label: 'Completed', value: stats.completed, icon: CheckSquare, accent: 'success' as const, onClick: () => { setStatus('completed'); setPage(1); } },
+      { label: 'Review', value: stats.review, icon: MessageSquare, accent: 'warning' as const, onClick: () => { setStatus('review'); setPage(1); } },
+      { label: 'Blocked', value: stats.blocked, icon: GripVertical, accent: 'destructive' as const, onClick: () => { setStatus('blocked'); setPage(1); } },
+      { label: 'Est. Hours', value: stats.totalEstimatedHours ?? 0, icon: Clock, sub: `${stats.totalActualHours ?? 0} actual` },
+    ],
+    [stats],
+  );
+
+  function handleRowClick(task: ProjectTask) {
+    router.push(`/admin/crm/project-tasks/${task.id}`);
+  }
+
+  function renderTaskMeta(task: ProjectTask) {
+    const progress = microtaskProgress(task.microtasks ?? []);
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
+        {task.crmProject && (
+          <span className="truncate max-w-[140px]">{task.crmProject.name || task.crmProject.project_number}</span>
+        )}
+        {task.subproject && <span className="truncate max-w-[120px]">· {task.subproject.name}</span>}
+        {task.due_date && (
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {daysUntil(task.due_date)}
+          </span>
+        )}
+        {task.estimated_hours !== undefined && task.estimated_hours !== null && (
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {task.actual_hours ?? 0}/{task.estimated_hours}h
+          </span>
+        )}
+        {progress !== null && (
+          <span className="flex items-center gap-1">
+            <CheckSquare className="h-3 w-3" />
+            {progress}%
+          </span>
+        )}
+        {(task.task_comments?.length ?? 0) > 0 && (
+          <span className="flex items-center gap-1">
+            <MessageSquare className="h-3 w-3" />
+            {task.task_comments?.length}
+          </span>
+        )}
+        {(task.attachments?.length ?? 0) > 0 && (
+          <span className="flex items-center gap-1">
+            <Paperclip className="h-3 w-3" />
+            {task.attachments?.length}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  function TaskCard({ task }: { task: ProjectTask }) {
+    const progress = microtaskProgress(task.microtasks ?? []);
+    return (
+      <div
+        className={cn(
+          'nm-raised-sm p-3 cursor-pointer hover:shadow-md transition-all border-l-4',
+          getStatusColor(task.status),
+        )}
+        onClick={() => handleRowClick(task)}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <h4 className="font-medium text-sm line-clamp-2">{task.title}</h4>
+          <PriorityBadge priority={task.priority} className="text-[10px] px-1.5 py-0.5 h-auto" />
+        </div>
+        {renderTaskMeta(task)}
+        <div className="mt-2 flex items-center justify-between">
+          <StatusBadge status={task.status} className="text-[10px] px-1.5 py-0.5 h-auto" />
+          {task.assignee ? (
+            <span className="text-xs text-muted-foreground truncate max-w-[90px]">
+              {task.assignee.first_name} {task.assignee.last_name}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">Unassigned</span>
+          )}
+        </div>
+        {progress !== null && (
+          <div className="mt-2">
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function KanbanView() {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {STATUSES.map((s) => {
+          const columnTasks = tasks.filter((t) => t.status === s.key);
+          return (
+            <div key={s.key} className="nm-raised-sm flex flex-col max-h-[65vh]">
+              <div className="p-3 border-b border-border/50 flex items-center justify-between">
+                <h3 className="font-semibold text-sm">{s.label}</h3>
+                <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{columnTasks.length}</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {columnTasks.map((task) => (
+                  <TaskCard key={task.id} task={task} />
+                ))}
+                {columnTasks.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <PageShell
       title="Project Tasks"
-      icon={FolderKanbanIcon}
-      description="Cross-project task management"
-      actions={<Button asChild><Link href="/admin/crm/project-tasks/new"><Plus className="mr-1 h-4 w-4" /> New Task</Link></Button>}
+      icon={FolderKanban}
+      description="Manage and track tasks across all projects"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center nm-raised-sm rounded-md p-0.5">
+            <Button
+              variant={view === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setView('list')}
+              className="h-8 rounded-sm"
+            >
+              <List className="h-4 w-4 mr-1" /> List
+            </Button>
+            <Button
+              variant={view === 'kanban' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setView('kanban')}
+              className="h-8 rounded-sm"
+            >
+              <LayoutGrid className="h-4 w-4 mr-1" /> Kanban
+            </Button>
+          </div>
+          <Button asChild>
+            <Link href="/admin/crm/project-tasks/new">
+              <Plus className="mr-1 h-4 w-4" /> New Task
+            </Link>
+          </Button>
+        </div>
+      }
     >
       <StatCards cards={statCards} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search tasks..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+          <Input
+            placeholder="Search tasks..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
         </div>
         <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
           <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All</SelectItem>
-            <SelectItem value="todo">To Do</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="review">Review</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="blocked">Blocked</SelectItem>
+            <SelectItem value="">All statuses</SelectItem>
+            {STATUSES.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={priority} onValueChange={(v) => { setPriority(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All priorities</SelectItem>
+            {PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
-          <SelectTrigger><SelectValue placeholder="Assignee" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder={loadingAssignees ? 'Loading...' : 'Assignee'} />
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All</SelectItem>
-            {(assignees ?? []).map((u: User) => <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>)}
+            <SelectItem value="">All assignees</SelectItem>
+            {(assignees ?? []).map((u: User) => (
+              <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={projectId} onValueChange={(v) => { setProjectId(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All projects</SelectItem>
+            {(projects?.projects ?? []).map((p: CrmProject) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId}>
+          <SelectTrigger><SelectValue placeholder="Subproject" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All subprojects</SelectItem>
+            {(subprojects?.subprojects ?? []).map((sp: CrmSubproject) => (
+              <SelectItem key={sp.id} value={String(sp.id)}>{sp.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      <DataTable
-        headers={[
-          { key: 'task', label: 'Task' },
-          { key: 'project', label: 'Project' },
-          { key: 'status', label: 'Status' },
-          { key: 'priority', label: 'Priority' },
-          { key: 'assignee', label: 'Assignee' },
-          { key: 'due', label: 'Due' },
-          { key: 'actions', label: '' },
-        ]}
-        data={tasks}
-        keyExtractor={(t) => t.id}
-        loading={isLoading}
-        renderRow={(t) => [
-          <div key="task"><Link href={`/admin/crm/project-tasks/${t.id}`} className="font-medium hover:underline">{t.title}</Link><p className="text-xs text-muted-foreground">{t.description}</p></div>,
-          <span key="project" className="text-sm text-muted-foreground">{t.crmProject?.name || t.project?.title || '-'}</span>,
-          <StatusBadge key="status" status={t.status} />,
-          <PriorityBadge key="priority" priority={t.priority} />,
-          <span key="assignee" className="text-sm">{t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '-'}</span>,
-          <span key="due">{formatDate(t.due_date)}</span>,
-          <div key="actions" className="flex items-center gap-1">
-            {['todo', 'in_progress', 'review', 'completed', 'blocked'].map((s) => (
-              <Button key={s} variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: t.id, status: s })} disabled={t.status === s}>
-                {s[0].toUpperCase()}
-              </Button>
-            ))}
-          </div>,
-        ]}
-      />
-
-      <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />
+      {view === 'kanban' ? (
+        <KanbanView />
+      ) : (
+        <>
+          <DataTable
+            headers={[
+              { key: 'task', label: 'Task' },
+              { key: 'status', label: 'Status' },
+              { key: 'priority', label: 'Priority' },
+              { key: 'assignee', label: 'Assignee' },
+              { key: 'due', label: 'Due' },
+              { key: 'actions', label: '', className: 'w-24' },
+            ]}
+            data={tasks}
+            keyExtractor={(t) => t.id}
+            loading={isLoading}
+            onRowClick={handleRowClick}
+            renderRow={(t) => [
+              <div key="task" className="min-w-0">
+                <Link
+                  href={`/admin/crm/project-tasks/${t.id}`}
+                  className="font-medium hover:underline block truncate"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {t.title}
+                </Link>
+                {renderTaskMeta(t)}
+              </div>,
+              <select
+                key="status"
+                value={t.status}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => statusMutation.mutate({ id: t.id, status: e.target.value })}
+                className="h-8 rounded-md border bg-background px-2 text-xs nm-interactive"
+              >
+                {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>,
+              <select
+                key="priority"
+                value={t.priority || ''}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => updateMutation.mutate({ id: t.id, data: { priority: e.target.value } })}
+                className="h-8 rounded-md border bg-background px-2 text-xs nm-interactive"
+              >
+                <option value="">-</option>
+                {PRIORITIES.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}
+              </select>,
+              <select
+                key="assignee"
+                value={t.assigned_to ?? ''}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => updateMutation.mutate({ id: t.id, data: { assigned_to: Number(e.target.value) || null } })}
+                className="h-8 rounded-md border bg-background px-2 text-xs nm-interactive max-w-[140px]"
+              >
+                <option value="">Unassigned</option>
+                {(assignees ?? []).map((u: User) => (
+                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                ))}
+              </select>,
+              <span key="due" className="text-sm whitespace-nowrap">{formatDate(t.due_date)}</span>,
+              <div key="actions" className="flex items-center justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={(e) => { e.stopPropagation(); duplicateMutation.mutate(t.id); }}
+                  title="Duplicate"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+                {isManager && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive"
+                    onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this task?')) deleteMutation.mutate(t.id); }}
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>,
+            ]}
+          />
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.totalItems}
+            onPageChange={setPage}
+          />
+        </>
+      )}
     </PageShell>
   );
 }

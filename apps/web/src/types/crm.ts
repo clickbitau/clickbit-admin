@@ -289,8 +289,42 @@ export interface ProjectTask {
   tags?: string[];
   subtasks?: ProjectTask[];
   task_comments?: TaskComment[];
+  microtasks?: TaskMicrotask[];
+  phase?: { id: number; name: string; position?: number; status?: string } | null;
+  parentTask?: { id: number; title: string; status: string } | null;
+  subTasks?: ProjectTask[];
+  attachments?: TaskAttachment[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface TaskMicrotask {
+  id: number;
+  project_task_id?: number;
+  title: string;
+  is_completed?: boolean;
+  is_mandatory?: boolean;
+  position?: number;
+  completed_at?: string | null;
+  created_at?: string;
+}
+
+export interface TaskAttachment {
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+  uploaded_at?: string;
+  uploaded_by?: number;
+}
+
+export interface TaskWorkLog {
+  id: number;
+  task_id?: number;
+  description?: string | null;
+  hours?: number;
+  created_at?: string;
+  time_entry?: { clock_in_time?: string; clock_out_time?: string; total_minutes?: number } | null;
 }
 
 export interface TaskComment {

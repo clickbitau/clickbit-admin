@@ -21,7 +21,11 @@ import type {
   ProjectMeeting,
   ProjectTask,
   ProjectStats,
+  TaskAttachment,
+  TaskComment,
+  TaskMicrotask,
   TaskStats,
+  TaskWorkLog,
   User,
   ValueBreakdownResponse,
 } from '@/types/crm';
@@ -683,17 +687,82 @@ export async function updateTaskStatus(
   taskId: string | number,
   data: { status: string; actual_hours?: number | string },
 ): Promise<ProjectTask> {
-  const response = await api.patch<{ data: ProjectTask }>(`/api/projects/tasks/${taskId}/status`, data, {
+  const response = await api.patch<{ data: ProjectTask }>(`/api/tasks/${taskId}/status`, data, {
     headers: authHeaders(token),
   });
   return extractSingle<ProjectTask>(response, 'data');
 }
 
 export async function fetchAssignees(token: string): Promise<User[]> {
-  const response = await api.get<{ success: boolean; data: User[] }>('/api/projects/tasks/assignees', {
+  const response = await api.get<{ success: boolean; data: User[] }>('/api/tasks/assignees', {
     headers: authHeaders(token),
   });
   return response.data.data ?? [];
+}
+
+export async function duplicateTask(token: string, id: string | number): Promise<ProjectTask> {
+  const response = await api.post<{ success: boolean; task: ProjectTask }>(`/api/tasks/${id}/duplicate`, {}, { headers: authHeaders(token) });
+  return extractSingle<ProjectTask>(response, 'task');
+}
+
+export async function assignAdditionalTaskAssignees(token: string, id: string | number, assignee_ids: number[]): Promise<{ success: boolean; message?: string; data?: ProjectTask[] }> {
+  const response = await api.patch(`/api/tasks/${id}/additional-assignees`, { assignee_ids }, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function fetchTaskComments(token: string, id: string | number): Promise<{ success: boolean; comments: TaskComment[] }> {
+  const response = await api.get(`/api/tasks/${id}/comments`, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function createTaskComment(token: string, id: string | number, content: string, is_internal = false): Promise<{ success: boolean; comment: TaskComment }> {
+  const response = await api.post(`/api/tasks/${id}/comments`, { content, is_internal }, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function deleteTaskComment(token: string, taskId: string | number, commentId: number): Promise<void> {
+  await api.delete(`/api/tasks/${taskId}/comments/${commentId}`, { headers: authHeaders(token) });
+}
+
+export async function fetchTaskWorkLog(token: string, id: string | number): Promise<{ success: boolean; data: TaskWorkLog[]; totalHours: number }> {
+  const response = await api.get(`/api/tasks/${id}/work-log`, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function logTaskTime(token: string, id: string | number, data: { start_time: string; end_time: string; description?: string }): Promise<{ success: boolean; log: TaskWorkLog; totalMinutes: number; totalHours: number }> {
+  const response = await api.post(`/api/tasks/${id}/log-time`, data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function fetchTaskMicrotasks(token: string, id: string | number): Promise<{ success: boolean; microtasks: TaskMicrotask[] }> {
+  const response = await api.get(`/api/tasks/${id}/microtasks`, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function createTaskMicrotask(token: string, id: string | number, title: string): Promise<{ success: boolean; microtask: TaskMicrotask }> {
+  const response = await api.post(`/api/tasks/${id}/microtasks`, { title }, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function updateTaskMicrotask(token: string, taskId: string | number, microtaskId: number, data: Partial<TaskMicrotask>): Promise<{ success: boolean; microtask: TaskMicrotask }> {
+  const response = await api.put(`/api/tasks/${taskId}/microtasks/${microtaskId}`, data, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function toggleTaskMicrotask(token: string, taskId: string | number, microtaskId: number): Promise<{ success: boolean; microtask: TaskMicrotask }> {
+  const response = await api.put(`/api/tasks/${taskId}/microtasks/${microtaskId}/toggle`, {}, { headers: authHeaders(token) });
+  return response.data;
+}
+
+export async function deleteTaskMicrotask(token: string, taskId: string | number, microtaskId: number): Promise<void> {
+  await api.delete(`/api/tasks/${taskId}/microtasks/${microtaskId}`, { headers: authHeaders(token) });
+}
+
+export async function addTaskAttachment(token: string, id: string | number, file: File): Promise<{ success: boolean; attachments: TaskAttachment[]; task: ProjectTask }> {
+  const form = new FormData();
+  form.append('files', file);
+  const response = await api.post(`/api/tasks/${id}/attachments`, form, { headers: authHeaders(token) });
+  return response.data;
 }
 
 
