@@ -254,11 +254,89 @@ export class NotificationsService {
     if (tokens.length === 0) {
       throw new BadRequestException('No push tokens registered for this account. Open the mobile app and allow notifications first.');
     }
+    const messages = tokens.map((token) => ({
+      to: token,
+      sound: 'default' as const,
+      title: 'ClickBIT test notification',
+      body: 'If you can see this, push notifications are working.',
+      data: { type: 'notification' },
+    }));
+    const result = await this.sendExpoPushNotifications(messages);
     return {
       success: true,
-      message: `Test push notification queued for ${tokens.length} token(s). Delivery receipts are logged server-side ~15s later.`,
-      data: { tokens, accepted: tokens.length, rejected: 0 },
+      message: `Sent ${result.accepted}/${tokens.length} test notification(s). Delivery receipts are logged server-side ~15s later.`,
+      data: result,
     };
+  }
+
+  async sendExpoPushNotifications(messages: { to: string; sound?: string; title?: string; body?: string; data?: Record<string, unknown> }[]) {
+    const expo = await this.getExpoClient();
+    if (!expo) {
+      return { tickets: [], accepted: 0, errors: [], skipped: 0, unavailable: true };
+    }
+    const notifications: any[] = [];
+    let skipped = 0;
+    for (const message of messages) {
+      if (!expo.isExpoPushToken(message.to)) {
+        skipped++;
+        continue;
+      }
+      notifications.push({
+        to: message.to,
+        sound: message.sound || 'default',
+        title: message.title,
+        body: message.body,
+        data: message.data,
+      });
+    }
+    const chunks = expo.chunkPushNotification(notifications);
+    const tickets: any[] = [];
+    const errors: any[] = [];
+    let accepted = 0;
+    for (const chunk of chunks) {
+      try {
+        const ticketChunk: any[] = await expo.sendPushNotificationsAsync(chunk);
+        tickets.push(...ticketChunk);
+        for (const ticket of ticketChunk) {
+          if (ticket.status === 'error') {
+            errors.push(ticket);
+            if (ticket.details?.error === 'DeviceNotRegistered') {
+              await this.removeInvalidPushToken(ticket.details?.expoPushToken || ticket.to);
+            }
+          } else {
+            accepted++;
+          }
+        }
+      } catch (sendErr: any) {
+        errors.push({ message: sendErr.message });
+      }
+    }
+    return { tickets, accepted, errors, skipped, unavailable: false };
+  }
+
+  private async getExpoClient(): Promise<any> {
+    try {
+      const mod: any = await import('expo-server-sdk');
+      const Expo = mod.Expo || mod.default;
+      return new Expo();
+    } catch {
+      return null;
+    }
+  }
+
+  private async removeInvalidPushToken(token: string) {
+    const profiles = await this.prisma.profiles.findMany({
+      where: { push_tokens: { not: Prisma.JsonNull } },
+    });
+    for (const profile of profiles) {
+      const tokens = this.asArray<string>(profile.push_tokens);
+      if (tokens.includes(token)) {
+        await this.prisma.profiles.update({
+          where: { id: profile.id },
+          data: { push_tokens: tokens.filter((t) => t !== token) as any },
+        });
+      }
+    }
   }
 
   getWebhookTestInfo() {

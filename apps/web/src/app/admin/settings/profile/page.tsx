@@ -28,6 +28,7 @@ import {
 } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { toast } from 'sonner';
+import { MfaSection } from './MfaSection';
 
 const NOTIFICATION_KEYS = [
   { key: 'new_leads', label: 'New leads', default: true },
@@ -317,6 +318,8 @@ export default function AdminSettingsProfilePage() {
               )}
             </CardContent>
           </Card>
+
+          <MfaSection />
 
           <Card className="border-destructive">
             <CardHeader>

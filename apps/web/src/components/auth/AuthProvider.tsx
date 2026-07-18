@@ -21,14 +21,26 @@ interface UserProfile {
   avatar?: string | null;
 }
 
+interface MfaFactor {
+  id: string;
+  friendly_name?: string;
+  factor_type: string;
+  status: string;
+}
+
 interface AuthContextValue {
   token: string | null;
+  refreshToken: string | null;
   user: UserProfile | null;
   loading: boolean;
   error: string | null;
+  mfaRequired: boolean;
+  mfaFactors: MfaFactor[];
   setToken: (token: string, refreshToken?: string) => void;
   clearToken: () => void;
-  login: (email: string, password: string) => Promise<{ user: UserProfile; accessToken: string; refreshToken: string }>;
+  login: (email: string, password: string) => Promise<{ user: UserProfile; accessToken: string; refreshToken: string; requiresMfa?: boolean }>;
+  completeMfa: (factorId: string, code: string) => Promise<void>;
+  cancelMfa: () => void;
   register: (data: RegisterData) => Promise<{ message: string }>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<{ message: string }>;
@@ -64,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaFactors, setMfaFactors] = useState<MfaFactor[]>([]);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaRefreshToken, setMfaRefreshToken] = useState<string | null>(null);
 
   const fetchUser = useCallback(async (t: string) => {
     try {
@@ -109,6 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (refresh) setRefreshTokenState(refresh);
   }, []);
 
+  const clearMfa = useCallback(() => {
+    setMfaRequired(false);
+    setMfaFactors([]);
+    setMfaToken(null);
+    setMfaRefreshToken(null);
+  }, []);
+
   const clearToken = useCallback(() => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(TOKEN_KEY);
@@ -117,7 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenState(null);
     setRefreshTokenState(null);
     setUser(null);
-  }, []);
+    clearMfa();
+  }, [clearMfa]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -125,10 +149,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       setLoading(true);
       setError(null);
+      clearMfa();
       try {
         const { data } = await axios.post('/api/auth/login', { email, password });
         const result = data?.data;
         if (!result?.accessToken) throw new Error('Login failed');
+        if (result.requiresMfa) {
+          setMfaRequired(true);
+          setMfaFactors(result.factors || []);
+          setMfaToken(result.accessToken);
+          setMfaRefreshToken(result.refreshToken);
+          return result;
+        }
         setToken(result.accessToken, result.refreshToken);
         if (result.user) setUser(result.user);
         router.replace(getDashboardPath(result.user?.role));
@@ -141,8 +173,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [router, setToken],
+    [router, setToken, clearMfa],
   );
+
+  const completeMfa = useCallback(
+    async (factorId: string, code: string) => {
+      if (!mfaToken || !mfaRefreshToken || !supabase) throw new Error('MFA session not available');
+      setLoading(true);
+      setError(null);
+      try {
+        const { error: sessionError } = await supabase.auth.setSession({ access_token: mfaToken, refresh_token: mfaRefreshToken });
+        if (sessionError) throw new Error(sessionError.message);
+        const { data, error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+        if (verifyError || !data?.access_token) throw new Error(verifyError?.message || 'Invalid MFA code');
+        setToken(data.access_token, data.refresh_token);
+        clearMfa();
+        const { data: me } = await axios.get('/api/auth/me', { headers: { Authorization: `Bearer ${data.access_token}` } });
+        if (me?.data?.user) {
+          setUser(me.data.user);
+          router.replace(getDashboardPath(me.data.user.role));
+        }
+      } catch (err: any) {
+        const message = err?.message || 'MFA verification failed';
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mfaToken, mfaRefreshToken, setToken, clearMfa, router],
+  );
+
+  const cancelMfa = useCallback(() => {
+    clearMfa();
+    setError(null);
+  }, [clearMfa]);
 
   const register = useCallback(
     async (data: RegisterData) => {
@@ -214,12 +279,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     token,
+    refreshToken,
     user,
     loading,
     error,
+    mfaRequired,
+    mfaFactors,
     setToken,
     clearToken,
     login,
+    completeMfa,
+    cancelMfa,
     register,
     logout,
     forgotPassword,
