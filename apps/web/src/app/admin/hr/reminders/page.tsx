@@ -49,7 +49,7 @@ export default function AdminHrRemindersPage() {
         className="sm:max-w-sm"
       />
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Reminders</CardTitle>
         </CardHeader>

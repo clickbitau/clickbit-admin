@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Employee } from '@/types/hr';
 
@@ -27,22 +27,8 @@ export function EmployeeTable({ employees, loading, onRowClick }: EmployeeTableP
     return <div className="rounded-lg border p-8 text-center text-muted-foreground">No employees found.</div>;
   }
 
-  const statusVariant = (status?: string | null) => {
-    switch (status) {
-      case 'active':
-        return 'default';
-      case 'on_leave':
-      case 'suspended':
-        return 'secondary';
-      case 'terminated':
-        return 'destructive';
-      default:
-        return 'outline';
-    }
-  };
-
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
@@ -72,7 +58,7 @@ export function EmployeeTable({ employees, loading, onRowClick }: EmployeeTableP
                 <TableCell>{employee.position || '-'}</TableCell>
                 <TableCell className="capitalize">{(employee.employment_type || '').replace(/_/g, ' ')}</TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant(employee.employment_status)}>{employee.employment_status || 'active'}</Badge>
+                  <StatusBadge status={employee.employment_status || 'active'} />
                 </TableCell>
               </TableRow>
             );

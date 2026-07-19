@@ -117,7 +117,7 @@ export default function AdminEmployeeDetailPage() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader>
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
@@ -185,7 +185,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><Clock className="h-5 w-5 text-primary" /><CardTitle>Time Clock</CardTitle></CardHeader>
                 <CardContent>
                   <DataTable<Record<string, unknown>>
@@ -203,7 +203,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><Briefcase className="h-5 w-5 text-primary" /><CardTitle>Contracts</CardTitle></CardHeader>
                 <CardContent>
                   <DataTable<Record<string, unknown>>
@@ -224,7 +224,7 @@ export default function AdminEmployeeDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p><span className="text-muted-foreground">Email:</span> {employee.user?.email || '—'}</p>
@@ -237,7 +237,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Banking</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p><span className="text-muted-foreground">Account name:</span> {employee.bank_account_name || '—'}</p>
@@ -249,7 +249,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><Calendar className="h-5 w-5 text-primary" /><CardTitle>Time Off</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -264,7 +264,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><Banknote className="h-5 w-5 text-primary" /><CardTitle>Payslips</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -279,7 +279,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><FileClock className="h-5 w-5 text-primary" /><CardTitle>Shifts</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -294,7 +294,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><HandCoins className="h-5 w-5 text-primary" /><CardTitle>Staff Advances</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -312,7 +312,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><CardTitle>Documents</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -327,7 +327,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><GraduationCap className="h-5 w-5 text-primary" /><CardTitle>Skills & Certifications</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p><span className="text-muted-foreground">Skills:</span> {Array.isArray(employee.skills) ? employee.skills.join(', ') : employee.skills ? String(employee.skills) : '—'}</p>
@@ -335,7 +335,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader className="flex flex-row flex-wrap items-center gap-2"><Target className="h-5 w-5 text-primary" /><CardTitle>KPI Scores</CardTitle></CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -350,7 +350,7 @@ export default function AdminEmployeeDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Manager</CardTitle></CardHeader>
                 <CardContent className="text-sm">
                   {employee.manager ? (

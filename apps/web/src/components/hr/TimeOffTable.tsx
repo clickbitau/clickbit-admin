@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { TimeOffRequest } from '@/types/hr';
 
@@ -27,25 +27,10 @@ export function TimeOffTable({ requests, loading }: TimeOffTableProps) {
     return <div className="rounded-lg border p-8 text-center text-muted-foreground">No time-off requests found.</div>;
   }
 
-  const statusVariant = (status?: string | null) => {
-    switch (status) {
-      case 'approved':
-        return 'default';
-      case 'rejected':
-      case 'cancelled':
-      case 'withdrawn':
-        return 'destructive';
-      case 'pending':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
-  };
-
   const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : '-');
 
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
@@ -69,7 +54,7 @@ export function TimeOffTable({ requests, loading }: TimeOffTableProps) {
                 <TableCell>{formatDate(request.end_date)}</TableCell>
                 <TableCell>{request.total_days ?? '-'}</TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant(request.status)}>{request.status || 'pending'}</Badge>
+                  <StatusBadge status={request.status || 'pending'} />
                 </TableCell>
               </TableRow>
             );

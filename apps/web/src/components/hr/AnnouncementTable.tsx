@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Announcement } from '@/types/hr';
 
@@ -27,23 +27,10 @@ export function AnnouncementTable({ announcements, loading }: AnnouncementTableP
     return <div className="rounded-lg border p-8 text-center text-muted-foreground">No announcements found.</div>;
   }
 
-  const statusVariant = (status?: string | null) => {
-    switch (status) {
-      case 'published':
-        return 'default';
-      case 'scheduled':
-        return 'secondary';
-      case 'archived':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
-
   const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : '-');
 
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
@@ -61,7 +48,7 @@ export function AnnouncementTable({ announcements, loading }: AnnouncementTableP
               <TableCell className="capitalize">{(announcement.type || 'general').replace(/_/g, ' ')}</TableCell>
               <TableCell className="capitalize">{announcement.priority || 'normal'}</TableCell>
               <TableCell>
-                <Badge variant={statusVariant(announcement.status)}>{announcement.status || 'draft'}</Badge>
+                <StatusBadge status={announcement.status || 'draft'} />
               </TableCell>
               <TableCell>{formatDate(announcement.publish_at)}</TableCell>
             </TableRow>

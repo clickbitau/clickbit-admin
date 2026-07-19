@@ -878,7 +878,7 @@ export default function AdminHrTimesheetsPage() {
         </TabsContent>
 
         <TabsContent value="list" className="mt-4">
-          <Card>
+          <Card className="nm-raised">
             <CardHeader>
               <CardTitle>Time Entries</CardTitle>
             </CardHeader>

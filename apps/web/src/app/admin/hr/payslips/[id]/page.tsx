@@ -112,7 +112,7 @@ export default function AdminPayslipDetailPage() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader>
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
@@ -169,7 +169,7 @@ export default function AdminPayslipDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Employee</CardTitle></CardHeader>
                 <CardContent className="text-sm space-y-2">
                   <p className="font-medium">{payslip.employee?.name || `Employee ${payslip.employee_id}`}</p>
@@ -177,7 +177,7 @@ export default function AdminPayslipDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
                   <Button className="w-full" onClick={() => download.mutate()} disabled={download.isPending}><Download className="mr-1 h-4 w-4" /> Download PDF</Button>

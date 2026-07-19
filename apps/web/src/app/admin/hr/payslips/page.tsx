@@ -136,7 +136,7 @@ export default function AdminHrPayslipsPage() {
       </div>
 
       {calculateMutation.data && (
-        <Card>
+        <Card className="nm-raised">
           <CardHeader>
             <CardTitle>Calculated Payslip Preview</CardTitle>
           </CardHeader>
@@ -150,7 +150,7 @@ export default function AdminHrPayslipsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Payslips</CardTitle>
         </CardHeader>

@@ -80,7 +80,7 @@ export default function AdminHrTimeOffPage() {
         </select>
       </div>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Leave Requests</CardTitle>
         </CardHeader>

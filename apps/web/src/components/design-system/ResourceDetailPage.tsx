@@ -175,7 +175,7 @@ export function ResourceDetailPage({
       {isLoading || !data ? (
         <Skeleton className="h-40 w-full" />
       ) : (
-        <Card>
+        <Card className="nm-raised">
           <CardHeader>
             <CardTitle className="text-2xl">{displayTitle}</CardTitle>
           </CardHeader>

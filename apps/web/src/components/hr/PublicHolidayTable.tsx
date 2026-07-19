@@ -30,7 +30,7 @@ export function PublicHolidayTable({ holidays, loading }: PublicHolidayTableProp
   const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : '-');
 
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
