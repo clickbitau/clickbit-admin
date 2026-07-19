@@ -58,7 +58,7 @@ export default function EmployeeTaskDetailPage() {
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="nm-raised lg:col-span-2">
           <CardHeader><CardTitle>Details</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p className="text-muted-foreground whitespace-pre-line">{task.description || 'No description.'}</p>
@@ -76,7 +76,7 @@ export default function EmployeeTaskDetailPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>People</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Assigned to</span> <span>{task.assigned_to ? `User ${task.assigned_to}` : '-'}</span></div>

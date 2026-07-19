@@ -130,7 +130,7 @@ export default function EmployeeDashboardPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="nm-raised lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <ListTodo className="h-4 w-4" /> Open Tasks
@@ -163,7 +163,7 @@ export default function EmployeeDashboardPage() {
         </Card>
 
         <div className="space-y-4">
-          <Card>
+          <Card className="nm-raised">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Palmtree className="h-4 w-4" /> Leave Balances
@@ -176,7 +176,7 @@ export default function EmployeeDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="nm-raised">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Sun className="h-4 w-4" /> Upcoming Public Holidays
@@ -199,7 +199,7 @@ export default function EmployeeDashboardPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="nm-raised">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Calendar className="h-4 w-4" /> Upcoming Shifts
@@ -224,7 +224,7 @@ export default function EmployeeDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="nm-raised">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Receipt className="h-4 w-4" /> Recent Payslips
@@ -249,7 +249,7 @@ export default function EmployeeDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="nm-raised">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4" /> Recent Time Off

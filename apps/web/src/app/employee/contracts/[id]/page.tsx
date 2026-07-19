@@ -8,6 +8,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { fetchEmployeeContract } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { FileText, ArrowLeft } from 'lucide-react';
@@ -55,17 +56,17 @@ export default function EmployeeContractDetailPage() {
       }
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>Overview</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Type</span> <span className="capitalize">{contract.employment_type?.replace(/_/g, ' ') || '-'}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Position</span> <span>{contract.position || '-'}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Department</span> <span>{contract.department || '-'}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Status</span> <span className="capitalize">{contract.status || '-'}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Status</span> <StatusBadge status={contract.status} /></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Manager</span> <span>{contract.manager?.name || '-'}</span></div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>Dates & Pay</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Start Date</span> <span>{formatDate(contract.start_date)}</span></div>
@@ -77,7 +78,7 @@ export default function EmployeeContractDetailPage() {
           </CardContent>
         </Card>
         {contract.terms_summary && (
-          <Card className="md:col-span-2">
+          <Card className="nm-raised md:col-span-2">
             <CardHeader><CardTitle>Terms Summary</CardTitle></CardHeader>
             <CardContent><p className="text-sm whitespace-pre-line">{contract.terms_summary}</p></CardContent>
           </Card>

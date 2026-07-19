@@ -10,6 +10,7 @@ import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { fetchEmployeePayslips } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Receipt } from 'lucide-react';
 
 export default function EmployeePayslipsPage() {
@@ -51,7 +52,7 @@ export default function EmployeePayslipsPage() {
           <span key="tax">{formatCurrency(Number(p.tax_withheld), p.currency)}</span>,
           <span key="super">{formatCurrency(Number(p.superannuation), p.currency)}</span>,
           <span key="net" className="font-medium">{formatCurrency(Number(p.net_pay), p.currency)}</span>,
-          <span key="status" className="text-xs capitalize">{p.status || '-'}</span>,
+          <StatusBadge key="status" status={p.status} />,
         ]}
       />
       {data?.pagination && (
