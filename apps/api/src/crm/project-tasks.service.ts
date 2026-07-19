@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, ForbiddenException 
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { CacheService } from '../redis/cache.service';
 
 interface UserLike {
   id: number;
@@ -29,7 +30,18 @@ export class ProjectTasksService {
   constructor(
     public readonly prisma: PrismaService,
     private readonly storage?: StorageService,
+    private readonly cache?: CacheService,
   ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('tasks', ...parts) ?? `tasks:${parts.filter(Boolean).join(':')}`;
+  }
+
+  private async invalidateTaskCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
 
   private get baseTaskInclude(): any {
     return {
@@ -206,6 +218,11 @@ export class ProjectTasksService {
   // Standalone tasks
   // -------------------------------------------------------------------------
   async findAll(query: Record<string, unknown>) {
+    const cacheKey = this.cacheKey('list', JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindAll(query), this.CACHE_TTL_SECONDS) ?? this.fetchFindAll(query);
+  }
+
+  private async fetchFindAll(query: Record<string, unknown>) {
     const page = Math.max(1, Number((query as any).page ?? 1));
     const limit = Math.min(100, Math.max(1, Number((query as any).limit ?? 25)));
     const where = this.buildWhere(query);
@@ -310,6 +327,11 @@ export class ProjectTasksService {
   // Project tasks
   // -------------------------------------------------------------------------
   async getProjectTasks(projectId: number, query: Record<string, unknown>, _user: UserLike) {
+    const cacheKey = this.cacheKey('project', projectId, JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchProjectTasks(projectId, query), this.CACHE_TTL_SECONDS) ?? this.fetchProjectTasks(projectId, query);
+  }
+
+  private async fetchProjectTasks(projectId: number, query: Record<string, unknown>) {
     const resolved = await this.resolveProjectEntity(projectId);
     if (!resolved) throw new NotFoundException('Project not found');
 
@@ -386,6 +408,7 @@ export class ProjectTasksService {
 
     const task = await this.prisma.project_tasks.create({ data: taskData });
     const full = await this.prisma.project_tasks.findUnique({ where: { id: task.id }, include: this.taskInclude });
+    await this.invalidateTaskCache();
     return { success: true, task: this.mapTask(full) };
   }
 
@@ -419,10 +442,19 @@ export class ProjectTasksService {
   // Single task
   // -------------------------------------------------------------------------
   async getTask(id: number, user: UserLike) {
-    const task = await this.prisma.project_tasks.findUnique({ where: { id, deleted_at: null }, include: this.taskInclude });
-    if (!task) throw new NotFoundException('Task not found');
-    this.ensureTaskAccess(task, user);
-    return { success: true, task: this.mapTask(task) };
+    const cacheKey = this.cacheKey('detail', id);
+    const result = await this.cache?.getOrSet(
+      cacheKey,
+      async () => {
+        const task = await this.prisma.project_tasks.findUnique({ where: { id, deleted_at: null }, include: this.taskInclude });
+        if (!task) throw new NotFoundException('Task not found');
+        return { task };
+      },
+      this.CACHE_TTL_SECONDS,
+    ) ?? { task: await this.prisma.project_tasks.findUnique({ where: { id, deleted_at: null }, include: this.taskInclude }) };
+    if (!result.task) throw new NotFoundException('Task not found');
+    this.ensureTaskAccess(result.task, user);
+    return { success: true, task: this.mapTask(result.task) };
   }
 
   async updateTask(id: number, body: any, user: UserLike) {
@@ -458,6 +490,8 @@ export class ProjectTasksService {
     }
 
     const updated = await this.prisma.project_tasks.update({ where: { id }, data: updates, include: this.taskInclude });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, task: this.mapTask(updated) };
   }
 
@@ -466,6 +500,8 @@ export class ProjectTasksService {
     const task = await this.prisma.project_tasks.findUnique({ where: { id, deleted_at: null } });
     if (!task) throw new NotFoundException('Task not found');
     await this.prisma.project_tasks.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, message: 'Task deleted' };
   }
 
@@ -480,6 +516,8 @@ export class ProjectTasksService {
     const task = await this.prisma.project_tasks.findUnique({ where: { id, deleted_at: null }, include: this.taskInclude });
     if (!task) throw new NotFoundException('Task not found');
     const updated = await this.prisma.project_tasks.update({ where: { id }, data: { assigned_to }, include: this.taskInclude });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, task: this.mapTask(updated) };
   }
 
@@ -496,6 +534,8 @@ export class ProjectTasksService {
       updates.completed_at = null;
     }
     const updated = await this.prisma.project_tasks.update({ where: { id }, data: updates, include: this.taskInclude });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: this.mapTask(updated) };
   }
 
@@ -593,6 +633,8 @@ export class ProjectTasksService {
       },
     });
     const full = await this.prisma.task_comments.findUnique({ where: { id: comment.id }, include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } } });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, comment: full };
   }
 
@@ -604,6 +646,8 @@ export class ProjectTasksService {
     if (!comment || comment.task_id !== id) throw new NotFoundException('Comment not found');
     if (comment.author_id !== user.id && !['admin', 'manager'].includes(user.role)) throw new ForbiddenException('Cannot delete this comment');
     await this.prisma.task_comments.delete({ where: { id: commentId } });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, message: 'Comment deleted' };
   }
 
@@ -634,6 +678,8 @@ export class ProjectTasksService {
       data: { attachments: [...attachments, ...uploaded] as any },
       include: this.taskInclude,
     });
+    await this.invalidateTaskCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, attachments: updated.attachments, task: this.mapTask(updated) };
   }
 
@@ -671,6 +717,7 @@ export class ProjectTasksService {
       });
     }
     const full = await this.prisma.project_tasks.findUnique({ where: { id: copy.id }, include: this.taskInclude });
+    await this.invalidateTaskCache();
     return { success: true, task: this.mapTask(full) };
   }
 
@@ -722,6 +769,7 @@ export class ProjectTasksService {
       created.push(copy.id);
     }
     const tasks = await this.prisma.project_tasks.findMany({ where: { id: { in: created } }, include: this.taskInclude });
+    await this.invalidateTaskCache();
     return { success: true, message: `Task assigned to ${validIds.length} additional people`, data: tasks.map((t) => this.mapTask(t)) };
   }
 
@@ -788,6 +836,7 @@ export class ProjectTasksService {
 
     const task = await this.prisma.project_tasks.create({ data: taskData });
     const full = await this.prisma.project_tasks.findUnique({ where: { id: task.id }, include: this.taskInclude });
+    await this.invalidateTaskCache();
     return { success: true, task: this.mapTask(full) };
   }
 
