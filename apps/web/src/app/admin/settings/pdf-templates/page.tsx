@@ -6,6 +6,7 @@ import { useDebounce } from '@/lib/useDebounce';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,14 +20,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -47,6 +40,7 @@ import {
   Check,
   LayoutTemplate,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -58,17 +52,17 @@ import {
   deletePdfTemplate,
   setDefaultPdfTemplate,
   clonePdfTemplate,
-  previewPdfTemplate,
   previewPdfTemplateWithData,
+  seedPdfTemplates,
 } from '@/lib/api';
 
 const TEMPLATE_TYPES = [
-  { value: 'invoice', label: 'Invoice', icon: FileText },
-  { value: 'quote', label: 'Quote / Estimate', icon: FileText },
-  { value: 'payslip', label: 'Payslip', icon: FileText },
-  { value: 'contract', label: 'Contract', icon: FileText },
-  { value: 'receipt', label: 'Receipt', icon: FileText },
-  { value: 'other', label: 'Other', icon: FileText },
+  { value: 'invoice', label: 'Invoice', icon: FileText, color: 'text-blue-600' },
+  { value: 'quote', label: 'Quote / Estimate', icon: FileText, color: 'text-emerald-600' },
+  { value: 'payslip', label: 'Payslip', icon: FileText, color: 'text-amber-600' },
+  { value: 'contract', label: 'Contract', icon: FileText, color: 'text-purple-600' },
+  { value: 'receipt', label: 'Receipt', icon: FileText, color: 'text-slate-600' },
+  { value: 'other', label: 'Other', icon: FileText, color: 'text-gray-600' },
 ];
 
 const PDF_TEMPLATE_VARIABLES = [
@@ -171,7 +165,7 @@ export default function AdminPdfTemplatesPage() {
 
   const debouncedForm = useDebounce(form, 600);
 
-  const { data: templates = [], isLoading, error } = useQuery({
+  const { data: templates = [], isLoading, error, refetch } = useQuery({
     queryKey: ['pdf-templates', token, typeFilter],
     queryFn: async () => {
       if (!token) throw new Error('No token');
@@ -190,6 +184,12 @@ export default function AdminPdfTemplatesPage() {
   }, [templates, filter]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['pdf-templates', token] });
+
+  const seedMutation = useMutation({
+    mutationFn: () => seedPdfTemplates(token!),
+    onSuccess: (res) => { refresh(); toast.success(res.message); },
+    onError: (err: Error) => toast.error(err.message || 'Failed to seed templates'),
+  });
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<PdfTemplate>) => createPdfTemplate(token!, data),
@@ -239,6 +239,7 @@ export default function AdminPdfTemplatesPage() {
     });
     setEditing(template || null);
     setPreviewHtml('');
+    setActiveField('html');
     if (template && template.id) {
       setPreviewLoading(true);
       previewMutation.mutate(t);
@@ -267,22 +268,10 @@ export default function AdminPdfTemplatesPage() {
   }
 
   useEffect(() => {
-    if (!editing) return;
+    if (!editing && !form.id) return;
     setPreviewLoading(true);
     previewMutation.mutate(debouncedForm);
-  }, [debouncedForm, editing, previewMutation]);
-
-  const statCards = useMemo(() => {
-    const byType = (type: string) => templates.filter((t) => (t.template_type || t.type) === type).length;
-    return [
-      { label: 'Total Templates', value: templates.length, icon: LayoutTemplate },
-      { label: 'Default', value: templates.filter((t) => t.is_default).length, icon: Star },
-      { label: 'Invoice', value: byType('invoice'), icon: FileText, onClick: () => setTypeFilter('invoice') },
-      { label: 'Quote', value: byType('quote'), icon: FileText, onClick: () => setTypeFilter('quote') },
-      { label: 'Payslip', value: byType('payslip'), icon: FileText, onClick: () => setTypeFilter('payslip') },
-      { label: 'Contract', value: byType('contract'), icon: FileText, onClick: () => setTypeFilter('contract') },
-    ];
-  }, [templates]);
+  }, [debouncedForm, editing, form.id, previewMutation]);
 
   const previewUrl = useMemo(() => {
     if (!previewHtml) return '';
@@ -313,6 +302,18 @@ export default function AdminPdfTemplatesPage() {
     }
   }
 
+  const statCards = useMemo(() => {
+    const byType = (type: string) => templates.filter((t) => (t.template_type || t.type) === type).length;
+    return [
+      { label: 'Total Templates', value: templates.length, icon: LayoutTemplate },
+      { label: 'Default', value: templates.filter((t) => t.is_default).length, icon: Star },
+      { label: 'Invoice', value: byType('invoice'), icon: FileText, onClick: () => setTypeFilter('invoice') },
+      { label: 'Quote', value: byType('quote'), icon: FileText, onClick: () => setTypeFilter('quote') },
+      { label: 'Payslip', value: byType('payslip'), icon: FileText, onClick: () => setTypeFilter('payslip') },
+      { label: 'Contract', value: byType('contract'), icon: FileText, onClick: () => setTypeFilter('contract') },
+    ];
+  }, [templates]);
+
   const fields = [
     { key: 'html' as const, label: 'Body HTML', rows: 12 },
     { key: 'css' as const, label: 'CSS', rows: 6 },
@@ -320,15 +321,26 @@ export default function AdminPdfTemplatesPage() {
     { key: 'footer' as const, label: 'Footer HTML', rows: 4 },
   ];
 
+  const typeMeta = (type?: string) => TEMPLATE_TYPES.find((t) => t.value === (type || 'other')) ?? TEMPLATE_TYPES[TEMPLATE_TYPES.length - 1];
+
+  const variablesUsed = (t: PdfTemplate) => PDF_TEMPLATE_VARIABLES.filter((v) =>
+    (t.html || '').includes(v.key) || (t.header || '').includes(v.key) || (t.footer || '').includes(v.key)
+  );
+
   return (
     <PageShell
       title="PDF Templates"
       icon={FileText}
       description="Design and preview invoice, quote, payslip and contract PDF templates"
       actions={
-        <Button onClick={() => openEditor()}>
-          <Plus className="mr-1 h-4 w-4" /> New Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending || isLoading}>
+            <Sparkles className="mr-1 h-4 w-4" /> Load defaults
+          </Button>
+          <Button onClick={() => openEditor()}>
+            <Plus className="mr-1 h-4 w-4" /> New Template
+          </Button>
+        </div>
       }
     >
       <StatCards cards={statCards} />
@@ -363,60 +375,103 @@ export default function AdminPdfTemplatesPage() {
 
       {error && <p className="text-sm text-destructive">Failed to load templates.</p>}
 
-      <div className="nm-raised overflow-hidden rounded-xl">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-b border-border/50 hover:bg-transparent">
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Variables</TableHead>
-              <TableHead>Default</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No templates found.</TableCell></TableRow>
-            ) : (
-              filtered.map((t) => (
-                <TableRow key={t.id} className="border-b border-border/30">
-                  <TableCell>
-                    <div className="font-medium">{t.name}</div>
-                    {t.description && <div className="text-xs text-muted-foreground">{t.description}</div>}
-                  </TableCell>
-                  <TableCell className="capitalize">{t.template_type || t.type || 'other'}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {PDF_TEMPLATE_VARIABLES.filter((v) => (t.html || '').includes(v.key) || (t.header || '').includes(v.key) || (t.footer || '').includes(v.key)).slice(0, 3).map((v) => (
-                        <Badge key={v.key} variant="outline" className="text-[10px]"><Code className="h-3 w-3 mr-1" />{v.key.replace(/[{}]/g, '')}</Badge>
-                      ))}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="nm-raised h-40 animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="space-y-6">
+          <div className="nm-raised p-8 text-center">
+            <div className="mx-auto mb-3 w-12 h-12 rounded-full nm-inset-sm flex items-center justify-center">
+              <LayoutTemplate className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-1">No PDF templates yet</h3>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">Get started by loading the default invoice, quote, payslip and contract templates, or build your own.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
+                <Sparkles className="mr-1 h-4 w-4" /> Load default templates
+              </Button>
+              <Button variant="outline" onClick={() => openEditor()}>
+                <Plus className="mr-1 h-4 w-4" /> New template
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {TEMPLATE_TYPES.slice(0, 4).map((type) => (
+              <button
+                key={type.value}
+                onClick={() => {
+                  setForm((prev) => ({ ...prev, template_type: type.value }));
+                  openEditor();
+                }}
+                className="nm-raised-sm p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[var(--nm-shadow-raised)]"
+              >
+                <type.icon className={cn('h-8 w-8 mb-3', type.color)} />
+                <h3 className="font-semibold">{type.label}</h3>
+                <p className="text-xs text-muted-foreground mt-1">Create a {type.label.toLowerCase()} template from scratch.</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((t) => {
+            const meta = typeMeta(t.template_type || t.type);
+            const vars = variablesUsed(t);
+            return (
+              <div
+                key={t.id}
+                className="nm-raised p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:shadow-[var(--nm-shadow-raised)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="nm-raised-sm w-10 h-10 flex items-center justify-center flex-shrink-0">
+                      <meta.icon className={cn('h-5 w-5', meta.color)} />
                     </div>
-                  </TableCell>
-                  <TableCell>{t.is_default ? <Badge variant="default" className="gap-1"><Check className="h-3 w-3" /> Default</Badge> : <span className="text-muted-foreground text-sm">—</span>}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => { openEditor(t); setActiveField('html'); }} title="Edit / preview">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => cloneMutation.mutate(t.id)} disabled={cloneMutation.isPending} title="Duplicate">
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => defaultMutation.mutate(t.id)} disabled={defaultMutation.isPending} title="Set as default">
-                        <Star className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(t.id)} disabled={removeMutation.isPending} title="Delete">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div>
+                      <h3 className="font-semibold leading-tight">{t.name}</h3>
+                      <p className="text-xs text-muted-foreground capitalize">{meta.label}</p>
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  </div>
+                  {t.is_default ? (
+                    <Badge variant="default" className="gap-1"><Check className="h-3 w-3" /> Default</Badge>
+                  ) : (
+                    <Badge variant="outline">Custom</Badge>
+                  )}
+                </div>
+
+                {t.description && <p className="text-sm text-muted-foreground line-clamp-2">{t.description}</p>}
+
+                <div className="flex flex-wrap gap-1.5">
+                  {vars.slice(0, 4).map((v) => (
+                    <Badge key={v.key} variant="secondary" className="text-[10px]"><Code className="h-3 w-3 mr-1" />{v.key.replace(/[{}]/g, '')}</Badge>
+                  ))}
+                  {vars.length > 4 && (
+                    <Badge variant="secondary" className="text-[10px]">+{vars.length - 4}</Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 mt-auto pt-2">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => { openEditor(t); setActiveField('html'); }}>
+                    <Eye className="mr-1 h-4 w-4" /> Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => cloneMutation.mutate(t.id)} disabled={cloneMutation.isPending} title="Duplicate">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => defaultMutation.mutate(t.id)} disabled={defaultMutation.isPending} title="Set as default">
+                    <Star className={cn('h-4 w-4', t.is_default && 'fill-current text-primary')} />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(t.id)} disabled={removeMutation.isPending} title="Delete">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Dialog open={!!editing || form.id !== 0} onOpenChange={(open) => { if (!open) closeEditor(); }}>
         <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden p-0">
@@ -497,7 +552,7 @@ export default function AdminPdfTemplatesPage() {
                       <button
                         key={v.key}
                         onClick={() => insertVariable(v.key)}
-                        className="inline-flex items-center px-2 py-1 text-[10px] rounded bg-muted hover:bg-primary/10 transition-colors"
+                        className="nm-raised-sm inline-flex items-center px-2 py-1 text-[10px] hover:-translate-y-0.5 transition-all"
                       >
                         <Code className="h-3 w-3 mr-1 text-primary" />{v.key}
                       </button>
@@ -532,9 +587,9 @@ export default function AdminPdfTemplatesPage() {
                     sandbox="allow-same-origin"
                   />
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground nm-raised-sm m-4">
                     <FileText className="h-12 w-12 mb-3 opacity-50" />
-                    <p className="text-sm">Save or edit to generate preview</p>
+                    <p className="text-sm">Start editing to generate a preview</p>
                   </div>
                 )}
               </div>

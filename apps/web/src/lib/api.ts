@@ -2358,6 +2358,10 @@ export async function previewPdfTemplateWithData(
   return (await api.post('/api/settings/pdf-templates/preview', data, { headers: authHeaders(token) })).data;
 }
 
+export async function seedPdfTemplates(token: string): Promise<{ success: boolean; templates: PdfTemplate[]; message: string }> {
+  return (await api.post('/api/settings/pdf-templates/seed', {}, { headers: authHeaders(token) })).data;
+}
+
 // ─── Bug Reports ─────────────────────────────────────────────────────────────
 
 export async function fetchBugReports(

@@ -49,4 +49,9 @@ export class PdfTemplatesController {
   previewWithData(@Body() body: any) {
     return this.pdfTemplatesService.previewWithData(body || {});
   }
+
+  @Post('seed')
+  seed() {
+    return this.pdfTemplatesService.seedDefaults();
+  }
 }
