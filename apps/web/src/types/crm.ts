@@ -292,6 +292,7 @@ export interface ProjectTask {
   tags?: string[];
   subtasks?: ProjectTask[];
   task_comments?: TaskComment[];
+  comment_count?: number;
   microtasks?: TaskMicrotask[];
   phase?: { id: number; name: string; position?: number; status?: string } | null;
   parentTask?: { id: number; title: string; status: string } | null;
