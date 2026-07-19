@@ -16,7 +16,6 @@ import {
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { PageShell } from '@/components/design-system/PageShell';
-import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { useDebounce } from '@/lib/useDebounce';
@@ -44,11 +43,9 @@ import {
   CheckSquare,
   MessageSquare,
   Paperclip,
-  MoreHorizontal,
   Copy,
   Trash2,
   Calendar,
-  GripVertical,
   Tags,
   RefreshCw,
 } from 'lucide-react';
@@ -158,7 +155,6 @@ export default function ProjectTasksPage() {
 
   const tasks = data?.data ?? [];
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 };
-  const stats = useMemo(() => data?.stats ?? { total: 0, todo: 0, in_progress: 0, review: 0, completed: 0, blocked: 0, totalEstimatedHours: 0, totalActualHours: 0 }, [data?.stats]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<ProjectTask> }) => updateTask(token!, id, data),
@@ -193,19 +189,6 @@ export default function ProjectTasksPage() {
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to duplicate'),
   });
-
-  const statCards = useMemo(
-    () => [
-      { label: 'Total', value: stats.total, icon: FolderKanban },
-      { label: 'To Do', value: stats.todo, icon: List, accent: 'secondary' as const, onClick: () => { setStatus('todo'); setPage(1); } },
-      { label: 'In Progress', value: stats.in_progress, icon: Clock, accent: 'primary' as const, onClick: () => { setStatus('in_progress'); setPage(1); } },
-      { label: 'Completed', value: stats.completed, icon: CheckSquare, accent: 'success' as const, onClick: () => { setStatus('completed'); setPage(1); } },
-      { label: 'Review', value: stats.review, icon: MessageSquare, accent: 'warning' as const, onClick: () => { setStatus('review'); setPage(1); } },
-      { label: 'Blocked', value: stats.blocked, icon: GripVertical, accent: 'destructive' as const, onClick: () => { setStatus('blocked'); setPage(1); } },
-      { label: 'Est. Hours', value: stats.totalEstimatedHours ?? 0, icon: Clock, sub: `${stats.totalActualHours ?? 0} actual` },
-    ],
-    [stats],
-  );
 
   function handleRowClick(task: ProjectTask) {
     router.push(`${basePath}/${task.id}`);
@@ -425,8 +408,6 @@ export default function ProjectTasksPage() {
         </div>
       }
     >
-      <StatCards cards={statCards} />
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <div className="relative sm:col-span-2">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

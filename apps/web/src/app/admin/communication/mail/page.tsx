@@ -202,7 +202,7 @@ export default function AdminCommunicationMailPage() {
 
   return (
     <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] -m-2 lg:-m-4 animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr_1fr] gap-0 rounded-2xl overflow-hidden nm-raised h-full">
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr_2fr] gap-0 rounded-2xl overflow-hidden nm-raised h-full">
         {/* Left sidebar: accounts, folders, templates */}
         <div className="hidden md:flex flex-col border-r border-border/50 bg-background/50 min-h-0">
           <div className="p-3 border-b border-border/50">
@@ -367,7 +367,13 @@ export default function AdminCommunicationMailPage() {
 
         {/* Reading pane */}
         <div className="flex flex-col min-h-0 bg-background">
-          {selectedMessage ? (
+          {loadingDetail && selectedUid ? (
+            <div className="flex-1 p-6 space-y-3">
+              <Skeleton className="h-6 w-1/2" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : selectedMessage ? (
             <>
               <div className="p-3 border-b border-border/50 flex items-start justify-between gap-2 bg-muted/20">
                 <div className="min-w-0">
@@ -386,6 +392,8 @@ export default function AdminCommunicationMailPage() {
                   <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: selectedMessage.html_body }} />
                 ) : selectedMessage.text_body ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{selectedMessage.text_body}</div>
+                ) : selectedMessage.preview ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-muted-foreground">{selectedMessage.preview}</div>
                 ) : (
                   <div className="text-sm text-muted-foreground">No content.</div>
                 )}

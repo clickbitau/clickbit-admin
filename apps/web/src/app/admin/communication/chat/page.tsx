@@ -392,9 +392,9 @@ export default function AdminCommunicationChatPage() {
                 const authorName = m.author ? `${m.author.first_name || ''} ${m.author.last_name || ''}`.trim() || m.author.email || `User ${m.user_id}` : `User ${m.user_id}`;
                 const groupedReactions = aggregateReactions(m.reactions);
                 return (
-                  <div key={m.id} className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+                  <div key={m.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
                     {showAvatar ? <Avatar src={m.author?.avatar} fallback={authorName} className="w-9 h-9 text-xs flex-shrink-0" /> : <div className="w-9 flex-shrink-0" />}
-                    <div className={`max-w-[80%] min-w-0 ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+                    <div className={`group max-w-[80%] min-w-0 ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                       {showAvatar && (
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-semibold">{authorName}</span>

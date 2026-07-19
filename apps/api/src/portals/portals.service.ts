@@ -813,7 +813,15 @@ export class PortalsService {
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
     const where: any = { assigned_to: user.id, deleted_at: null };
-    if (query.status) where.status = query.status;
+    if (query.priority) where.priority = query.priority;
+    if (query.project_id) where.crm_project_id = Number(query.project_id);
+    if (query.include_completed === 'true' || query.include_completed === true || query.status === 'completed') {
+      if (query.status) where.status = query.status;
+    } else if (query.status) {
+      where.status = query.status;
+    } else {
+      where.status = { not: 'completed' };
+    }
     const [rows, total] = await Promise.all([
       this.prisma.project_tasks.findMany({
         where,

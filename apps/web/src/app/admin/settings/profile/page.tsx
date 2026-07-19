@@ -8,6 +8,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,6 +32,23 @@ import { toast } from 'sonner';
 import { MfaSection } from './MfaSection';
 import { PasskeySection } from './PasskeySection';
 import { TrustedDevicesSection } from './TrustedDevicesSection';
+
+function formatAddressInput(value: string): string {
+  if (!value) return '';
+  if (typeof value !== 'string') return String(value);
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'string') return parsed;
+    if (Array.isArray(parsed)) return parsed.filter(Boolean).join('\n');
+    const entries = Object.entries(parsed).filter(([, v]) => v);
+    if (entries.length) return entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+    return value;
+  } catch {
+    return value;
+  }
+}
 
 const NOTIFICATION_KEYS = [
   { key: 'new_leads', label: 'New leads', default: true },
@@ -200,7 +218,7 @@ export default function AdminSettingsProfilePage() {
               <div className="flex flex-col sm:flex-row items-start gap-6">
                 <div className="relative">
                   <Avatar className="h-24 w-24">
-                    <AvatarImage src={user.avatar} alt={fullName} />
+                    <AvatarImage src={user.avatar} alt={fullName} className="object-cover" />
                     <AvatarFallback className="text-2xl">{form.first_name?.[0] || form.last_name?.[0] || 'U'}</AvatarFallback>
                   </Avatar>
                   <div className="absolute -bottom-2 -right-2 flex gap-1">
@@ -219,7 +237,7 @@ export default function AdminSettingsProfilePage() {
                   <div className="space-y-2"><Label>Website</Label><Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} /></div>
                   <div className="space-y-2"><Label>Timezone</Label><Input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="Australia/Sydney" /></div>
                   <div className="space-y-2"><Label>Language</Label><Input value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} placeholder="en" /></div>
-                  <div className="space-y-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+                  <div className="space-y-2 sm:col-span-2"><Label>Address</Label><Textarea value={formatAddressInput(form.address)} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={3} /></div>
                 </div>
               </div>
               <div className="flex justify-end">

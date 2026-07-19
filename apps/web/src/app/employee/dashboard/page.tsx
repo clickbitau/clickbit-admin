@@ -13,7 +13,7 @@ import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { fetchEmployeeDashboard, fetchPublicHolidays } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { Calendar, Clock, ListTodo, Receipt, FileText, Sun, AlertCircle, Briefcase, Palmtree } from 'lucide-react';
+import { Calendar, Clock, ListTodo, Receipt, FileText, Sun, AlertCircle, Briefcase, Palmtree, Headset } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
   const { token, user } = useAuth();
@@ -114,6 +114,23 @@ export default function EmployeeDashboardPage() {
       }
     >
       <StatCards cards={statCards} />
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { to: '/employee/tasks', icon: ListTodo, label: 'Tasks', desc: 'View and manage tasks' },
+          { to: '/employee/time-clock', icon: Clock, label: 'Time Clock', desc: 'Clock in/out and entries' },
+          { to: '/employee/time-off', icon: Palmtree, label: 'Time Off', desc: 'Request leave' },
+          { to: '/employee/payslips', icon: Receipt, label: 'Payslips', desc: 'Pay history and PDFs' },
+          { to: '/employee/contracts', icon: FileText, label: 'Contracts', desc: 'Employment documents' },
+          { to: '/employee/it-support', icon: Headset, label: 'IT Support', desc: 'Report issues' },
+        ].map((item) => (
+          <Link key={item.to} href={item.to} className="nm-raised-sm p-3 rounded-xl hover:nm-raised transition-all group">
+            <item.icon className="h-5 w-5 text-primary mb-2" />
+            <p className="text-sm font-medium group-hover:text-primary">{item.label}</p>
+            <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+          </Link>
+        ))}
+      </div>
 
       {data?.activeEntry && (
         <div className="nm-raised p-4 rounded-xl border-l-4 border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10">

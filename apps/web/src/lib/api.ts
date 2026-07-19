@@ -799,6 +799,10 @@ export async function logTaskTime(token: string, id: string | number, data: { st
   return response.data;
 }
 
+export async function createTask(token: string, data: Record<string, unknown>) {
+  return (await api.post('/api/tasks', data, { headers: authHeaders(token) })).data;
+}
+
 export async function fetchTaskMicrotasks(token: string, id: string | number): Promise<{ success: boolean; microtasks: TaskMicrotask[] }> {
   const response = await api.get(`/api/tasks/${id}/microtasks`, { headers: authHeaders(token) });
   return response.data;
@@ -1834,6 +1838,10 @@ export async function fetchLinkedAccounts(token: string) {
   return (await api.get('/api/auth/linked-accounts', { headers: authHeaders(token) })).data;
 }
 
+export async function fetchMfaFactors(token: string) {
+  return (await api.get('/api/auth/mfa/factors', { headers: authHeaders(token) })).data;
+}
+
 export async function linkProvider(token: string, provider: string, access_token?: string) {
   return (await api.post('/api/auth/link-provider', { provider, access_token }, { headers: authHeaders(token) })).data;
 }
@@ -2280,6 +2288,21 @@ export async function deleteDocument(token: string, id: string | number) {
 
 export async function uploadDocument(token: string, formData: FormData): Promise<{ success: boolean; document: AppDocument }> {
   return (await api.post('/api/documents/upload', formData, {
+    headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' },
+  })).data;
+}
+
+export async function uploadContentImage(
+  token: string,
+  type: 'team' | 'portfolio' | 'blog' | 'announcement' | 'company',
+  file: File,
+  oldImageUrl?: string,
+): Promise<{ imageUrl: string; transformedUrl: string }> {
+  const formData = new FormData();
+  formData.append('image', file);
+  const params = oldImageUrl ? { oldImageUrl } : undefined;
+  return (await api.post(`/api/upload/${type}`, formData, {
+    params,
     headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' },
   })).data;
 }

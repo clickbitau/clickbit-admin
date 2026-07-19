@@ -14,10 +14,26 @@ export type {
 } from '@clickbit/shared';
 
 export interface TimeClockStatus {
-  clockedIn: boolean;
-  isOnBreak: boolean;
-  activeEntry?: TimeEntry | null;
-  todaySummary?: { totalMinutes: number; breakMinutes: number; entriesCount: number };
+  employee?: {
+    id: number;
+    name: string;
+    canClockIn: boolean;
+    requireGps: boolean;
+    requirePhoto: boolean;
+  };
+  activeEntry?: {
+    id: number;
+    clockInTime: string;
+    isOnBreak: boolean;
+    breakStartTime?: string | null;
+    totalBreakMinutes: number;
+    currentDuration: number;
+    clockInLatitude?: number | null;
+    clockInLongitude?: number | null;
+  } | null;
+  todayHours: number;
+  weeklyHours: number;
+  todayShift?: unknown;
 }
 
 export interface TimeEntry {

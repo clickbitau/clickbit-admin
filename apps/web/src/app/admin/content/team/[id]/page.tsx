@@ -18,7 +18,7 @@ export default function AdminTeamMemberDetailPage() {
         { key: 'name', label: 'Name', type: 'text' },
         { key: 'role', label: 'Role', type: 'text' },
         { key: 'role_label', label: 'Role label', type: 'text' },
-        { key: 'image', label: 'Photo', type: 'image' },
+        { key: 'image', label: 'Photo', type: 'image', upload: 'team' },
         { key: 'email', label: 'Email', type: 'text' },
         { key: 'phone', label: 'Phone', type: 'text' },
         { key: 'bio', label: 'Bio', type: 'textarea' },

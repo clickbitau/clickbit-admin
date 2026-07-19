@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Smartphone, X, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { fetchMfaFactors } from '@/lib/api';
 
 interface Factor {
   id: string;
@@ -18,6 +20,7 @@ interface Factor {
 
 export function MfaSection() {
   const { token, refreshToken, setToken } = useAuth();
+  const queryClient = useQueryClient();
   const [factors, setFactors] = useState<Factor[]>([]);
   const [loading, setLoading] = useState(false);
   const [enrollData, setEnrollData] = useState<{ id: string; qr_code: string; secret: string; uri: string } | null>(null);
@@ -30,25 +33,20 @@ export function MfaSection() {
     return supabase;
   }
 
-  async function loadFactors() {
-    if (!supabase || !token || !refreshToken) return;
-    setLoading(true);
-    try {
-      const client = await ensureSession();
-      const { data, error } = await client.auth.mfa.listFactors();
-      if (error) throw error;
-      setFactors(((data?.all as unknown as Factor[]) || []).filter((f) => !!f));
-    } catch {
-      setFactors([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const factorsQuery = useQuery({
+    queryKey: ['mfa-factors', token],
+    queryFn: async () => {
+      if (!token) return { data: { factors: [] } };
+      return fetchMfaFactors(token);
+    },
+    enabled: !!token,
+  });
 
   useEffect(() => {
-    loadFactors();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, refreshToken]);
+    const raw = (factorsQuery.data?.data?.factors ?? factorsQuery.data?.factors ?? []) as Factor[];
+    setFactors(raw.filter((f) => !!f));
+    setLoading(factorsQuery.isLoading);
+  }, [factorsQuery.data, factorsQuery.isLoading]);
 
   async function startEnroll() {
     setLoading(true);
@@ -74,7 +72,7 @@ export function MfaSection() {
       setToken(data.access_token, data.refresh_token);
       setEnrollData(null);
       setVerifyCode('');
-      await loadFactors();
+      queryClient.invalidateQueries({ queryKey: ['mfa-factors', token] });
     } catch (e: any) {
       alert(e?.message || 'Verification failed');
     } finally {
@@ -89,7 +87,7 @@ export function MfaSection() {
       const client = await ensureSession();
       const { error } = await client.auth.mfa.unenroll({ factorId: id });
       if (error) throw error;
-      await loadFactors();
+      queryClient.invalidateQueries({ queryKey: ['mfa-factors', token] });
     } catch (e: any) {
       alert(e?.message || 'Could not remove factor');
     } finally {

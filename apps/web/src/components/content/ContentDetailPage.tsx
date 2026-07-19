@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { uploadContentImage } from '@/lib/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Save, Trash, type LucideIcon } from 'lucide-react';
 
@@ -21,6 +22,7 @@ interface FieldConfig {
   label: string;
   type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox' | 'json' | 'image';
   options?: string[];
+  upload?: 'team' | 'portfolio' | 'blog' | 'announcement' | 'company';
 }
 
 interface ContentDetailPageProps {
@@ -138,6 +140,27 @@ export function ContentDetailPage({
         return (
           <div className="space-y-2">
             <Input value={value || ''} onChange={(e) => setValue(e.target.value)} placeholder="https://..." />
+            {field.upload && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    const uploadType = field.upload;
+                    if (!file || !token || !uploadType) return;
+                    try {
+                      const result = await uploadContentImage(token, uploadType, file, value || undefined);
+                      setValue(result.imageUrl);
+                      toast.success('Image uploaded');
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.message || 'Upload failed');
+                    }
+                  }}
+                  className="text-sm"
+                />
+              </div>
+            )}
             {value && <img src={value} alt={field.label} className="max-h-40 rounded-md object-cover" />}
           </div>
         );
