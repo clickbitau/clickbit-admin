@@ -116,20 +116,18 @@ export class PublicPaymentsService {
         user_agent: '',
       } as any,
     });
-    for (const item of validated) {
-      await this.prisma.order_items.create({
-        data: {
-          order_id: order.id,
-          product_id: item.productId ?? 0,
-          product_name: item.name,
-          product_sku: item.sku || '',
-          quantity: item.quantity,
-          unit_price: new Decimal(item.price),
-          total_price: new Decimal(item.price * item.quantity),
-          status: 'pending',
-        } as any,
-      });
-    }
+    await this.prisma.order_items.createMany({
+      data: validated.map((item) => ({
+        order_id: order.id,
+        product_id: item.productId ?? 0,
+        product_name: item.name,
+        product_sku: item.sku || '',
+        quantity: item.quantity,
+        unit_price: new Decimal(item.price),
+        total_price: new Decimal(item.price * item.quantity),
+        status: 'pending' as any,
+      })),
+    });
     const session = await this.stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: validated.map((item) => ({

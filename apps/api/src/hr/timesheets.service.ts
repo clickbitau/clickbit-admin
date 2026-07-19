@@ -403,13 +403,6 @@ export class TimesheetsService {
       orderBy: { created_at: 'asc' },
     });
 
-    for (const wi of workItems) {
-      if (wi.task_id) {
-        const agg = await this.prisma.time_entry_work_items.aggregate({ where: { task_id: wi.task_id }, _sum: { hours_spent: true } });
-        (wi as any).hours_logged_elsewhere = parseNumber(agg._sum.hours_spent);
-      }
-    }
-
     const linkedTaskIds = workItems.filter((wi) => wi.task_id).map((wi) => wi.task_id as number);
 
     const baseWhere: any = {
@@ -437,6 +430,23 @@ export class TimesheetsService {
       take: 60,
     });
 
+    const allTaskIds = [...new Set([...linkedTaskIds, ...candidates.map((c) => c.id)])];
+    const loggedHoursByTask = allTaskIds.length
+      ? await this.prisma.time_entry_work_items.groupBy({
+          by: ['task_id'],
+          where: { task_id: { in: allTaskIds } },
+          _sum: { hours_spent: true },
+        })
+      : [];
+    const hoursMap = new Map<number, number>();
+    for (const row of loggedHoursByTask) {
+      if (row.task_id != null) hoursMap.set(row.task_id, parseNumber(row._sum.hours_spent));
+    }
+
+    for (const wi of workItems) {
+      if (wi.task_id) (wi as any).hours_logged_elsewhere = hoursMap.get(wi.task_id) ?? 0;
+    }
+
     const tasks = candidates.filter((task) => {
       const estimated = parseNumber(task.estimated_hours);
       const actual = parseNumber(task.actual_hours);
@@ -445,8 +455,7 @@ export class TimesheetsService {
     });
 
     for (const task of tasks) {
-      const agg = await this.prisma.time_entry_work_items.aggregate({ where: { task_id: task.id }, _sum: { hours_spent: true } });
-      (task as any).hours_logged_elsewhere = parseNumber(agg._sum.hours_spent);
+      (task as any).hours_logged_elsewhere = hoursMap.get(task.id) ?? 0;
     }
 
     return { success: true, data: tasks, workItems };
