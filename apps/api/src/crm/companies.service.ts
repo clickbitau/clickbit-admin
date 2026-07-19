@@ -599,77 +599,58 @@ export class CompaniesService {
   ) {
     if (!name && !domain) return;
 
-    const users = await this.prisma.profiles.findMany({
-      where: {
-        role: 'customer',
-        OR: [
-          ...(name ? [{ company: name }] : []),
-          ...(domain ? [{ email: { contains: `@${domain}` } }] : []),
-        ],
-      },
-    });
+    const nameOrDomainFilter = [
+      ...(name ? [{ company: name }] : []),
+      ...(domain ? [{ email: { contains: `@${domain}` } }] : []),
+    ];
+    if (nameOrDomainFilter.length === 0) return;
 
-    for (const user of users) {
-      if (!user.company_id) {
-        await this.prisma.profiles.update({
-          where: { id: user.id },
-          data: { company_id: companyId },
-        });
-      }
-      const contact = user.email
-        ? await this.prisma.contacts.findFirst({ where: { email: user.email } })
-        : null;
-      if (contact) {
-        const existing = await this.prisma.crm_contact_companies.findFirst({
-          where: { contact_id: contact.id, company_id: companyId },
-        });
-        if (!existing) {
-          await this.prisma.crm_contact_companies.create({
-            data: {
-              contact_id: contact.id,
-              company_id: companyId,
-              is_primary: true,
-              job_title: user.job_title || null,
-            },
-          });
-        }
-      }
+    const orFilter = { OR: nameOrDomainFilter } as any;
+
+    const [users, contacts] = await Promise.all([
+      this.prisma.profiles.findMany({
+        where: { role: 'customer', ...orFilter },
+        select: { id: true, email: true, company_id: true, job_title: true },
+      }),
+      this.prisma.contacts.findMany({
+        where: orFilter,
+        select: { id: true, email: true, user_id: true, job_title: true },
+      }),
+    ]);
+
+    const userIdsWithoutCompany = users.filter((u) => !u.company_id).map((u) => u.id);
+    if (userIdsWithoutCompany.length > 0) {
+      await this.prisma.profiles.updateMany({
+        where: { id: { in: userIdsWithoutCompany } },
+        data: { company_id: companyId },
+      });
     }
 
-    const contacts = await this.prisma.contacts.findMany({
-      where: {
-        OR: [
-          ...(name ? [{ company: name }] : []),
-          ...(domain ? [{ email: { contains: `@${domain}` } }] : []),
-        ],
-      },
-    });
-
-    for (const contact of contacts) {
-      const existing = await this.prisma.crm_contact_companies.findFirst({
-        where: { contact_id: contact.id, company_id: companyId },
+    const contactByEmail = new Map(contacts.filter((c) => c.email).map((c) => [c.email!, c]));
+    const contactLinkInputs = users
+      .filter((u) => u.email && contactByEmail.has(u.email))
+      .map((u) => {
+        const contact = contactByEmail.get(u.email!)!;
+        return { contact_id: contact.id, company_id: companyId, is_primary: true, job_title: u.job_title || null };
       });
-      if (!existing) {
-        await this.prisma.crm_contact_companies.create({
-          data: {
-            contact_id: contact.id,
-            company_id: companyId,
-            is_primary: false,
-            job_title: contact.job_title || null,
-          },
-        });
-      }
-      if (contact.user_id) {
-        const linkedUser = await this.prisma.profiles.findUnique({
-          where: { id: contact.user_id },
-        });
-        if (linkedUser && !linkedUser.company_id) {
-          await this.prisma.profiles.update({
-            where: { id: linkedUser.id },
-            data: { company_id: companyId },
-          });
-        }
-      }
+
+    const contactUserIds = contacts.map((c) => c.user_id).filter((id): id is number => id != null);
+    if (contactUserIds.length > 0) {
+      await this.prisma.profiles.updateMany({
+        where: { id: { in: contactUserIds }, company_id: null },
+        data: { company_id: companyId },
+      });
+    }
+
+    const userContactIds = new Set(contactLinkInputs.map((c) => c.contact_id));
+    contactLinkInputs.push(
+      ...contacts
+        .filter((c) => !userContactIds.has(c.id))
+        .map((c) => ({ contact_id: c.id, company_id: companyId, is_primary: false, job_title: c.job_title || null })),
+    );
+
+    if (contactLinkInputs.length > 0) {
+      await this.prisma.crm_contact_companies.createMany({ data: contactLinkInputs as any, skipDuplicates: true });
     }
   }
 
