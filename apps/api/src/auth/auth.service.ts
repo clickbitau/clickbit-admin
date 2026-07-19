@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -413,5 +414,19 @@ export class AuthService {
     }
     const frontendUrl = (this.config.get<string>('FRONTEND_URL') || 'https://clickbit.com.au').replace(/\/$/, '');
     return { success: true, verified: true, redirectUrl: `${frontendUrl}/login?verified=true` };
+  }
+
+  async listMfaFactors(user: any) {
+    if (!user?.auth_uid) return { success: true, data: { factors: [] } };
+    try {
+      const rows = await this.prisma.$queryRaw(Prisma.sql`
+        SELECT id, friendly_name, factor_type, status
+        FROM auth.mfa_factors
+        WHERE user_id = ${user.auth_uid}::uuid
+      `);
+      return { success: true, data: { factors: Array.isArray(rows) ? rows : [] } };
+    } catch (err: any) {
+      throw new InternalServerErrorException(err?.message || 'Failed to load MFA factors');
+    }
   }
 }

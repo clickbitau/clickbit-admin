@@ -39,6 +39,10 @@ export class AuthController {
   @UseGuards(SupabaseAuthGuard)
   async me(@Req() req: RequestWithUser) { return this.authService.me(req.user); }
 
+  @Get('mfa/factors')
+  @UseGuards(SupabaseAuthGuard)
+  async mfaFactors(@Req() req: RequestWithUser) { return this.authService.listMfaFactors(req.user); }
+
   @Post('refresh')
   async refresh(@Body() body: RefreshDto) { return this.authService.refresh(body || {}); }
 

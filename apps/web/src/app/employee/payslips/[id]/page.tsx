@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
-import { fetchEmployeePayslip } from '@/lib/api';
+import { fetchEmployeePayslip, fetchPayslipPdf } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { Receipt, ArrowLeft, Download } from 'lucide-react';
 
@@ -28,6 +29,25 @@ export default function EmployeePayslipDetailPage() {
   });
 
   const payslip = data?.data;
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (!token || !id) return;
+    setDownloading(true);
+    try {
+      const blob = await fetchPayslipPdf(token, id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payslip-${payslip?.pay_period_start ? formatDate(payslip.pay_period_start) : id}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Failed to download payslip PDF');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -54,11 +74,9 @@ export default function EmployeePayslipDetailPage() {
           <Button variant="outline" size="sm" asChild>
             <Link href="/employee/payslips"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>
-          {payslip.pdf_url && (
-            <Button size="sm" asChild>
-              <a href={payslip.pdf_url} target="_blank" rel="noreferrer"><Download className="mr-1 h-4 w-4" /> PDF</a>
-            </Button>
-          )}
+          <Button size="sm" onClick={handleDownload} disabled={downloading}>
+            <Download className="mr-1 h-4 w-4" /> {downloading ? 'Downloading…' : 'Download PDF'}
+          </Button>
         </div>
       }
     >

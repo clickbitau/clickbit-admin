@@ -9,9 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
-import { fetchEmployeeContract } from '@/lib/api';
+import { fetchEmployeeContract, fetchContractPdfUrl } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { FileText, ArrowLeft } from 'lucide-react';
+import { FileText, ArrowLeft, Download } from 'lucide-react';
+import { useState } from 'react';
 
 export default function EmployeeContractDetailPage() {
   const { token } = useAuth();
@@ -28,6 +29,25 @@ export default function EmployeeContractDetailPage() {
   });
 
   const contract = data?.data;
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (!token || !id) return;
+    setDownloading(true);
+    try {
+      const blob = await fetchContractPdfUrl(token, id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `contract-${contract?.contract_number || id}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Failed to download contract PDF');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -50,9 +70,14 @@ export default function EmployeeContractDetailPage() {
       title={`Contract ${contract.contract_number ? `#${contract.contract_number}` : `#${contract.id}`}`}
       icon={FileText}
       actions={
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/employee/contracts"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/employee/contracts"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
+          </Button>
+          <Button size="sm" onClick={handleDownload} disabled={downloading}>
+            <Download className="mr-1 h-4 w-4" /> {downloading ? 'Downloading…' : 'Download PDF'}
+          </Button>
+        </div>
       }
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from '@/components/admin/ThemeToggle';
+import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
   ListTodo,
@@ -19,6 +20,7 @@ import {
   User,
   Briefcase,
   Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface NavItem {
@@ -97,6 +99,16 @@ export function EmployeeLayout({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+        {user && (user.role === 'admin' || user.role === 'manager') && (
+          <Link
+            href="/admin/dashboard"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:nm-raised-sm hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {!collapsed && <span className="truncate">Back to Admin</span>}
+          </Link>
+        )}
       </nav>
 
       <div className="pt-3 border-t border-border/50 px-2">
@@ -147,6 +159,11 @@ export function EmployeeLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {user && (user.role === 'admin' || user.role === 'manager') && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/admin/dashboard"><ArrowLeft className="mr-1 h-4 w-4" /> Admin</Link>
+              </Button>
+            )}
             <ThemeToggle />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:nm-raised-sm transition-all">
               {user?.avatar ? (

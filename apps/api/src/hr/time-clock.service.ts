@@ -62,6 +62,8 @@ export interface TimeClockStatus {
     breakStartTime?: Date | null;
     totalBreakMinutes: number;
     currentDuration: number;
+    clockInLatitude?: number | null;
+    clockInLongitude?: number | null;
   } | null;
   todayHours: number;
   weeklyHours: number;
@@ -141,6 +143,8 @@ export class TimeClockService {
             breakStartTime: active.break_start_time,
             totalBreakMinutes: active.break_minutes ?? 0,
             currentDuration: durationMinutes(active),
+            clockInLatitude: active.clock_in_latitude ? Number(active.clock_in_latitude) : null,
+            clockInLongitude: active.clock_in_longitude ? Number(active.clock_in_longitude) : null,
           }
         : null,
       todayHours: await this.todayHours(employee.id),
