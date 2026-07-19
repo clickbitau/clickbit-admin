@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { fetchEmployeeDashboard, fetchPublicHolidays } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatLeaveHours } from '@/lib/format';
 import { Calendar, Clock, ListTodo, Receipt, FileText, Sun, AlertCircle, Briefcase, Palmtree, Headset } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
@@ -60,7 +60,7 @@ export default function EmployeeDashboardPage() {
       },
       {
         label: 'Annual Leave',
-        value: `${data?.stats?.annualLeave ?? 0} days`,
+        value: formatLeaveHours(data?.stats?.annualLeave),
         icon: Sun,
         accent: 'success' as const,
         to: '/employee/time-off',
@@ -187,9 +187,9 @@ export default function EmployeeDashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Annual</span> <span>{data?.stats?.annualLeave ?? 0} days</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Sick</span> <span>{data?.stats?.sickLeave ?? 0} days</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Personal</span> <span>{data?.stats?.personalLeave ?? 0} days</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Annual</span> <span>{formatLeaveHours(data?.stats?.annualLeave)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Sick</span> <span>{formatLeaveHours(data?.stats?.sickLeave)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Personal</span> <span>{formatLeaveHours(data?.stats?.personalLeave)}</span></div>
             </CardContent>
           </Card>
 

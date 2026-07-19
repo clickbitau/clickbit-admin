@@ -65,3 +65,10 @@ export function formatDuration(totalSeconds?: number | null): string {
   if (hours > 0) return `${hours}h`;
   return `${minutes}m`;
 }
+
+export function formatLeaveHours(value: number | string | null | undefined): string {
+  if (value === undefined || value === null || value === '') return '0.0 hrs';
+  const num = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : NaN;
+  if (Number.isNaN(num)) return '0.0 hrs';
+  return `${num.toFixed(1)} hrs`;
+}

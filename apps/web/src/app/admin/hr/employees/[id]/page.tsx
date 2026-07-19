@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { fetchEmployee, updateEmployee, deleteEmployee } from '@/lib/api';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime, formatLeaveHours } from '@/lib/format';
 import type { Employee } from '@/types/hr';
 import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase, FileClock, ClipboardList, GraduationCap, Plus, HandCoins, Target } from 'lucide-react';
 
@@ -79,7 +79,7 @@ export default function AdminEmployeeDetailPage() {
         { label: 'Employment status', value: employee.employment_status || 'active', icon: Users, accent: employee.employment_status === 'active' ? 'success' as const : 'warning' as const },
         { label: 'Hourly rate', value: formatCurrency(employee.hourly_rate ?? undefined), icon: Banknote },
         { label: 'Salary', value: formatCurrency(employee.salary ?? undefined), icon: Banknote },
-        { label: 'Annual leave', value: `${employee.annual_leave_balance ?? 0} days`, icon: Calendar },
+        { label: 'Annual leave', value: formatLeaveHours(employee.annual_leave_balance), icon: Calendar },
       ]
     : [];
 
@@ -169,9 +169,9 @@ export default function AdminEmployeeDetailPage() {
                       <p><span className="text-muted-foreground">Hourly rate:</span> {formatCurrency(employee.hourly_rate ?? undefined)}</p>
                       <p><span className="text-muted-foreground">Salary:</span> {formatCurrency(employee.salary ?? undefined)}</p>
                       <p><span className="text-muted-foreground">Pay frequency:</span> {employee.pay_frequency || '—'}</p>
-                      <p><span className="text-muted-foreground">Annual leave:</span> {employee.annual_leave_balance ?? '—'}</p>
-                      <p><span className="text-muted-foreground">Sick leave:</span> {employee.sick_leave_balance ?? '—'}</p>
-                      <p><span className="text-muted-foreground">Personal leave:</span> {employee.personal_leave_balance ?? '—'}</p>
+                      <p><span className="text-muted-foreground">Annual leave:</span> {formatLeaveHours(employee.annual_leave_balance)}</p>
+                      <p><span className="text-muted-foreground">Sick leave:</span> {formatLeaveHours(employee.sick_leave_balance)}</p>
+                      <p><span className="text-muted-foreground">Personal leave:</span> {formatLeaveHours(employee.personal_leave_balance)}</p>
                       <p><span className="text-muted-foreground">Emergency contact:</span> {employee.emergency_contact_name ? `${employee.emergency_contact_name} · ${employee.emergency_contact_phone || ''} · ${employee.emergency_contact_relationship || ''}` : '—'}</p>
                       {employee.notes && <p className="md:col-span-2"><span className="text-muted-foreground">Notes:</span> {employee.notes}</p>}
                     </div>
