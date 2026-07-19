@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -28,6 +28,8 @@ import {
   updateInvoice,
   sendInvoice,
   recordInvoicePayment,
+  markInvoicePaid,
+  voidInvoice,
   deleteInvoice,
   downloadInvoicePdf,
 } from '@/lib/api';
@@ -46,6 +48,9 @@ import {
   Folder,
   FileText,
   CreditCard,
+  Link2,
+  XCircle,
+  Check,
 } from 'lucide-react';
 
 const statuses = ['draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'cancelled'];
@@ -101,13 +106,24 @@ export default function AdminInvoiceDetailPage() {
   });
 
   const paidMutation = useMutation({
-    mutationFn: () => fetch(`/api/invoices/${id}/mark-paid`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } } as any).then((r) => r.json()),
+    mutationFn: () => markInvoicePaid(token!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', token, id] });
       toast.success('Marked as paid');
     },
     onError: () => toast.error('Failed to mark as paid'),
   });
+
+  const voidMutation = useMutation({
+    mutationFn: () => voidInvoice(token!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoice', token, id] });
+      toast.success('Invoice voided');
+    },
+    onError: () => toast.error('Failed to void invoice'),
+  });
+
+  const [copied, setCopied] = useState(false);
 
   const recordMutation = useMutation({
     mutationFn: (amount: number) => recordInvoicePayment(token!, id, { amount, method: 'manual' }),
@@ -222,6 +238,13 @@ export default function AdminInvoiceDetailPage() {
           )}
           <Button variant="outline" size="sm" onClick={() => pdfMutation.mutate()} disabled={pdfMutation.isPending}><Download className="mr-1 h-4 w-4" /> PDF</Button>
           <Button variant="outline" size="sm" onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending}><Mail className="mr-1 h-4 w-4" /> Send</Button>
+          <Button variant="outline" size="sm" onClick={() => {
+            const url = `${window.location.origin}/pay/${invoice?.invoice_number || invoice?.package_code || id}`;
+            navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success('Payment link copied'); }).catch(() => toast.error('Failed to copy link'));
+          }}>{copied ? <Check className="mr-1 h-4 w-4" /> : <Link2 className="mr-1 h-4 w-4" />} {copied ? 'Copied' : 'Copy Link'}</Button>
+          {invoice && invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
+            <Button variant="outline" size="sm" onClick={() => { if (window.confirm('Void this invoice?')) voidMutation.mutate(); }} disabled={voidMutation.isPending}><XCircle className="mr-1 h-4 w-4" /> Void</Button>
+          )}
         </div>
       }
     >
@@ -239,14 +262,14 @@ export default function AdminInvoiceDetailPage() {
           />
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
-            <Card>
+            <Card className="nm-raised">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div>
                     <CardTitle className="text-2xl">{invoice.title || 'Untitled'}</CardTitle>
                     <p className="text-sm text-muted-foreground">{invoice.client_name} · {invoice.client_email}</p>
                   </div>
-                  <Badge variant={invoice.status === 'paid' ? 'default' : invoice.status === 'overdue' ? 'destructive' : 'secondary'}>{invoice.status}</Badge>
+                  <StatusBadge status={invoice.status} />
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -352,7 +375,7 @@ export default function AdminInvoiceDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="nm-raised">
               <CardHeader><CardTitle>Payment history</CardTitle></CardHeader>
               <CardContent>
                 {(invoice.payments || []).length === 0 ? (
@@ -374,7 +397,7 @@ export default function AdminInvoiceDetailPage() {
           </div>
 
           <div className="space-y-6">
-            <Card>
+            <Card className="nm-raised">
               <CardHeader><CardTitle>Totals</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(totals.subtotal)}</span></div>
@@ -386,7 +409,7 @@ export default function AdminInvoiceDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="nm-raised">
               <CardHeader><CardTitle>Related</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
                 {invoice.company ? (
@@ -418,7 +441,7 @@ export default function AdminInvoiceDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="nm-raised">
               <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <Button className="w-full" onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending || invoice.status === 'paid'}><Mail className="mr-2 h-4 w-4" /> Send invoice</Button>

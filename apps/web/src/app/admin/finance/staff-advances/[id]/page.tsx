@@ -171,7 +171,7 @@ export default function StaffAdvanceDetailPage() {
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="nm-raised lg:col-span-2">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <HandCoins className="h-5 w-5" /> Advance Details
@@ -205,7 +205,7 @@ export default function StaffAdvanceDetailPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {advance.status === 'pending' && (
@@ -226,7 +226,7 @@ export default function StaffAdvanceDetailPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <CardTitle>Deductions</CardTitle>
           <Button size="sm" onClick={() => setShowDeduction(true)} disabled={advance.status === 'cleared' || advance.status === 'rejected'}><Plus className="mr-1 h-4 w-4" /> Add Deduction</Button>

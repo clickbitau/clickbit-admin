@@ -109,7 +109,7 @@ export function InvoiceTable({
   };
 
   return (
-    <div className="rounded-lg border">
+    <div className="nm-raised overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
