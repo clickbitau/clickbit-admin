@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -761,15 +762,20 @@ export class PortalsService {
     const employee = await this.resolveEmployee(user);
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
+    const year = query.year ? Number(query.year) : undefined;
+    const where: Prisma.payslipsWhereInput = { employee_id: employee.id };
+    if (year) {
+      where.payment_date = { gte: new Date(`${year}-01-01`), lt: new Date(`${year + 1}-01-01`) };
+    }
     const [rows, total] = await Promise.all([
       this.prisma.payslips.findMany({
-        where: { employee_id: employee.id },
+        where,
         orderBy: { payment_date: 'desc' },
         take: limit,
         skip: (page - 1) * limit,
         include: { employees: { select: { employee_number: true } } },
       }),
-      this.prisma.payslips.count({ where: { employee_id: employee.id } }),
+      this.prisma.payslips.count({ where }),
     ]);
     return {
       success: true,

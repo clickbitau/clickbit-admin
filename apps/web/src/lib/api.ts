@@ -2518,7 +2518,7 @@ export async function fetchEmployeeContract(token: string, id: string | number):
 
 export async function fetchEmployeePayslips(
   token: string,
-  params?: { page?: number; limit?: number },
+  params?: { page?: number; limit?: number; year?: number },
 ): Promise<{ success: boolean; data: Payslip[]; pagination: any }> {
   return (await api.get('/api/employee/payslips', { params, headers: authHeaders(token) })).data;
 }
