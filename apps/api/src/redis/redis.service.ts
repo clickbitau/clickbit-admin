@@ -62,6 +62,18 @@ class InMemoryRedis {
     return 1;
   }
 
+  keys(pattern: string) {
+    const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+    this.cleanupAll();
+    return Array.from(this.store.keys()).filter((k) => regex.test(k));
+  }
+
+  private cleanupAll() {
+    for (const key of this.expiry.keys()) {
+      this.cleanup(key);
+    }
+  }
+
   quit() {
     this.store.clear();
     this.expiry.clear();
@@ -115,6 +127,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   get isAvailable() {
     return this.client instanceof Redis;
+  }
+
+  async get(key: string): Promise<string | null> {
+    return (this.client as any).get(key);
+  }
+
+  async set(key: string, value: string, ttlSeconds?: number): Promise<any> {
+    if (ttlSeconds && ttlSeconds > 0) {
+      return (this.client as any).set(key, value, 'EX', ttlSeconds);
+    }
+    return (this.client as any).set(key, value);
+  }
+
+  async del(...keys: string[]): Promise<number> {
+    if (keys.length === 0) return 0;
+    return (this.client as any).del(...keys);
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    return (this.client as any).keys(pattern);
   }
 
   async onModuleDestroy() {
