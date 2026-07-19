@@ -218,6 +218,46 @@ export class NotificationsService {
     return { success: true, message: 'Notification deleted', unreadCount };
   }
 
+  async createNotification(
+    user: UserLike,
+    data: { title: string; message: string; type?: string; source?: string; user_id?: number | null; role?: string; broadcast?: boolean; metadata?: string },
+  ) {
+    this.ensureAdminOrManager(user);
+    if (!data.title || !data.message) {
+      throw new BadRequestException('Title and message are required');
+    }
+
+    const base = {
+      title: data.title,
+      message: data.message,
+      type: (data.type || 'info').toLowerCase(),
+      source: data.source || 'system',
+      metadata: data.metadata || null,
+    };
+
+    if (data.broadcast) {
+      const users = await this.prisma.profiles.findMany({ where: { deleted_at: null }, select: { id: true } });
+      await this.prisma.notifications.createMany({
+        data: users.map((u) => ({ ...base, user_id: u.id })),
+      });
+      return { success: true, message: `Notification sent to ${users.length} user(s)` };
+    }
+
+    if (data.role) {
+      const users = await this.prisma.profiles.findMany({ where: { role: data.role, deleted_at: null }, select: { id: true } });
+      await this.prisma.notifications.createMany({
+        data: users.map((u) => ({ ...base, user_id: u.id })),
+      });
+      return { success: true, message: `Notification sent to ${users.length} user(s) with role ${data.role}` };
+    }
+
+    const targetUserId = data.user_id ?? user.id;
+    await this.prisma.notifications.create({
+      data: { ...base, user_id: targetUserId },
+    });
+    return { success: true, message: 'Notification created' };
+  }
+
   async savePushToken(user: UserLike, token: string) {
     if (!token) throw new BadRequestException('Push token required');
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });

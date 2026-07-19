@@ -138,6 +138,18 @@ export class NotificationsController {
     return this.notificationsService.remove(req.user, id);
   }
 
+  @Post()
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin', 'manager')
+  async create(
+    @Body() body: { title: string; message: string; type?: string; source?: string; user_id?: number; role?: string; broadcast?: boolean; metadata?: string },
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.notificationsService.createNotification(req.user, body);
+  }
+
   @Post('push-token')
   @UseGuards(SupabaseAuthGuard)
   async savePushToken(
