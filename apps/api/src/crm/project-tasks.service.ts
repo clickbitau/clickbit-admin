@@ -31,7 +31,7 @@ export class ProjectTasksService {
     private readonly storage?: StorageService,
   ) {}
 
-  get taskInclude(): any {
+  private get baseTaskInclude(): any {
     return {
       project_phases: { select: { id: true, name: true, position: true, status: true } },
       crm_projects: { select: { id: true, project_number: true, name: true } },
@@ -44,11 +44,24 @@ export class ProjectTasksService {
         select: { id: true, email: true, first_name: true, last_name: true, avatar: true, role: true },
       },
       task_microtasks: { orderBy: { position: 'asc' } },
-      task_comments: { include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } }, orderBy: { created_at: 'desc' } },
       recurring_task_configs: { select: { id: true, title: true, frequency: true } },
       deals: { select: { id: true, deal_number: true, title: true } },
       project_tasks: { select: { id: true, title: true, status: true } },
       other_project_tasks: { select: { id: true, title: true, status: true } },
+    };
+  }
+
+  get taskInclude(): any {
+    return {
+      ...this.baseTaskInclude,
+      _count: { select: { task_comments: true } },
+    };
+  }
+
+  get taskListInclude(): any {
+    return {
+      ...this.baseTaskInclude,
+      _count: { select: { task_comments: true } },
     };
   }
 
@@ -98,6 +111,8 @@ export class ProjectTasksService {
       parentTask,
       subTasks,
       microtasks: t.task_microtasks || [],
+      comments: t.task_comments || [],
+      commentCount: t._count?.task_comments ?? t.task_comments?.length ?? 0,
     };
   }
 
@@ -209,7 +224,7 @@ export class ProjectTasksService {
     const [tasks, total] = await Promise.all([
       this.prisma.project_tasks.findMany({
         where,
-        include: this.taskInclude,
+        include: this.taskListInclude,
         orderBy: { created_at: 'desc' },
         take: limit,
         skip: (page - 1) * limit,
@@ -242,7 +257,7 @@ export class ProjectTasksService {
     }
     const tasks = await this.prisma.project_tasks.findMany({
       where,
-      include: this.taskInclude,
+      include: this.taskListInclude,
       orderBy: [{ priority: 'desc' }, { due_date: 'asc' }],
     });
     return { success: true, tasks: tasks.map((t) => this.mapTask(t)) };
@@ -258,7 +273,7 @@ export class ProjectTasksService {
     };
     const tasks = await this.prisma.project_tasks.findMany({
       where,
-      include: this.taskInclude,
+      include: this.taskListInclude,
       orderBy: { due_date: 'asc' },
     });
     return { success: true, data: tasks.map((t) => this.mapTask(t)) };
@@ -273,7 +288,7 @@ export class ProjectTasksService {
     }
     const tasks = await this.prisma.project_tasks.findMany({
       where,
-      include: this.taskInclude,
+      include: this.taskListInclude,
       orderBy: { created_at: 'desc' },
     });
     return { success: true, data: tasks.map((t) => this.mapTask(t)) };
@@ -310,7 +325,7 @@ export class ProjectTasksService {
     const [tasks, total] = await Promise.all([
       this.prisma.project_tasks.findMany({
         where,
-        include: this.taskInclude,
+        include: this.taskListInclude,
         orderBy: { created_at: 'desc' },
         take: limit,
         skip: (page - 1) * limit,

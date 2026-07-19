@@ -3768,6 +3768,7 @@ model task_comments {
   @@index([author_id], map: "idx_task_comments_author_id")
   @@index([is_internal], map: "idx_task_comments_is_internal")
   @@index([task_id], map: "idx_task_comments_task_id")
+  @@index([task_id, created_at(sort: Desc)], map: "idx_task_comments_task_id_created_at")
   @@schema("public")
 }
 

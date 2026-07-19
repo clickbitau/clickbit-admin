@@ -272,10 +272,10 @@ export default function ProjectTasksPage() {
             {tags.length > 3 && ` +${tags.length - 3}`}
           </span>
         )}
-        {(task.task_comments?.length ?? 0) > 0 && (
+        {(task.comment_count ?? 0) > 0 && (
           <span className="flex items-center gap-1">
             <MessageSquare className="h-3 w-3" />
-            {task.task_comments?.length}
+            {task.comment_count}
           </span>
         )}
         {(task.attachments?.length ?? 0) > 0 && (

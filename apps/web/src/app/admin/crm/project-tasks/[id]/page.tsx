@@ -215,7 +215,7 @@ export default function ProjectTaskDetailPage() {
         <TabsList className="mb-4 flex-wrap h-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="microtasks">Microtasks ({task.microtasks?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="comments">Comments ({task.task_comments?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="comments">Comments ({task.comment_count ?? 0})</TabsTrigger>
           <TabsTrigger value="worklog">Work Log</TabsTrigger>
           <TabsTrigger value="attachments">Attachments ({task.attachments?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="subtasks">Subtasks ({task.subTasks?.length ?? 0})</TabsTrigger>
@@ -534,6 +534,7 @@ function MicrotasksTab({ taskId, token }: { taskId: number; token: string }) {
 
 function CommentsTab({ taskId, token, isManager, currentUserId }: { taskId: number; token: string; isManager: boolean; currentUserId?: number | null }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
 
@@ -545,22 +546,69 @@ function CommentsTab({ taskId, token, isManager, currentUserId }: { taskId: numb
 
   const createMutation = useMutation({
     mutationFn: () => createTaskComment(token, taskId, content, isInternal),
-    onSuccess: () => {
+    onMutate: async () => {
+      const previous = queryClient.getQueryData<{ comments: TaskComment[] }>(['task-comments', token, taskId]);
+      const tempId = -Date.now();
+      const optimistic: TaskComment = {
+        id: tempId,
+        task_id: taskId,
+        author_id: user?.id ?? null,
+        content,
+        is_internal: isInternal,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        profiles: user
+          ? { id: user.id, first_name: user.first_name, last_name: user.last_name, email: user.email, avatar: user.avatar ?? null }
+          : null,
+      };
+      queryClient.setQueryData(['task-comments', token, taskId], { ...previous, comments: [optimistic, ...(previous?.comments ?? [])] });
+      queryClient.setQueryData<ProjectTask>(['task', token, taskId], (old) =>
+        old ? { ...old, comment_count: (old.comment_count ?? 0) + 1 } : old,
+      );
       setContent('');
       setIsInternal(false);
-      queryClient.invalidateQueries({ queryKey: ['task-comments', token, taskId] });
-      queryClient.invalidateQueries({ queryKey: ['task', token, taskId] });
+      return { previous, tempId };
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed'),
+    onError: (err: Error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['task-comments', token, taskId], context.previous);
+      }
+      toast.error(err.message || 'Failed');
+    },
+    onSuccess: (data: { comment: TaskComment }, _variables, context) => {
+      const current = queryClient.getQueryData<{ comments: TaskComment[] }>(['task-comments', token, taskId]);
+      if (current) {
+        const comments = current.comments.filter((c) => c.id !== context?.tempId);
+        queryClient.setQueryData(['task-comments', token, taskId], { ...current, comments: [data.comment, ...comments] });
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', token, taskId] });
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (commentId: number) => deleteTaskComment(token, taskId, commentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['task-comments', token, taskId] });
-      queryClient.invalidateQueries({ queryKey: ['task', token, taskId] });
+    onMutate: async (commentId) => {
+      const previous = queryClient.getQueryData<{ comments: TaskComment[] }>(['task-comments', token, taskId]);
+      queryClient.setQueryData(['task-comments', token, taskId], {
+        ...previous,
+        comments: previous?.comments.filter((c) => c.id !== commentId) ?? [],
+      });
+      queryClient.setQueryData<ProjectTask>(['task', token, taskId], (old) =>
+        old ? { ...old, comment_count: Math.max(0, (old.comment_count ?? 0) - 1) } : old,
+      );
+      return { previous };
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed'),
+    onError: (err: Error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['task-comments', token, taskId], context.previous);
+      }
+      toast.error(err.message || 'Failed');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', token, taskId] });
+    },
   });
 
   const comments = data?.comments ?? [];
@@ -578,8 +626,8 @@ function CommentsTab({ taskId, token, isManager, currentUserId }: { taskId: numb
               <input type="checkbox" checked={isInternal} onChange={(e) => setIsInternal(e.target.checked)} className="h-4 w-4" />
               Internal only
             </label>
-            <Button onClick={() => createMutation.mutate()} disabled={!content.trim()}>
-              <Send className="mr-1 h-4 w-4" /> Post
+            <Button onClick={() => createMutation.mutate()} disabled={!content.trim() || createMutation.isPending}>
+              <Send className="mr-1 h-4 w-4" /> {createMutation.isPending ? 'Posting...' : 'Post'}
             </Button>
           </div>
         </div>
