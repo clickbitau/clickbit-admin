@@ -1374,6 +1374,10 @@ export async function deleteNotification(token: string, id: number): Promise<{ s
   return (await api.delete(`/api/notifications/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function createNotification(token: string, data: { title: string; message: string; type?: string; source?: string; user_id?: number | null; role?: string; broadcast?: boolean; metadata?: string }): Promise<{ success: boolean; message: string }> {
+  return (await api.post('/api/notifications', data, { headers: authHeaders(token) })).data;
+}
+
 // ─── Communication ─────────────────────────────────────────────────────────
 
 export async function fetchChatParticipants(token: string): Promise<{ success: boolean; data: { id: number; first_name: string; last_name: string; email: string; avatar?: string | null; role?: string }[] }> {

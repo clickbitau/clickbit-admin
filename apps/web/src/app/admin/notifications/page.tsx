@@ -14,14 +14,20 @@ import {
   AlertTriangle,
   MailOpen,
   CheckCircle,
+  Plus,
+  Megaphone,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/design-system/ConfirmDialog';
-import { fetchNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification } from '@/lib/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { fetchNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification, createNotification } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { toast } from 'sonner';
 import type { Notification } from '@/types/notifications';
@@ -64,13 +70,23 @@ function parseMetadata(metadata: Notification['metadata']): Record<string, unkno
 }
 
 export default function NotificationsPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [deleting, setDeleting] = useState<Notification | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newNote, setNewNote] = useState({
+    title: '',
+    message: '',
+    type: 'info',
+    source: 'system',
+    target: 'self',
+    role: 'employee',
+  });
+  const canCreate = user?.role === 'admin' || user?.role === 'manager';
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['notifications', token, filter],
@@ -106,6 +122,27 @@ export default function NotificationsPage() {
     onError: () => toast.error('Failed to delete notification'),
   });
 
+  const createMut = useMutation({
+    mutationFn: () => {
+      const base = {
+        title: newNote.title,
+        message: newNote.message,
+        type: newNote.type,
+        source: newNote.source,
+      };
+      if (newNote.target === 'broadcast') return createNotification(token!, { ...base, broadcast: true });
+      if (newNote.target === 'role') return createNotification(token!, { ...base, role: newNote.role });
+      return createNotification(token!, base);
+    },
+    onSuccess: (res) => {
+      toast.success(res.message || 'Notification created');
+      setCreateOpen(false);
+      setNewNote({ title: '', message: '', type: 'info', source: 'system', target: 'self', role: 'employee' });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to create notification'),
+  });
+
   const notifications = useMemo(() => data?.data ?? [], [data?.data]);
   const unreadCount = data?.unreadCount ?? 0;
 
@@ -133,6 +170,11 @@ export default function NotificationsPage() {
       icon={Bell}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          {canCreate && (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> New
+            </Button>
+          )}
           {unreadCount > 0 && (
             <Button variant="outline" size="sm" onClick={() => markAll.mutate()} disabled={markAll.isPending}>
               <CheckCheck className="mr-1 h-4 w-4" /> Mark all read
@@ -146,17 +188,17 @@ export default function NotificationsPage() {
     >
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          <div className="flex rounded-lg border bg-muted p-0.5">
+          <div className="flex rounded-lg border bg-muted p-0.5 nm-raised-sm">
             <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
             <Button variant={filter === 'unread' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('unread')}>Unread</Button>
           </div>
           {availableSources.length > 1 && (
-            <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
+            <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm nm-raised-sm">
               <option value="all">All sources</option>
               {availableSources.map((s) => <option key={s} value={s}>{SOURCE_LABELS[s ?? ''] ?? s}</option>)}
             </select>
           )}
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm nm-raised-sm">
             <option value="all">All types</option>
             {['info', 'warning', 'error', 'success'].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -164,11 +206,22 @@ export default function NotificationsPage() {
       </div>
 
       {isLoading ? (
-        <Card><CardContent className="p-6 text-sm text-muted-foreground">Loading...</CardContent></Card>
+        <Card className="nm-raised"><CardContent className="p-6 text-sm text-muted-foreground">Loading...</CardContent></Card>
       ) : filtered.length === 0 ? (
-        <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-2">
-            <MailOpen className="h-4 w-4" /> No notifications.
+        <Card className="nm-raised">
+          <CardContent className="p-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+              <MailOpen className="h-8 w-8 text-muted-foreground/60" />
+            </div>
+            <h3 className="text-base font-medium">No notifications</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+              You do not have any notifications yet. System events like ticket assignments, reminders, and timesheet approvals will appear here.
+            </p>
+            {canCreate && (
+              <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
+                <Megaphone className="mr-1 h-4 w-4" /> Send a notification
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -186,6 +239,58 @@ export default function NotificationsPage() {
         loading={deleteMut.isPending}
         confirmLabel="Delete"
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send notification</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input value={newNote.title} onChange={(e) => setNewNote({ ...newNote, title: e.target.value })} placeholder="e.g. System maintenance" />
+            </div>
+            <div className="space-y-2">
+              <Label>Message</Label>
+              <Textarea value={newNote.message} onChange={(e) => setNewNote({ ...newNote, message: e.target.value })} rows={3} placeholder="Notification body" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <select value={newNote.type} onChange={(e) => setNewNote({ ...newNote, type: e.target.value })} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                  {['info', 'warning', 'error', 'success'].map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Source</Label>
+                <Input value={newNote.source} onChange={(e) => setNewNote({ ...newNote, source: e.target.value })} placeholder="system" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Send to</Label>
+              <select value={newNote.target} onChange={(e) => setNewNote({ ...newNote, target: e.target.value })} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                <option value="self">Yourself (test)</option>
+                <option value="role">A role</option>
+                <option value="broadcast">All users</option>
+              </select>
+            </div>
+            {newNote.target === 'role' && (
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <select value={newNote.role} onChange={(e) => setNewNote({ ...newNote, role: e.target.value })} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                  {['admin', 'manager', 'employee', 'customer', 'agent'].map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button onClick={() => createMut.mutate()} disabled={!newNote.title.trim() || !newNote.message.trim() || createMut.isPending}>
+              {createMut.isPending ? 'Sending...' : 'Send notification'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }
@@ -205,7 +310,7 @@ function NotificationCard({
   const Icon = config.icon;
 
   return (
-    <Card className={`transition-opacity hover:bg-muted/30 ${notification.is_read ? 'opacity-70' : ''}`}>
+    <Card className={`nm-raised transition-opacity hover:bg-muted/30 ${notification.is_read ? 'opacity-70' : ''}`}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${config.bg}`}>
