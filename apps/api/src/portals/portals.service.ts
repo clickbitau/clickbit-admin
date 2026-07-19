@@ -798,15 +798,21 @@ export class PortalsService {
     const employee = await this.resolveEmployee(user);
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
+    const year = query.year ? Number(query.year) : undefined;
+    const where: Prisma.hr_time_off_requestsWhereInput = { employee_id: employee.id };
+    if (query.status) where.status = query.status as any;
+    if (year) {
+      where.start_date = { gte: new Date(`${year}-01-01`), lt: new Date(`${year + 1}-01-01`) };
+    }
     const [rows, total] = await Promise.all([
       this.prisma.hr_time_off_requests.findMany({
-        where: { employee_id: employee.id },
+        where,
         orderBy: { created_at: 'desc' },
         take: limit,
         skip: (page - 1) * limit,
         include: { profiles: { select: { first_name: true, last_name: true, email: true } } },
       }),
-      this.prisma.hr_time_off_requests.count({ where: { employee_id: employee.id } }),
+      this.prisma.hr_time_off_requests.count({ where }),
     ]);
     return {
       success: true,
