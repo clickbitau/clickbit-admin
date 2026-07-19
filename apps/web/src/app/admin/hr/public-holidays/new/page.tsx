@@ -46,7 +46,7 @@ export default function AdminNewPublicHolidayPage() {
         </Button>
       }
     >
-      <Card>
+      <Card className="nm-raised">
         <CardHeader><CardTitle>Public Holiday</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2"><Label>Name</Label><Input value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>

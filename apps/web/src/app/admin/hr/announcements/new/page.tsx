@@ -63,7 +63,7 @@ export default function AdminNewAnnouncementPage() {
         </Button>
       }
     >
-      <Card>
+      <Card className="nm-raised">
         <CardHeader><CardTitle>Announcement</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div><Label>Title</Label><Input value={form.title || ''} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>

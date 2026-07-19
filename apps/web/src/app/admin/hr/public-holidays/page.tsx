@@ -49,7 +49,7 @@ export default function AdminHrPublicHolidaysPage() {
         className="sm:max-w-sm"
       />
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Public Holidays</CardTitle>
         </CardHeader>

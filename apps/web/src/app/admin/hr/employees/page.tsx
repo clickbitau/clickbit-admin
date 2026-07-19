@@ -129,7 +129,7 @@ export default function AdminHrEmployeesPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Employees</CardTitle>
         </CardHeader>

@@ -113,7 +113,7 @@ export default function AdminContractDetailPage() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader>
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
@@ -168,7 +168,7 @@ export default function AdminContractDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Employee</CardTitle></CardHeader>
                 <CardContent className="text-sm space-y-2">
                   <p className="font-medium">{contract.employee?.name || `Employee ${contract.employee_id}`}</p>
@@ -176,7 +176,7 @@ export default function AdminContractDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Manager</CardTitle></CardHeader>
                 <CardContent className="text-sm space-y-2">
                   <p className="font-medium">{contract.manager?.name || `Manager ${contract.manager_id || '—'}`}</p>
@@ -184,7 +184,7 @@ export default function AdminContractDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Work location</CardTitle></CardHeader>
                 <CardContent className="text-sm space-y-1">
                   <p><span className="text-muted-foreground">Address:</span> {contract.work_address || '—'}</p>
@@ -196,7 +196,7 @@ export default function AdminContractDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="nm-raised">
                 <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
                   {contract.status !== 'active' && <Button className="w-full" onClick={() => activate.mutate()} disabled={activate.isPending}><Power className="mr-1 h-4 w-4" /> Activate</Button>}

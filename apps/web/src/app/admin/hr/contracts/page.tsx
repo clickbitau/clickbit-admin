@@ -76,7 +76,7 @@ export default function AdminHrContractsPage() {
     <PageShell title="Contracts" icon={FileText} description="Manage employee contracts, activations, and terminations." actions={<Button asChild><Link href="/admin/hr/contracts/new"><Plus className="mr-1 h-4 w-4" /> New Contract</Link></Button>}>
       <StatCards cards={statCards} />
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Contracts</CardTitle>
         </CardHeader>

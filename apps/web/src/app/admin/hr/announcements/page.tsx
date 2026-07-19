@@ -49,7 +49,7 @@ export default function AdminHrAnnouncementsPage() {
         className="sm:max-w-sm"
       />
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Announcements</CardTitle>
         </CardHeader>

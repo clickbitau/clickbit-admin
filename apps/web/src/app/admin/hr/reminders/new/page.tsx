@@ -51,7 +51,7 @@ export default function AdminNewReminderPage() {
         </Button>
       }
     >
-      <Card>
+      <Card className="nm-raised">
         <CardHeader><CardTitle>Reminder</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2"><Label>Title</Label><Input value={form.title || ''} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>

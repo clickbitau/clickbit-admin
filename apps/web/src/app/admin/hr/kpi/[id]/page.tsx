@@ -98,7 +98,7 @@ export default function AdminKpiEmployeeDetailPage() {
         <>
           <StatCards cards={statCards} />
 
-          <Card>
+          <Card className="nm-raised">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> {employeeName}</CardTitle>
             </CardHeader>
@@ -139,7 +139,7 @@ export default function AdminKpiEmployeeDetailPage() {
           </Card>
 
           {latest?.metadata && (
-            <Card>
+            <Card className="nm-raised">
               <CardHeader><CardTitle>Latest Metadata — {latest.period}</CardTitle></CardHeader>
               <CardContent>
                 <pre className="text-xs text-muted-foreground overflow-x-auto">{JSON.stringify(latest.metadata, null, 2)}</pre>

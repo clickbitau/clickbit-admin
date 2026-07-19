@@ -90,7 +90,7 @@ export default function AdminNewContractPage() {
         </Button>
       }
     >
-      <Card>
+      <Card className="nm-raised">
         <CardHeader><CardTitle>Contract Details</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2"><Label>Employee</Label>

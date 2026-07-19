@@ -69,7 +69,7 @@ export default function AdminNewEmployeePage() {
         </Button>
       }
     >
-      <Card>
+      <Card className="nm-raised">
         <CardHeader><CardTitle>Employee Details</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2"><Label>Link user</Label>

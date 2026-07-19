@@ -318,7 +318,7 @@ export default function AdminHrTimeClockPage() {
     <PageShell title="Time Clock" icon={Clock} description="Clock in and out, track breaks, and manage the team's active sessions.">
       <StatCards cards={statCards} />
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Current Session</CardTitle>
         </CardHeader>
@@ -414,7 +414,7 @@ export default function AdminHrTimeClockPage() {
       </Card>
 
       {isManager && (
-        <Card>
+        <Card className="nm-raised">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" /> Active Employees

@@ -181,7 +181,7 @@ export default function AdminHrPage() {
 
 function DashboardCard({ title, link, isLoading, children }: { title: string; link: string; isLoading?: boolean; children: React.ReactNode }) {
   return (
-    <Card>
+    <Card className="nm-raised">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base font-medium">{title}</CardTitle>
         <Button asChild variant="ghost" size="sm" className="h-auto px-0 py-0">

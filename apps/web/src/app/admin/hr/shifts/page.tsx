@@ -106,7 +106,7 @@ export default function AdminHrShiftsPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Quick Add Shift</CardTitle>
         </CardHeader>
@@ -121,7 +121,7 @@ export default function AdminHrShiftsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Shifts</CardTitle>
           <Button size="sm" variant="outline" onClick={() => publish.mutate(shifts.filter((s: any) => s.status === 'draft').map((s: any) => s.id))} disabled={publish.isPending}>

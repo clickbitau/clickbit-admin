@@ -86,7 +86,7 @@ export default function AdminHrKpiPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Performance Scores — {period}</CardTitle>
         </CardHeader>
