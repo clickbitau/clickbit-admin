@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { fetchTimeClockStatus, clockIn, clockOut, startBreak, endBreak, fetchEmployeeMe, fetchTimesheets } from '@/lib/api';
 import { formatDate, formatDateTime, formatDuration } from '@/lib/format';
 import { Clock, Play, Square, Coffee, Utensils } from 'lucide-react';
@@ -101,7 +102,7 @@ export default function EmployeeTimeClockPage() {
   return (
     <PageShell title="Time Clock" icon={Clock} description="Clock in/out and view your recent entries.">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="nm-raised lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Clock className="h-4 w-4" /> Status
@@ -146,7 +147,7 @@ export default function EmployeeTimeClockPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="nm-raised">
           <CardHeader>
             <CardTitle className="text-sm font-medium">Today</CardTitle>
           </CardHeader>
@@ -158,7 +159,7 @@ export default function EmployeeTimeClockPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="nm-raised">
         <CardHeader>
           <CardTitle className="text-sm font-medium">Recent Entries</CardTitle>
         </CardHeader>
@@ -180,7 +181,7 @@ export default function EmployeeTimeClockPage() {
               <span key="clock_in">{formatDateTime(e.clock_in_time)}</span>,
               <span key="clock_out">{e.clock_out_time ? formatDateTime(e.clock_out_time) : '-'}</span>,
               <span key="duration">{e.total_minutes ? formatDuration(Number(e.total_minutes) * 60) : '-'}</span>,
-              <span key="status" className="text-xs capitalize">{e.status || '-'}</span>,
+              <StatusBadge key="status" status={e.status} />,
             ]}
           />
           {timesheetsQuery.data?.pagination && (

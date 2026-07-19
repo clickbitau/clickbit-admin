@@ -39,7 +39,7 @@ export default function EmployeeItSupportPage() {
 
   return (
     <PageShell title="IT Support" icon={Headset} description="Submit an internal IT support request.">
-      <Card className="max-w-2xl">
+      <Card className="nm-raised max-w-2xl">
         <CardHeader>
           <CardTitle className="text-base">New IT Support Request</CardTitle>
         </CardHeader>

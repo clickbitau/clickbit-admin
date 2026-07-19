@@ -8,6 +8,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { fetchEmployeePayslip } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { Receipt, ArrowLeft, Download } from 'lucide-react';
@@ -62,7 +63,7 @@ export default function EmployeePayslipDetailPage() {
       }
     >
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>Pay Summary</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Gross Pay</span> <span>{formatCurrency(Number(payslip.gross_pay), payslip.currency)}</span></div>
@@ -71,7 +72,7 @@ export default function EmployeePayslipDetailPage() {
             <div className="flex justify-between pt-2 border-t border-gray-100 dark:border-gray-700"><span className="font-medium">Net Pay</span> <span className="font-bold">{formatCurrency(Number(payslip.net_pay), payslip.currency)}</span></div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>YTD</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Gross YTD</span> <span>{formatCurrency(Number(payslip.ytd_gross), payslip.currency)}</span></div>
@@ -79,12 +80,12 @@ export default function EmployeePayslipDetailPage() {
             <div className="flex justify-between"><span className="text-muted-foreground">Super YTD</span> <span>{formatCurrency(Number(payslip.ytd_super), payslip.currency)}</span></div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="nm-raised">
           <CardHeader><CardTitle>Details</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Payment Date</span> <span>{formatDate(payslip.payment_date)}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Pay Frequency</span> <span className="capitalize">{payslip.pay_frequency?.replace(/_/g, ' ') || '-'}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Status</span> <span className="capitalize">{payslip.status || '-'}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Status</span> <StatusBadge status={payslip.status} /></div>
           </CardContent>
         </Card>
       </div>

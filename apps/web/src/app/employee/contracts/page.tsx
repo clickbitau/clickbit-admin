@@ -9,6 +9,7 @@ import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { fetchEmployeeContracts } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { FileText } from 'lucide-react';
 
 export default function EmployeeContractsPage() {
@@ -50,7 +51,7 @@ export default function EmployeeContractsPage() {
           <span key="start">{formatDate(c.start_date)}</span>,
           <span key="end">{formatDate(c.end_date)}</span>,
           <span key="salary">{c.salary ? formatCurrency(Number(c.salary), c.currency) : c.hourly_rate ? `${formatCurrency(Number(c.hourly_rate), c.currency)}/hr` : '-'}</span>,
-          <span key="status" className="text-xs capitalize">{c.status || '-'}</span>,
+          <StatusBadge key="status" status={c.status} />,
         ]}
       />
       {data?.pagination && (
