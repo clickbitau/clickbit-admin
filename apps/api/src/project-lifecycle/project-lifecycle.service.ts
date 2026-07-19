@@ -165,86 +165,101 @@ export class ProjectLifecycleService {
     }
 
     const sortedPhaseTemplates = [...(template.phase_templates || [])].sort((a: any, b: any) => a.position - b.position);
-    const positionToPhaseId = new Map<number, number>();
-    const createdPhases: any[] = [];
 
-    for (const pt of sortedPhaseTemplates) {
-      const phase = await this.prisma.project_phases.create({
-        data: {
-          crm_project_id: parentProjectId,
-          subproject_id: parentSubprojectId,
-          name: pt.name,
-          description: pt.description,
-          position: pt.position,
-          weight: pt.weight,
-          status: 'not_started',
-          progress_percentage: 0,
-          phase_type: pt.phase_type,
-          dependency_type: pt.dependency_type || 'sequential',
-          is_mandatory: pt.is_mandatory || false,
-          estimated_hours: pt.estimated_hours,
-          actual_hours: 0,
-          template_phase_id: pt.id,
-          created_by: user?.id,
-        } as any,
-      });
-      positionToPhaseId.set(pt.position, phase.id);
-      createdPhases.push({ phase, template: pt });
+    const phaseInputs = sortedPhaseTemplates.map((pt: any) => ({
+      crm_project_id: parentProjectId,
+      subproject_id: parentSubprojectId,
+      name: pt.name,
+      description: pt.description,
+      position: pt.position,
+      weight: pt.weight,
+      status: 'not_started',
+      progress_percentage: 0,
+      phase_type: pt.phase_type,
+      dependency_type: pt.dependency_type || 'sequential',
+      is_mandatory: pt.is_mandatory || false,
+      estimated_hours: pt.estimated_hours,
+      actual_hours: 0,
+      template_phase_id: pt.id,
+      created_by: user?.id,
+    })) as any;
+
+    const createdPhases = await this.prisma.project_phases.createManyAndReturn({ data: phaseInputs });
+    const positionToPhaseId = new Map(createdPhases.map((phase: any, i: number) => [sortedPhaseTemplates[i].position, phase.id]));
+
+    const dependencyUpdates = createdPhases
+      .map((phase: any, i: number) => {
+        const pt = sortedPhaseTemplates[i];
+        if (pt.depends_on_position == null) return null;
+        const dependsOnPhaseId = positionToPhaseId.get(pt.depends_on_position);
+        return dependsOnPhaseId ? { id: phase.id, depends_on_phase_id: dependsOnPhaseId } : null;
+      })
+      .filter(Boolean) as { id: number; depends_on_phase_id: number }[];
+
+    if (dependencyUpdates.length > 0) {
+      await this.prisma.$transaction(
+        dependencyUpdates.map((update) =>
+          this.prisma.project_phases.update({ where: { id: update.id }, data: { depends_on_phase_id: update.depends_on_phase_id } }),
+        ),
+      );
     }
 
-    for (const { phase, template: pt } of createdPhases) {
-      if (pt.depends_on_position !== null && pt.depends_on_position !== undefined) {
-        const dependsOnPhaseId = positionToPhaseId.get(pt.depends_on_position);
-        if (dependsOnPhaseId) {
-          await this.prisma.project_phases.update({ where: { id: phase.id }, data: { depends_on_phase_id: dependsOnPhaseId } });
-        }
+    const taskInputs: any[] = [];
+    const phaseTemplateMap = new Map(createdPhases.map((phase: any, i: number) => [phase.id, sortedPhaseTemplates[i]]));
+    for (const phase of createdPhases) {
+      const pt: any = phaseTemplateMap.get(phase.id);
+      const sortedTaskTemplates = [...(pt.task_templates || [])].sort((a: any, b: any) => a.position - b.position);
+      for (const tt of sortedTaskTemplates) {
+        taskInputs.push({
+          phase_id: phase.id,
+          crm_project_id: parentProjectId,
+          subproject_id: parentSubprojectId,
+          company_id: companyId,
+          customer_id: customerId,
+          title: tt.title,
+          description: tt.description,
+          status: 'todo',
+          priority: tt.priority || 'medium',
+          position: tt.position,
+          weight: tt.weight,
+          estimated_hours: tt.estimated_hours,
+          is_template_generated: true,
+          template_task_id: tt.id,
+          assigned_to: phase.manager_id ?? null,
+          actual_hours: 0,
+        });
       }
     }
 
-    for (const { phase, template: pt } of createdPhases) {
+    const createdTasks = taskInputs.length > 0 ? await this.prisma.project_tasks.createManyAndReturn({ data: taskInputs }) : [];
+
+    const microtaskInputs: any[] = [];
+    let taskIndex = 0;
+    for (const phase of createdPhases) {
+      const pt: any = phaseTemplateMap.get(phase.id);
       const sortedTaskTemplates = [...(pt.task_templates || [])].sort((a: any, b: any) => a.position - b.position);
       for (const tt of sortedTaskTemplates) {
-        const task = await this.prisma.project_tasks.create({
-          data: {
-            phase_id: phase.id,
-            crm_project_id: parentProjectId,
-            subproject_id: parentSubprojectId,
-            company_id: companyId,
-            customer_id: customerId,
-            title: tt.title,
-            description: tt.description,
-            status: 'todo',
-            priority: tt.priority || 'medium',
-            position: tt.position,
-            weight: tt.weight,
-            estimated_hours: tt.estimated_hours,
-            is_template_generated: true,
-            template_task_id: tt.id,
-            assigned_to: phase.manager_id ?? null,
-            actual_hours: 0,
-          } as any,
-        });
-
+        const task = createdTasks[taskIndex++];
         const sortedMicrotaskTemplates = [...(tt.microtask_templates || [])].sort((a: any, b: any) => a.position - b.position);
         for (const mt of sortedMicrotaskTemplates) {
-          await this.prisma.task_microtasks.create({
-            data: {
-              project_task_id: task.id,
-              title: mt.title,
-              position: mt.position,
-              is_mandatory: mt.is_mandatory !== false,
-              is_completed: false,
-              template_microtask_id: mt.id,
-            },
+          microtaskInputs.push({
+            project_task_id: task.id,
+            title: mt.title,
+            position: mt.position,
+            is_mandatory: mt.is_mandatory !== false,
+            is_completed: false,
+            template_microtask_id: mt.id,
           });
         }
       }
     }
 
-    await this.calculatePhaseTimeline(targetId, targetType, parent.start_date as Date, parent.due_date as Date);
-    for (const { phase } of createdPhases) {
-      await this.calculateTaskExpectedTimes(phase.id);
+    if (microtaskInputs.length > 0) {
+      await this.prisma.task_microtasks.createMany({ data: microtaskInputs });
     }
+
+    await this.calculatePhaseTimeline(targetId, targetType, parent.start_date as Date, parent.due_date as Date);
+    await Promise.all(createdPhases.map((phase: any) => this.calculateTaskExpectedTimes(phase.id)));
 
     if (targetType === 'project') {
       await this.prisma.crm_projects.update({ where: { id: targetId }, data: { project_type: template.project_type } as any });
@@ -254,8 +269,8 @@ export class ProjectLifecycleService {
       templateName: template.name,
       projectType: template.project_type,
       phases: createdPhases.length,
-      taskCount: 0,
-      microtaskCount: 0,
+      taskCount: createdTasks.length,
+      microtaskCount: microtaskInputs.length,
     };
   }
 
@@ -825,12 +840,14 @@ export class ProjectLifecycleService {
     }
 
     if (persist) {
-      for (const phase of phases) {
-        await this.prisma.project_phases.update({
-          where: { id: phase.id },
-          data: { start_date: (phase as any)._calcStart, due_date: (phase as any)._calcEnd } as any,
-        });
-      }
+      await Promise.all(
+        phases.map((phase) =>
+          this.prisma.project_phases.update({
+            where: { id: phase.id },
+            data: { start_date: (phase as any)._calcStart, due_date: (phase as any)._calcEnd } as any,
+          }),
+        ),
+      );
     }
 
     return phases.map((p) => ({
@@ -849,28 +866,35 @@ export class ProjectLifecycleService {
   private async calculateTaskExpectedTimes(phaseId: number, persist = true) {
     const phase = await this.prisma.project_phases.findUnique({ where: { id: phaseId } });
     if (!phase || !phase.start_date || !phase.due_date) return [];
-    const phaseDays = Math.max(1, daysBetween(new Date(phase.start_date), new Date(phase.due_date)));
+    const phaseStart = phase.start_date;
+    const phaseDue = phase.due_date;
+    const phaseDays = Math.max(1, daysBetween(new Date(phaseStart), new Date(phaseDue)));
     const tasks = await this.prisma.project_tasks.findMany({ where: { phase_id: phaseId, deleted_at: null }, orderBy: { position: 'asc' } });
     if (tasks.length === 0) return [];
 
     const totalWeight = tasks.reduce((sum, t) => sum + (toNumber(t.weight) || 0), 0);
     const useEqualWeights = totalWeight === 0;
 
-    for (const task of tasks) {
+    const taskUpdates = tasks.map((task) => {
       const weight = useEqualWeights ? 100 / tasks.length : toNumber(task.weight) || 0;
       const expectedDays = Math.max(0.5, (phaseDays * weight) / 100);
       if (persist) {
-        let due = addDays(new Date(phase.start_date), Math.ceil(expectedDays) - 1);
-        if (due > new Date(phase.due_date)) due = new Date(phase.due_date);
-        await this.prisma.project_tasks.update({
+        let due = addDays(new Date(phaseStart), Math.ceil(expectedDays) - 1);
+        if (due > new Date(phaseDue)) due = new Date(phaseDue);
+        return this.prisma.project_tasks.update({
           where: { id: task.id },
           data: {
             expected_duration_days: Math.round(expectedDays * 10) / 10,
-            start_date: phase.start_date,
+            start_date: phaseStart,
             due_date: due,
           } as any,
         });
       }
+      return Promise.resolve();
+    });
+
+    if (persist) {
+      await Promise.all(taskUpdates);
     }
     return tasks;
   }
