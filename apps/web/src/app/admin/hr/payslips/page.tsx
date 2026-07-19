@@ -159,17 +159,17 @@ export default function AdminHrPayslipsPage() {
           {isLoading && <div className="text-muted-foreground">Loading...</div>}
 
           {!isLoading && (
-            <Table>
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Payment Date</TableHead>
-                  <TableHead>Gross</TableHead>
-                  <TableHead>Tax</TableHead>
-                  <TableHead>Net</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="whitespace-nowrap">Employee</TableHead>
+                  <TableHead className="whitespace-nowrap">Period</TableHead>
+                  <TableHead className="whitespace-nowrap">Payment Date</TableHead>
+                  <TableHead className="whitespace-nowrap">Gross</TableHead>
+                  <TableHead className="whitespace-nowrap">Tax</TableHead>
+                  <TableHead className="whitespace-nowrap">Net</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

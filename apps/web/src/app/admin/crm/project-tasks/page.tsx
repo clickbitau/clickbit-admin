@@ -60,6 +60,11 @@ const STATUSES = [
   { key: 'blocked', label: 'Blocked' },
 ];
 
+const STATUS_TABS = [
+  { key: '', label: 'All' },
+  ...STATUSES,
+];
+
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 function getStatusColor(status: string) {
@@ -408,6 +413,19 @@ export default function ProjectTasksPage() {
         </div>
       }
     >
+      <div className="flex flex-wrap gap-2">
+        {STATUS_TABS.map((s) => (
+          <Button
+            key={s.key}
+            size="sm"
+            variant={status === s.key ? 'default' : 'outline'}
+            onClick={() => { setStatus(s.key); setPage(1); }}
+          >
+            {s.label}
+          </Button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <div className="relative sm:col-span-2">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -418,13 +436,6 @@ export default function ProjectTasksPage() {
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All statuses</SelectItem>
-            {STATUSES.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Select value={priority} onValueChange={(v) => { setPriority(v); setPage(1); }}>
           <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
