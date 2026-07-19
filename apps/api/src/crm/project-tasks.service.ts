@@ -711,9 +711,9 @@ export class ProjectTasksService {
       created_by: user.id,
     };
     const copy = await this.prisma.project_tasks.create({ data: copyData });
-    for (const mt of task.task_microtasks) {
-      await this.prisma.task_microtasks.create({
-        data: { project_task_id: copy.id, title: mt.title, position: mt.position, is_mandatory: mt.is_mandatory },
+    if (task.task_microtasks && task.task_microtasks.length > 0) {
+      await this.prisma.task_microtasks.createMany({
+        data: (task.task_microtasks as any[]).map((mt) => ({ project_task_id: copy.id, title: mt.title, position: mt.position, is_mandatory: mt.is_mandatory })),
       });
     }
     const full = await this.prisma.project_tasks.findUnique({ where: { id: copy.id }, include: this.taskInclude });
@@ -739,36 +739,37 @@ export class ProjectTasksService {
 
     const valid = await this.prisma.profiles.findMany({ where: { id: { in: newIds } }, select: { id: true } });
     const validIds = valid.map((p) => p.id);
-    const created: any[] = [];
-    for (const assigneeId of validIds) {
-      const copyData: any = {
-        title: source.title,
-        description: source.description,
-        status: source.status,
-        priority: source.priority,
-        assigned_to: assigneeId,
-        estimated_hours: source.estimated_hours,
-        actual_hours: 0,
-        due_date: source.due_date,
-        start_date: source.start_date,
-        crm_project_id: source.crm_project_id,
-        subproject_id: source.subproject_id,
-        project_id: source.project_id,
-        customer_id: source.customer_id,
-        phase_id: source.phase_id,
-        tags: source.tags,
-        customer_visible: source.customer_visible,
-        created_by: user.id,
-      };
-      const copy = await this.prisma.project_tasks.create({ data: copyData });
-      for (const mt of source.task_microtasks) {
-        await this.prisma.task_microtasks.create({
-          data: { project_task_id: copy.id, title: mt.title, position: mt.position, is_mandatory: mt.is_mandatory },
-        });
-      }
-      created.push(copy.id);
+    const taskInputs = validIds.map((assigneeId: number) => ({
+      title: source.title,
+      description: source.description,
+      status: source.status,
+      priority: source.priority,
+      assigned_to: assigneeId,
+      estimated_hours: source.estimated_hours,
+      actual_hours: 0,
+      due_date: source.due_date,
+      start_date: source.start_date,
+      crm_project_id: source.crm_project_id,
+      subproject_id: source.subproject_id,
+      project_id: source.project_id,
+      customer_id: source.customer_id,
+      phase_id: source.phase_id,
+      tags: source.tags,
+      customer_visible: source.customer_visible,
+      created_by: user.id,
+    })) as any;
+
+    const createdTasks = validIds.length > 0 ? await this.prisma.project_tasks.createManyAndReturn({ data: taskInputs }) : [];
+    const created = createdTasks.map((copy: any) => copy.id);
+
+    if (source.task_microtasks && (source.task_microtasks as any[]).length > 0 && createdTasks.length > 0) {
+      const microtaskInputs = createdTasks.flatMap((copy: any) =>
+        (source.task_microtasks as any[]).map((mt) => ({ project_task_id: copy.id, title: mt.title, position: mt.position, is_mandatory: mt.is_mandatory })),
+      );
+      await this.prisma.task_microtasks.createMany({ data: microtaskInputs });
     }
-    const tasks = await this.prisma.project_tasks.findMany({ where: { id: { in: created } }, include: this.taskInclude });
+
+    const tasks = created.length > 0 ? await this.prisma.project_tasks.findMany({ where: { id: { in: created } }, include: this.taskInclude }) : [];
     await this.invalidateTaskCache();
     return { success: true, message: `Task assigned to ${validIds.length} additional people`, data: tasks.map((t) => this.mapTask(t)) };
   }
