@@ -58,36 +58,58 @@ import {
 
 const TEMPLATE_TYPES = [
   { value: 'invoice', label: 'Invoice', icon: FileText, color: 'text-blue-600' },
-  { value: 'quote', label: 'Quote / Estimate', icon: FileText, color: 'text-emerald-600' },
+  { value: 'estimate', label: 'Estimate', icon: FileText, color: 'text-emerald-600' },
   { value: 'payslip', label: 'Payslip', icon: FileText, color: 'text-amber-600' },
-  { value: 'contract', label: 'Contract', icon: FileText, color: 'text-purple-600' },
-  { value: 'receipt', label: 'Receipt', icon: FileText, color: 'text-slate-600' },
-  { value: 'other', label: 'Other', icon: FileText, color: 'text-gray-600' },
 ];
 
 const PDF_TEMPLATE_VARIABLES = [
+  { key: '{{document_title}}', label: 'Document Title' },
   { key: '{{invoice_number}}', label: 'Invoice Number' },
   { key: '{{quote_number}}', label: 'Quote Number' },
   { key: '{{date}}', label: 'Date' },
   { key: '{{due_date}}', label: 'Due Date' },
   { key: '{{client_name}}', label: 'Client Name' },
+  { key: '{{client_company}}', label: 'Client Company' },
   { key: '{{client_email}}', label: 'Client Email' },
   { key: '{{company_name}}', label: 'Company Name' },
   { key: '{{company_address}}', label: 'Company Address' },
   { key: '{{company_phone}}', label: 'Company Phone' },
   { key: '{{company_email}}', label: 'Company Email' },
+  { key: '{{company_abn}}', label: 'Company ABN' },
   { key: '{{items}}', label: 'Line Items Table' },
   { key: '{{subtotal}}', label: 'Subtotal' },
   { key: '{{tax}}', label: 'Tax' },
+  { key: '{{discount}}', label: 'Discount' },
   { key: '{{total}}', label: 'Total' },
   { key: '{{amount_due}}', label: 'Amount Due' },
   { key: '{{notes}}', label: 'Notes' },
   { key: '{{payment_terms}}', label: 'Payment Terms' },
+  { key: '{{bank_account_name}}', label: 'Bank Account Name' },
+  { key: '{{bank_bsb}}', label: 'Bank BSB' },
+  { key: '{{bank_account_number}}', label: 'Bank Account Number' },
   { key: '{{employee_name}}', label: 'Employee Name' },
-  { key: '{{pay_period}}', label: 'Pay Period' },
+  { key: '{{position}}', label: 'Position' },
+  { key: '{{employment_type}}', label: 'Employment Type' },
+  { key: '{{tfn}}', label: 'TFN' },
+  { key: '{{pay_date}}', label: 'Pay Date' },
+  { key: '{{pay_frequency}}', label: 'Pay Frequency' },
+  { key: '{{hourly_rate}}', label: 'Hourly Rate' },
+  { key: '{{super_fund}}', label: 'Super Fund' },
+  { key: '{{hours_worked}}', label: 'Hours Worked' },
+  { key: '{{ordinary_hours_pay}}', label: 'Ordinary Hours Pay' },
   { key: '{{gross_pay}}', label: 'Gross Pay' },
   { key: '{{net_pay}}', label: 'Net Pay' },
   { key: '{{tax_deduction}}', label: 'Tax Deduction' },
+  { key: '{{superannuation}}', label: 'Superannuation' },
+  { key: '{{total_deductions}}', label: 'Total Deductions' },
+  { key: '{{ytd_gross}}', label: 'YTD Gross' },
+  { key: '{{ytd_tax}}', label: 'YTD Tax' },
+  { key: '{{ytd_super}}', label: 'YTD Super' },
+  { key: '{{ytd_net}}', label: 'YTD Net' },
+  { key: '{{annual_leave_balance}}', label: 'Annual Leave Balance' },
+  { key: '{{sick_leave_balance}}', label: 'Sick Leave Balance' },
+  { key: '{{bank_name}}', label: 'Bank Name' },
+  { key: '{{pay_period}}', label: 'Pay Period' },
 ];
 
 const DEFAULT_CSS = `body {
@@ -308,9 +330,8 @@ export default function AdminPdfTemplatesPage() {
       { label: 'Total Templates', value: templates.length, icon: LayoutTemplate },
       { label: 'Default', value: templates.filter((t) => t.is_default).length, icon: Star },
       { label: 'Invoice', value: byType('invoice'), icon: FileText, onClick: () => setTypeFilter('invoice') },
-      { label: 'Quote', value: byType('quote'), icon: FileText, onClick: () => setTypeFilter('quote') },
+      { label: 'Estimate', value: byType('estimate'), icon: FileText, onClick: () => setTypeFilter('estimate') },
       { label: 'Payslip', value: byType('payslip'), icon: FileText, onClick: () => setTypeFilter('payslip') },
-      { label: 'Contract', value: byType('contract'), icon: FileText, onClick: () => setTypeFilter('contract') },
     ];
   }, [templates]);
 
@@ -388,7 +409,7 @@ export default function AdminPdfTemplatesPage() {
               <LayoutTemplate className="w-5 h-5 text-muted-foreground" />
             </div>
             <h3 className="font-semibold mb-1">No PDF templates yet</h3>
-            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">Get started by loading the default invoice, quote, payslip and contract templates, or build your own.</p>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">Get started by loading the default invoice, estimate and payslip templates, or build your own.</p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
                 <Sparkles className="mr-1 h-4 w-4" /> Load default templates
