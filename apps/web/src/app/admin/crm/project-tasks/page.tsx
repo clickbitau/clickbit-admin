@@ -51,6 +51,18 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
+function UserAvatar({ user, className }: { user?: { first_name?: string | null; last_name?: string | null; email?: string | null; avatar?: string | null } | null; className?: string }) {
+  const name = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '';
+  const initials = name ? `${name.split(' ')[0][0]}${name.split(' ').slice(-1)[0][0]}`.toUpperCase() : '?';
+  return (
+    <Avatar className={cn('h-7 w-7', className)}>
+      {user?.avatar ? <AvatarImage src={user.avatar} alt={name} /> : null}
+      <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
+    </Avatar>
+  );
+}
 
 const STATUSES = [
   { key: 'todo', label: 'To Do' },
@@ -311,9 +323,10 @@ export default function ProjectTasksPage() {
         <div className="mt-2 flex items-center justify-between">
           <StatusBadge status={task.status} className="text-[10px] px-1.5 py-0.5 h-auto" />
           {task.assignee ? (
-            <span className="text-xs text-muted-foreground truncate max-w-[90px]">
-              {task.assignee.first_name} {task.assignee.last_name}
-            </span>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate max-w-[120px]">
+              <UserAvatar user={task.assignee} />
+              <span className="truncate">{task.assignee.first_name} {task.assignee.last_name}</span>
+            </div>
           ) : (
             <span className="text-xs text-muted-foreground">Unassigned</span>
           )}
@@ -539,18 +552,20 @@ export default function ProjectTasksPage() {
                 <option value="">-</option>
                 {PRIORITIES.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}
               </select>,
-              <select
-                key="assignee"
-                value={t.assigned_to ?? ''}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => updateMutation.mutate({ id: t.id, data: { assigned_to: Number(e.target.value) || null } })}
-                className="h-8 rounded-md border bg-background px-2 text-xs nm-interactive max-w-[140px]"
-              >
-                <option value="">Unassigned</option>
-                {(assignees ?? []).map((u: User) => (
-                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
-                ))}
-              </select>,
+              <div key="assignee" className="flex items-center gap-2">
+                <UserAvatar user={t.assignee} />
+                <select
+                  value={t.assigned_to ?? ''}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => updateMutation.mutate({ id: t.id, data: { assigned_to: Number(e.target.value) || null } })}
+                  className="h-8 rounded-md border bg-background px-2 text-xs nm-interactive max-w-[120px]"
+                >
+                  <option value="">Unassigned</option>
+                  {(assignees ?? []).map((u: User) => (
+                    <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                  ))}
+                </select>
+              </div>,
               <span key="due" className="text-sm whitespace-nowrap">{formatDate(t.due_date)}</span>,
               <div key="actions" className="flex items-center justify-end gap-1">
                 <Button
