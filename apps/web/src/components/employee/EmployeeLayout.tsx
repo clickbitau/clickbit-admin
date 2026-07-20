@@ -22,6 +22,7 @@ import {
   Loader2,
   ArrowLeft,
   Megaphone,
+  Bell,
 } from 'lucide-react';
 
 interface NavItem {
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { href: '/employee/payslips', label: 'Payslips', icon: Receipt },
   { href: '/employee/contracts', label: 'Contracts', icon: FileText },
   { href: '/employee/announcements', label: 'Announcements', icon: Megaphone },
+  { href: '/employee/reminders', label: 'Reminders', icon: Bell },
   { href: '/employee/time-clock', label: 'Time Clock', icon: Clock },
   { href: '/employee/it-support', label: 'IT Support', icon: Headset },
 ];

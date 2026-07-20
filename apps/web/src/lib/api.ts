@@ -1181,6 +1181,10 @@ export async function fetchReminder(token: string, id: string | number): Promise
   return (await api.get(`/api/hr/reminders/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function completeReminder(token: string, id: string | number): Promise<{ success: boolean; message: string; data?: Reminder }> {
+  return (await api.post(`/api/hr/reminders/${id}/complete`, {}, { headers: authHeaders(token) })).data;
+}
+
 export async function updateReminder(token: string, id: string | number, data: Partial<Reminder>): Promise<Reminder> {
   return (await api.put(`/api/hr/reminders/${id}`, data, { headers: authHeaders(token) })).data;
 }
