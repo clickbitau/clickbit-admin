@@ -2451,6 +2451,14 @@ export async function createStaffAdvance(token: string, data: CreateStaffAdvance
   return (await api.post('/api/staff-advances', data, { headers: authHeaders(token) })).data;
 }
 
+export async function fetchMeStaffAdvances(token: string): Promise<StaffAdvanceListResponse> {
+  return (await api.get('/api/staff-advances/me', { headers: authHeaders(token) })).data;
+}
+
+export async function requestStaffAdvance(token: string, data: { title: string; amount: number; notes?: string; advance_type?: string }): Promise<{ success: boolean; data: StaffAdvance }> {
+  return (await api.post('/api/staff-advances/me/request', data, { headers: authHeaders(token) })).data;
+}
+
 export async function approveStaffAdvance(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   return (await api.post(`/api/staff-advances/${id}/approve`, {}, { headers: authHeaders(token) })).data;
 }
