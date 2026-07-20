@@ -1181,6 +1181,10 @@ export async function fetchReminder(token: string, id: string | number): Promise
   return (await api.get(`/api/hr/reminders/${id}`, { headers: authHeaders(token) })).data;
 }
 
+export async function completeReminder(token: string, id: string | number): Promise<{ success: boolean; message: string; data?: Reminder }> {
+  return (await api.post(`/api/hr/reminders/${id}/complete`, {}, { headers: authHeaders(token) })).data;
+}
+
 export async function updateReminder(token: string, id: string | number, data: Partial<Reminder>): Promise<Reminder> {
   return (await api.put(`/api/hr/reminders/${id}`, data, { headers: authHeaders(token) })).data;
 }
@@ -2445,6 +2449,14 @@ export async function fetchStaffAdvance(token: string, id: string | number): Pro
 
 export async function createStaffAdvance(token: string, data: CreateStaffAdvanceInput): Promise<{ success: boolean; data: StaffAdvance }> {
   return (await api.post('/api/staff-advances', data, { headers: authHeaders(token) })).data;
+}
+
+export async function fetchMeStaffAdvances(token: string): Promise<StaffAdvanceListResponse> {
+  return (await api.get('/api/staff-advances/me', { headers: authHeaders(token) })).data;
+}
+
+export async function requestStaffAdvance(token: string, data: { title: string; amount: number; notes?: string; advance_type?: string }): Promise<{ success: boolean; data: StaffAdvance }> {
+  return (await api.post('/api/staff-advances/me/request', data, { headers: authHeaders(token) })).data;
 }
 
 export async function approveStaffAdvance(token: string, id: string | number): Promise<{ success: boolean; message: string }> {

@@ -45,6 +45,8 @@ export class RemindersService {
     start_date?: string;
     end_date?: string;
     search?: string;
+    assigned_to?: string;
+    created_by?: string;
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
   }) {
@@ -55,6 +57,8 @@ export class RemindersService {
     const where: Prisma.hr_remindersWhereInput = {};
     if (query.status) where.status = query.status as any;
     if (query.trigger_type) where.trigger_type = query.trigger_type as any;
+    if (query.assigned_to) where.assigned_to = Number(query.assigned_to);
+    if (query.created_by) where.created_by = Number(query.created_by);
     if (query.start_date || query.end_date) {
       where.reminder_date = {};
       if (query.start_date) (where.reminder_date as any).gte = parseDateOnly(query.start_date);
