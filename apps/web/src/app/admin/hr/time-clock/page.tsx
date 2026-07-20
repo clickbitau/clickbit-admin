@@ -31,14 +31,20 @@ import type { ProjectTask } from '@/types/crm';
 import type { TimeEntry } from '@/types/hr';
 
 function formatTime(date: Date) {
-  return date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  return date
+    .toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(' am', ' AM')
+    .replace(' pm', ' PM');
 }
 
 function formatDateTime(value: string | Date | null | undefined) {
   if (!value) return '-';
   const d = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('en-AU');
+  return d
+    .toLocaleString('en-AU', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(' am', ' AM')
+    .replace(' pm', ' PM');
 }
 
 function formatDurationSeconds(totalSeconds: number) {

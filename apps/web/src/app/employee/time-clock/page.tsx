@@ -48,7 +48,10 @@ function formatTime(value: string | Date | null | undefined): string {
   if (!value) return '-';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  return date
+    .toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(' am', ' AM')
+    .replace(' pm', ' PM');
 }
 
 function getPosition(): Promise<Location> {
