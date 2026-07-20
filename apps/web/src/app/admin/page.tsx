@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
@@ -23,7 +23,7 @@ import {
   fetchPublicHolidays,
   syncEmployees,
 } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatDuration } from '@/lib/format';
 import type { DashboardStats, FinanceDashboardData, FinanceTrendPoint } from '@/types/dashboard';
 import type { HrDashboardData } from '@/types/hr';
 import {
@@ -87,6 +87,18 @@ function getGreeting(name?: string | null) {
   if (hour < 12) return `Good morning${suffix}`;
   if (hour < 18) return `Good afternoon${suffix}`;
   return `Good evening${suffix}`;
+}
+
+function Elapsed({ since }: { since: string | Date | undefined }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!since) return null;
+  const start = typeof since === 'string' ? new Date(since) : since;
+  const seconds = Math.max(0, Math.floor((now - start.getTime()) / 1000));
+  return <span className="text-xs text-muted-foreground">{formatDuration(seconds)}</span>;
 }
 
 function StatCard({
@@ -505,7 +517,7 @@ function HRTab({ data, loading }: { data?: HrDashboardData; loading: boolean }) 
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">{emp.name}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {emp.department} · In {formatDate(emp.clockInTime)}
+                      {emp.department} · In {formatDate(emp.clockInTime)} · <Elapsed since={emp.clockInTime} />
                     </p>
                   </div>
                   <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse self-start sm:self-auto hidden sm:block" />
