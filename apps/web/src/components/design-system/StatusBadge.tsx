@@ -48,11 +48,24 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
     partial: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
   };
 
+  const labels: Record<string, string> = {
+    'to-do': 'To Do',
+    'in-progress': 'In Progress',
+    'not-started': 'Not Started',
+    'on-hold': 'On Hold',
+    todo: 'To Do',
+    'in_progress': 'In Progress',
+    'not_started': 'Not Started',
+    'on_hold': 'On Hold',
+  };
+
   const style = variants[normalized] ?? 'bg-secondary text-secondary-foreground';
+  const clean = status.replace(/[_\s-]+/g, ' ').trim();
+  const label = labels[normalized] ?? clean.replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <Badge variant="outline" className={cn(style, className)}>
-      {status.replace(/_/g, ' ')}
+      {label}
     </Badge>
   );
 }

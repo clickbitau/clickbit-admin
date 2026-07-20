@@ -13,14 +13,21 @@ export function formatDate(value: string | Date | undefined | null): string {
   if (!value) return '-';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('en-AU');
+  return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export function formatDateTime(value: string | Date | undefined | null): string {
   if (!value) return '-';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('en-AU');
+  return date.toLocaleString('en-AU', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).replace(' am', ' AM').replace(' pm', ' PM');
 }
 
 export function getInitials(name?: string | null): string {

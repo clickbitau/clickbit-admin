@@ -24,7 +24,7 @@ export function PriorityBadge({ priority, className }: PriorityBadgeProps) {
 
   return (
     <Badge variant="outline" className={cn(style, className)}>
-      {priority}
+      {priority.charAt(0).toUpperCase() + priority.slice(1)}
     </Badge>
   );
 }
