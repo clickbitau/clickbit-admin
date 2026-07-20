@@ -184,31 +184,66 @@ export class PayslipsService {
       return { success: true, data: [], message: 'No payslips are due at this time.' };
     }
 
-    const results: PayslipCalcResult[] = [];
+    const workItems: { employee: any; period: { start: Date; end: Date; paymentDate: Date } }[] = [];
+    const employeeIds = new Set<number>();
+    let globalStart: Date | null = null;
+    let globalEnd: Date | null = null;
+
     for (const { employee, periods } of duePeriods) {
       if (employee.employment_type === 'contractor') continue;
       for (const period of periods) {
-        const timesheetHours = await this.getTimesheetHours(employee.id, period.start, period.end);
-        if (employee.employment_type === 'casual' && timesheetHours <= 0) continue;
-
-        const approvedLeave = await this.prisma.hr_time_off_requests.findMany({
-          where: {
-            employee_id: employee.id,
-            status: 'approved',
-            start_date: { lte: period.end },
-            end_date: { gte: period.start },
-          },
-        });
-
-        const data = await this.generatePayslipData(employee, period.start, period.end, period.paymentDate, {
-          manualHours: timesheetHours > 0 ? timesheetHours : null,
-          preFetchedLeave: approvedLeave as any,
-        });
-        data.employee_name = employee.profiles ? `${employee.profiles.first_name} ${employee.profiles.last_name}` : 'Unknown Employee';
-        data.timesheet_hours = parseFloat(timesheetHours.toFixed(2));
-        data.is_overdue = period.paymentDate < new Date();
-        results.push(data);
+        workItems.push({ employee, period });
+        employeeIds.add(employee.id);
+        if (!globalStart || period.start < globalStart) globalStart = period.start;
+        if (!globalEnd || period.end > globalEnd) globalEnd = period.end;
       }
+    }
+
+    if (workItems.length === 0) {
+      return { success: true, data: [], message: 'No payslips are due at this time.' };
+    }
+
+    const employeeIdArr = Array.from(employeeIds);
+    const [timeEntries, approvedLeave] = await Promise.all([
+      this.prisma.hr_time_entries.findMany({
+        where: {
+          employee_id: { in: employeeIdArr },
+          clock_in_time: { gte: globalStart!, lte: globalEnd! },
+          status: { in: ['completed', 'approved'] },
+        },
+        select: { employee_id: true, clock_in_time: true, total_minutes: true },
+      }),
+      this.prisma.hr_time_off_requests.findMany({
+        where: {
+          employee_id: { in: employeeIdArr },
+          status: 'approved',
+          start_date: { lte: globalEnd! },
+          end_date: { gte: globalStart! },
+        },
+      }),
+    ]);
+
+    const results: PayslipCalcResult[] = [];
+    for (const { employee, period } of workItems) {
+      const empEntries = timeEntries.filter(
+        (e) => e.employee_id === employee.id && e.clock_in_time >= period.start && e.clock_in_time <= period.end,
+      );
+      const totalMinutes = empEntries.reduce((sum, e) => sum + (this.toNumber(e.total_minutes) || 0), 0);
+      const timesheetHours = totalMinutes / 60;
+      if (employee.employment_type === 'casual' && timesheetHours <= 0) continue;
+
+      const leaveForPeriod = approvedLeave.filter(
+        (l) => l.employee_id === employee.id && new Date(l.end_date) >= period.start && new Date(l.start_date) <= period.end,
+      );
+
+      const data = await this.generatePayslipData(employee, period.start, period.end, period.paymentDate, {
+        manualHours: timesheetHours > 0 ? timesheetHours : null,
+        preFetchedLeave: leaveForPeriod as any,
+      });
+      data.employee_name = employee.profiles ? `${employee.profiles.first_name} ${employee.profiles.last_name}` : 'Unknown Employee';
+      data.timesheet_hours = parseFloat(timesheetHours.toFixed(2));
+      data.is_overdue = period.paymentDate < new Date();
+      results.push(data);
     }
 
     results.sort((a, b) => new Date(a.pay_period_start).getTime() - new Date(b.pay_period_start).getTime());
@@ -567,19 +602,27 @@ export class PayslipsService {
     });
     const today = new Date();
     today.setHours(23, 59, 59, 999);
+
+    const employeeIds = employees.map((e) => e.id);
+    const latestByEmployee = employeeIds.length
+      ? await this.prisma.payslips.groupBy({
+          by: ['employee_id'],
+          where: { employee_id: { in: employeeIds } },
+          _max: { pay_period_end: true },
+        })
+      : [];
+    const lastPayslipMap = new Map<number, Date | null>();
+    for (const row of latestByEmployee) lastPayslipMap.set(row.employee_id, row._max.pay_period_end ? new Date(row._max.pay_period_end) : null);
+
     const results: { employee: any; periods: { start: Date; end: Date; paymentDate: Date }[] }[] = [];
 
     for (const emp of employees) {
       const frequency = emp.pay_frequency || 'fortnightly';
-      const last = await this.prisma.payslips.findFirst({
-        where: { employee_id: emp.id },
-        orderBy: { pay_period_end: 'desc' },
-        select: { pay_period_end: true },
-      });
+      const lastEnd = lastPayslipMap.get(emp.id);
 
       let nextStart: Date;
-      if (last) {
-        nextStart = new Date(last.pay_period_end);
+      if (lastEnd) {
+        nextStart = new Date(lastEnd);
         nextStart.setDate(nextStart.getDate() + 1);
       } else {
         nextStart = emp.hire_date ? new Date(emp.hire_date) : new Date();

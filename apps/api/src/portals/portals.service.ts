@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 import { PublicInvoicesService } from '../finance/public-invoices.service';
 
 interface UserLike {
@@ -31,6 +32,7 @@ export class PortalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publicInvoices: PublicInvoicesService,
+    private readonly cache?: CacheService,
   ) {}
 
   private async resolveCustomer(user: UserLike) {
@@ -634,6 +636,18 @@ export class PortalsService {
   }
 
   private async resolveEmployee(user: UserLike) {
+    if (this.cache) {
+      const cacheKey = this.cache.key('portals', 'employee', user.id);
+      const cached = await this.cache.get<any>(cacheKey);
+      if (cached) return cached;
+      const employee = await this.prisma.employees.findUnique({
+        where: { user_id: user.id },
+        include: { profiles: { select: { first_name: true, last_name: true, email: true, phone: true, avatar: true } } },
+      });
+      if (!employee) throw new NotFoundException('Employee record not found');
+      await this.cache.set(cacheKey, employee, 15);
+      return employee;
+    }
     const employee = await this.prisma.employees.findUnique({
       where: { user_id: user.id },
       include: { profiles: { select: { first_name: true, last_name: true, email: true, phone: true, avatar: true } } },
