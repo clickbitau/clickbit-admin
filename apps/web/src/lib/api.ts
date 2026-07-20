@@ -2529,7 +2529,7 @@ export async function fetchEmployeePayslip(token: string, id: string | number): 
 
 export async function fetchEmployeeTimeOff(
   token: string,
-  params?: { page?: number; limit?: number },
+  params?: { page?: number; limit?: number; status?: string; year?: number },
 ): Promise<{ success: boolean; data: TimeOffRequest[]; pagination: any }> {
   return (await api.get('/api/employee/time-off', { params, headers: authHeaders(token) })).data;
 }
