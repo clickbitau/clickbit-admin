@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Clock, Coffee, MapPin, Play, Square, Users, Timer, Calendar, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Clock, Coffee, MapPin, Play, Square, Users, Timer, Calendar, Plus, Trash2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,12 @@ import {
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { clockIn, clockOut, endBreak, fetchMyTasks, fetchTasks, fetchTimeClockActive, fetchTimeClockStatus, startBreak } from '@/lib/api';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
+import { LocationMap } from '@/components/LocationMap';
+import { clockIn, clockOut, endBreak, fetchMyTasks, fetchTasks, fetchTimeClockActive, fetchTimeClockStatus, fetchTimesheets, startBreak } from '@/lib/api';
+import { formatDate } from '@/lib/format';
 import type { ProjectTask } from '@/types/crm';
+import type { TimeEntry } from '@/types/hr';
 
 function formatTime(date: Date) {
   return date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -42,6 +46,26 @@ function formatDurationSeconds(totalSeconds: number) {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function toISODate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function startOfWeek(d: Date) {
+  const date = new Date(d);
+  const day = date.getDay() || 7;
+  date.setDate(date.getDate() - day + 1);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function endOfWeek(d: Date) {
+  const start = startOfWeek(d);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return end;
 }
 
 interface LocationState {
@@ -79,6 +103,7 @@ export default function AdminHrTimeClockPage() {
   const [sessionNotes, setSessionNotes] = useState('');
   const [fetchingTasks, setFetchingTasks] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [week, setWeek] = useState<Date>(new Date());
   const [searchResults, setSearchResults] = useState<ProjectTask[]>([]);
   const [searching, setSearching] = useState(false);
   const [activeAdhocIndex, setActiveAdhocIndex] = useState<number | null>(null);
@@ -138,9 +163,44 @@ export default function AdminHrTimeClockPage() {
     return Math.max(0, Math.floor((now - started) / 1000) - breakSeconds);
   }, [now, activeEntry]);
 
+  const weekStart = useMemo(() => startOfWeek(week), [week]);
+  const weekEnd = useMemo(() => endOfWeek(week), [week]);
+
+  const { data: timesheetsData, isLoading: loadingTimesheets } = useQuery({
+    queryKey: ['admin-time-clock-entries', token, toISODate(weekStart), toISODate(weekEnd)],
+    queryFn: async () => {
+      if (!token) throw new Error('No token');
+      const params: Record<string, string | number | boolean | undefined> = {
+        start_date: toISODate(weekStart),
+        end_date: toISODate(weekEnd),
+        limit: 100,
+      };
+      if (status?.employee?.id) params.employee_id = status.employee.id;
+      return fetchTimesheets(token, params);
+    },
+    enabled: !!token && !!status?.employee?.id,
+  });
+
+  const entriesByDay = useMemo(() => {
+    const map: Record<string, TimeEntry[]> = {};
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      map[toISODate(d)] = [];
+    }
+    const rows = timesheetsData?.data || [];
+    for (const entry of rows) {
+      const key = toISODate(new Date(entry.clock_in_time));
+      if (map[key]) map[key].push(entry);
+      else map[key] = [entry];
+    }
+    return map;
+  }, [timesheetsData, weekStart]);
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['time-clock-status', token] });
     queryClient.invalidateQueries({ queryKey: ['time-clock-active', token] });
+    queryClient.invalidateQueries({ queryKey: ['admin-time-clock-entries', token] });
   };
 
   const { data: activeData, isLoading: loadingActive } = useQuery({
@@ -413,6 +473,38 @@ export default function AdminHrTimeClockPage() {
         </CardContent>
       </Card>
 
+      <Card className="nm-raised">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <MapPin className="h-4 w-4" /> Location
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {location || activeEntry?.clockInLatitude ? (
+            <LocationMap
+              latitude={activeEntry?.clockInLatitude ?? location?.latitude}
+              longitude={activeEntry?.clockInLongitude ?? location?.longitude}
+              height="180px"
+            />
+          ) : (
+            <div className="h-[180px] nm-raised flex flex-col items-center justify-center text-sm text-muted-foreground gap-2">
+              <MapPin className="h-6 w-6" />
+              <p>No location captured yet.</p>
+            </div>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mt-3"
+            onClick={captureLocation}
+            disabled={locating}
+          >
+            <MapPin className="mr-2 h-4 w-4" />
+            {locating ? 'Locating…' : location ? 'Update Location' : 'Capture Location'}
+          </Button>
+        </CardContent>
+      </Card>
+
       {isManager && (
         <Card className="nm-raised">
           <CardHeader>
@@ -458,6 +550,62 @@ export default function AdminHrTimeClockPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="nm-raised">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Calendar className="h-4 w-4" /> Recent Entries
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setWeek((w) => { const d = new Date(w); d.setDate(d.getDate() - 7); return d; })}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-xs text-muted-foreground min-w-[140px] text-center">{formatDate(weekStart)} — {formatDate(weekEnd)}</span>
+              <Button variant="outline" size="sm" onClick={() => setWeek((w) => { const d = new Date(w); d.setDate(d.getDate() + 7); return d; })}><ChevronRight className="h-4 w-4" /></Button>
+              <Button variant="outline" size="sm" onClick={() => setWeek(new Date())}>Today</Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingTimesheets ? (
+            <Skeleton className="h-40" />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayLabel, i) => {
+                const day = new Date(weekStart);
+                day.setDate(day.getDate() + i);
+                const key = toISODate(day);
+                const entries = entriesByDay[key] || [];
+                return (
+                  <div key={key} className="nm-raised-sm p-2 min-h-[120px] flex flex-col">
+                    <div className="text-xs font-medium text-muted-foreground mb-1 flex justify-between">
+                      <span>{dayLabel}</span>
+                      <span>{day.getDate()}</span>
+                    </div>
+                    <div className="flex-1 space-y-1.5 overflow-y-auto">
+                      {entries.map((e: TimeEntry) => (
+                        <div key={e.id} className="text-xs p-1.5 rounded bg-primary/5 border border-border/50">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-medium">{formatDateTime(e.clock_in_time)}</span>
+                            <StatusBadge status={e.status} className="text-[10px] px-1 py-0" />
+                          </div>
+                          <div className="text-muted-foreground mt-0.5">
+                            {e.clock_out_time ? formatDateTime(e.clock_out_time) : '—'}
+                            <span className="mx-1">·</span>
+                            {e.total_minutes ? `${Math.round(Number(e.total_minutes) / 6) / 10}h` : '-'}
+                          </div>
+                        </div>
+                      ))}
+                      {entries.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground text-center mt-4">No entries</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
