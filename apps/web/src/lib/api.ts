@@ -1116,6 +1116,13 @@ export async function fetchAnnouncements(
   return (await api.get('/api/hr/announcements', { params, headers: authHeaders(token) })).data;
 }
 
+export async function fetchPublicAnnouncements(
+  token: string,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ success: boolean; data: Announcement[]; pagination: { total: number; page: number; pages: number; limit: number } }> {
+  return (await api.get('/api/hr/announcements/public', { params, headers: authHeaders(token) })).data;
+}
+
 export async function createAnnouncement(token: string, data: Partial<Announcement>): Promise<Announcement> {
   return (await api.post('/api/hr/announcements', data, { headers: authHeaders(token) })).data;
 }

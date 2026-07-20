@@ -11,9 +11,17 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
-import { fetchEmployeeDashboard, fetchPublicHolidays } from '@/lib/api';
+import { fetchEmployeeDashboard, fetchPublicAnnouncements, fetchPublicHolidays } from '@/lib/api';
 import { formatCurrency, formatDate, formatLeaveHours } from '@/lib/format';
-import { Calendar, Clock, ListTodo, Receipt, FileText, Sun, AlertCircle, Briefcase, Palmtree, Headset } from 'lucide-react';
+import { Calendar, Clock, ListTodo, Receipt, FileText, Sun, AlertCircle, Briefcase, Palmtree, Headset, Megaphone } from 'lucide-react';
+
+function getGreeting(name?: string | null) {
+  const hour = new Date().getHours();
+  const suffix = name ? `, ${name}` : '';
+  if (hour < 12) return `Good morning${suffix}`;
+  if (hour < 18) return `Good afternoon${suffix}`;
+  return `Good evening${suffix}`;
+}
 
 export default function EmployeeDashboardPage() {
   const { token, user } = useAuth();
@@ -33,6 +41,15 @@ export default function EmployeeDashboardPage() {
     queryFn: async () => {
       if (!token) throw new Error('No token');
       return fetchPublicHolidays(token);
+    },
+    enabled: !!token,
+  });
+
+  const announcementsQuery = useQuery({
+    queryKey: ['public-announcements', token],
+    queryFn: async () => {
+      if (!token) throw new Error('No token');
+      return fetchPublicAnnouncements(token, { limit: 5 });
     },
     enabled: !!token,
   });
@@ -102,8 +119,8 @@ export default function EmployeeDashboardPage() {
 
   return (
     <PageShell
-      title={`Welcome, ${employee.name || user?.first_name || 'Employee'}`}
-      icon={Briefcase}
+      title={getGreeting(employee.name || user?.first_name)}
+      icon={Sun}
       description={`${employee.position || 'Employee'}${employee.department ? ` · ${employee.department}` : ''}`}
       actions={
         <Button asChild variant="outline">
@@ -237,6 +254,33 @@ export default function EmployeeDashboardPage() {
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground py-6 text-center">No upcoming shifts.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="nm-raised">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Megaphone className="h-4 w-4" /> Announcements
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {announcementsQuery.isLoading ? (
+              <Skeleton className="h-20" />
+            ) : (announcementsQuery.data?.data?.length ?? 0) > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {announcementsQuery.data?.data.slice(0, 3).map((a: any) => (
+                  <li key={a.id} className="flex items-start gap-2">
+                    <span className={`w-2 h-2 mt-1.5 rounded-full ${a.priority === 'critical' ? 'bg-red-500' : a.priority === 'high' ? 'bg-amber-500' : 'bg-primary'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium line-clamp-1">{a.title}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(a.publish_at || a.created_at)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">No announcements.</p>
             )}
           </CardContent>
         </Card>

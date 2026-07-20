@@ -48,6 +48,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CheckSquare,
+  Sun,
 } from 'lucide-react';
 import {
   Area,
@@ -73,6 +74,14 @@ const periodOptions = [
   { value: 90, label: 'Last 90 days' },
   { value: 365, label: 'Last year' },
 ];
+
+function getGreeting(name?: string | null) {
+  const hour = new Date().getHours();
+  const suffix = name ? `, ${name}` : '';
+  if (hour < 12) return `Good morning${suffix}`;
+  if (hour < 18) return `Good afternoon${suffix}`;
+  return `Good evening${suffix}`;
+}
 
 function StatCard({
   label,
@@ -829,9 +838,9 @@ export default function AdminDashboardPage() {
 
   return (
     <PageShell
-      title={`Welcome back, ${user?.first_name || ''}`}
+      title={getGreeting(user?.first_name)}
       description="Here's what's happening across your business today."
-      icon={Home}
+      icon={Sun}
       actions={<TabSwitcher active={activeTab} onChange={setTab} />}
     >
       {tabContent[activeTab] || tabContent.business}
