@@ -538,10 +538,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="hidden lg:flex nm-raised m-2 mb-0 px-6 py-3 items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">{user?.role === 'employee' ? 'Employee Portal' : 'Admin Panel'}</h1>
+            <h1 className="text-lg font-semibold">
+              {user?.role === 'manager' ? 'Manager Panel' : user?.role === 'admin' ? 'Admin Panel' : 'Admin Panel'}
+            </h1>
             {user && (
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400" />
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-sm text-muted-foreground capitalize">{user.role}</span>
               </div>
             )}
@@ -570,7 +572,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           <button onClick={() => setMobileOpen(true)} className="p-2 text-muted-foreground">
             <Menu className="h-6 w-6" />
           </button>
-          <span className="font-semibold">{user?.role === 'employee' ? 'Employee Portal' : 'Admin Panel'}</span>
+          <span className="font-semibold">
+            {user?.role === 'manager' ? 'Manager Panel' : user?.role === 'admin' ? 'Admin Panel' : 'Admin Panel'}
+          </span>
           <div className="flex items-center gap-2">
             <NotificationBell />
             <ThemeToggle />

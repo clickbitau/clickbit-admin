@@ -11,11 +11,16 @@ import { ActiveWebsiteCard } from '@/components/dashboard/ActiveWebsiteCard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { toast } from 'sonner';
 import {
   fetchDashboardStats,
   fetchFinanceDashboard,
   fetchHrDashboard,
+  fetchPayslips,
+  fetchTimeOff,
+  fetchPublicHolidays,
   syncEmployees,
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -49,6 +54,7 @@ import {
   ArrowDownRight,
   CheckSquare,
   Sun,
+  FileText,
 } from 'lucide-react';
 import {
   Area,
@@ -334,6 +340,34 @@ function HRTab({ data, loading }: { data?: HrDashboardData; loading: boolean }) 
   const queryClient = useQueryClient();
   const { token } = useAuth();
   const [syncing, setSyncing] = useState(false);
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: recentPayslips } = useQuery({
+    queryKey: ['admin-recent-payslips', token],
+    queryFn: async () => {
+      const res = await fetchPayslips(token!, { limit: 5 });
+      return res.data ?? [];
+    },
+    enabled: !!token,
+  });
+
+  const { data: recentTimeOff } = useQuery({
+    queryKey: ['admin-recent-time-off', token],
+    queryFn: async () => {
+      const res = await fetchTimeOff(token!, { limit: 5 });
+      return res.data ?? [];
+    },
+    enabled: !!token,
+  });
+
+  const { data: upcomingHolidays } = useQuery({
+    queryKey: ['admin-upcoming-holidays', token],
+    queryFn: async () => {
+      const res = await fetchPublicHolidays(token!, { limit: 10 });
+      return (res.data ?? []).filter((h: any) => h.holiday_date >= today).slice(0, 5);
+    },
+    enabled: !!token,
+  });
 
   const handleSync = async () => {
     if (!window.confirm('Sync all admins/managers as employees?')) return;
@@ -547,6 +581,83 @@ function HRTab({ data, loading }: { data?: HrDashboardData; loading: boolean }) 
             <p className="text-sm text-gray-400 text-center py-8">No announcements yet</p>
           )}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="nm-raised">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Sun className="h-4 w-4" /> Upcoming Public Holidays
+            </CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/hr/public-holidays">View all</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {upcomingHolidays && upcomingHolidays.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {upcomingHolidays.map((h: any) => (
+                  <li key={h.id} className="flex justify-between">
+                    <span>{h.name}</span>
+                    <span className="text-muted-foreground">{formatDate(h.holiday_date)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">No upcoming holidays.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="nm-raised">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Receipt className="h-4 w-4" /> Recent Payslips
+            </CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/hr/payslips">View all</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentPayslips && recentPayslips.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {recentPayslips.slice(0, 5).map((p: any) => (
+                  <li key={p.id} className="flex justify-between items-center">
+                    <span>{formatDate(p.pay_period_start)} - {formatDate(p.pay_period_end)}</span>
+                    <span className="font-medium">{formatCurrency(Number(p.net_pay), p.currency)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">No payslips yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="nm-raised">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4" /> Recent Time Off
+            </CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/hr/time-off">View all</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentTimeOff && recentTimeOff.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {recentTimeOff.slice(0, 5).map((r: any) => (
+                  <li key={r.id} className="flex justify-between items-center">
+                    <span>{r.leave_type} ({formatDate(r.start_date)})</span>
+                    <StatusBadge status={r.status} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">No time-off requests.</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
