@@ -4,7 +4,8 @@ export function formatCurrency(value: number | string | undefined, currency = 'A
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(num);
 }
 
