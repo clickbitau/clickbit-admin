@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Calendar,
+  CalendarDays,
   Receipt,
   FileText,
   Clock,
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { href: '/employee/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/employee/reminders', label: 'Reminders', icon: Bell },
   { href: '/employee/staff-advances', label: 'My Advances', icon: Wallet },
+  { href: '/employee/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/employee/time-clock', label: 'Time Clock', icon: Clock },
   { href: '/employee/it-support', label: 'IT Support', icon: Headset },
 ];
