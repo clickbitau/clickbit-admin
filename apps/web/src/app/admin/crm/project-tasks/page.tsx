@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -48,6 +49,7 @@ import {
   Calendar,
   Tags,
   RefreshCw,
+  Filter,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -125,6 +127,7 @@ export default function ProjectTasksPage() {
   const [subprojectId, setSubprojectId] = useState('');
   const [viewScope, setViewScope] = useState<'all' | 'my' | 'unassigned'>('all');
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   const queryParams = useMemo(() => {
     const params: Record<string, string | number | boolean> = { page, limit: 25 };
@@ -439,8 +442,8 @@ export default function ProjectTasksPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        <div className="relative sm:col-span-2">
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search tasks..."
@@ -449,61 +452,77 @@ export default function ProjectTasksPage() {
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <Select value={priority} onValueChange={(v) => { setPriority(v); setPage(1); }}>
-          <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All priorities</SelectItem>
-            {PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={viewScope} onValueChange={(v) => { setViewScope(v as 'all' | 'my' | 'unassigned'); setPage(1); }}>
-          <SelectTrigger><SelectValue placeholder="Scope" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All tasks</SelectItem>
-            <SelectItem value="my">My tasks</SelectItem>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
-          <SelectTrigger>
-            <SelectValue placeholder={loadingAssignees ? 'Loading...' : 'Assignee'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All assignees</SelectItem>
-            {(assignees ?? []).map((u: User) => (
-              <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={projectId} onValueChange={(v) => { setProjectId(v); setPage(1); }}>
-          <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All projects</SelectItem>
-            <SelectItem value="none">No project</SelectItem>
-            {(projects?.projects ?? []).map((p: CrmProject) => (
-              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId || projectId === 'none'}>
-          <SelectTrigger><SelectValue placeholder="Subproject" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All subprojects</SelectItem>
-            {(subprojects?.subprojects ?? []).map((sp: CrmSubproject) => (
-              <SelectItem key={sp.id} value={String(sp.id)}>{sp.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Button
-          variant={hideCompleted ? 'default' : 'outline'}
+          variant={showFilters ? 'default' : 'outline'}
           size="sm"
-          onClick={() => { setHideCompleted((prev) => !prev); setPage(1); }}
-          className="w-full"
+          onClick={() => setShowFilters((v) => !v)}
         >
-          <CheckSquare className="mr-2 h-4 w-4" />
-          {hideCompleted ? 'Completed hidden' : 'Hide completed'}
+          <Filter className="mr-2 h-4 w-4" /> Filters
         </Button>
       </div>
+
+      {showFilters && (
+        <Card className="nm-raised">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Select value={priority} onValueChange={(v) => { setPriority(v); setPage(1); }}>
+                <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All priorities</SelectItem>
+                  {PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={viewScope} onValueChange={(v) => { setViewScope(v as 'all' | 'my' | 'unassigned'); setPage(1); }}>
+                <SelectTrigger><SelectValue placeholder="Scope" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All tasks</SelectItem>
+                  <SelectItem value="my">My tasks</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingAssignees ? 'Loading...' : 'Assignee'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All assignees</SelectItem>
+                  {(assignees ?? []).map((u: User) => (
+                    <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={projectId} onValueChange={(v) => { setProjectId(v); setPage(1); }}>
+                <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All projects</SelectItem>
+                  <SelectItem value="none">No project</SelectItem>
+                  {(projects?.projects ?? []).map((p: CrmProject) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId || projectId === 'none'}>
+                <SelectTrigger><SelectValue placeholder="Subproject" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All subprojects</SelectItem>
+                  {(subprojects?.subprojects ?? []).map((sp: CrmSubproject) => (
+                    <SelectItem key={sp.id} value={String(sp.id)}>{sp.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant={hideCompleted ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setHideCompleted((prev) => !prev); setPage(1); }}
+                className="w-full"
+              >
+                <CheckSquare className="mr-2 h-4 w-4" />
+                {hideCompleted ? 'Completed hidden' : 'Hide completed'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {view === 'kanban' ? (
         <KanbanView />
