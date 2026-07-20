@@ -19,6 +19,7 @@ interface DataTableProps<T> {
   renderRow: (row: T, index: number) => ReactNode[];
   loading?: boolean;
   emptyText?: string;
+  emptyDescription?: string;
   onRowClick?: (row: T, index: number) => void;
 }
 
@@ -29,6 +30,7 @@ export function DataTable<T>({
   renderRow,
   loading,
   emptyText = 'No records found.',
+  emptyDescription,
   onRowClick,
 }: DataTableProps<T>) {
   if (loading) {
@@ -42,7 +44,7 @@ export function DataTable<T>({
   }
 
   if (data.length === 0) {
-    return <EmptyState text={emptyText} />;
+    return <EmptyState text={emptyText} description={emptyDescription} />;
   }
 
   return (
