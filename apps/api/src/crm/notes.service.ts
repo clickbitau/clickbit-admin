@@ -3,10 +3,28 @@ import { enum_crm_notes_note_type } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNoteDto, UpdateNoteDto } from './dto';
 import { asJsonInput, buildLegacyList } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class NotesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('notes', ...parts) ?? `notes:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: {
     contact_id?: number;
@@ -19,6 +37,7 @@ export class NotesService {
     sortBy?: string;
     sortOrder?: string;
   }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const { contact_id, company_id, deal_id, activity_id, note_type, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
 
     const where: { [key: string]: unknown } = {};
@@ -44,15 +63,18 @@ export class NotesService {
     ]);
 
     return buildLegacyList('notes', notes, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const note = await this.prisma.crm_notes.findUnique({
       where: { id },
       include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
     });
     if (!note) throw new NotFoundException('Note not found');
     return { note };
+    });
   }
 
   async create(userId: number, dto: CreateNoteDto) {
@@ -72,6 +94,7 @@ export class NotesService {
       },
     });
 
+    await this.invalidateCache();
     return this.findOne(note.id);
   }
 
@@ -92,6 +115,8 @@ export class NotesService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -99,6 +124,8 @@ export class NotesService {
     const existing = await this.prisma.crm_notes.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Note not found');
     await this.prisma.crm_notes.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Note deleted successfully' };
   }
 }

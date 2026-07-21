@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildLegacyDataEnvelope, buildLegacyListEnvelope, buildLegacyMessageEnvelope } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 const profileSelect = { select: { id: true, first_name: true, last_name: true, email: true } } as const;
 
@@ -31,7 +32,24 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 
 @Injectable()
 export class RemindersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('reminders', ...parts) ?? `reminders:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private isAdminOrManager(user: Profile) {
     return user.role === 'admin' || user.role === 'manager';
@@ -50,6 +68,7 @@ export class RemindersService {
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
   }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -82,12 +101,15 @@ export class RemindersService {
     ]);
 
     return buildLegacyListEnvelope(rows.map(mapReminder), total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const reminder = await this.prisma.hr_reminders.findUnique({ where: { id }, include: reminderInclude });
     if (!reminder) throw new NotFoundException({ success: false, message: 'Reminder not found' });
     return buildLegacyDataEnvelope(mapReminder(reminder));
+    });
   }
 
   async create(dto: Record<string, unknown>, user: Profile) {
@@ -105,6 +127,7 @@ export class RemindersService {
       notes: (dto.notes as string) || null,
     };
     const created = await this.prisma.hr_reminders.create({ data, include: reminderInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapReminder(created));
   }
 
@@ -126,6 +149,8 @@ export class RemindersService {
     if (dto.notes !== undefined) data.notes = (dto.notes) || null;
 
     const updated = await this.prisma.hr_reminders.update({ where: { id }, data, include: reminderInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyDataEnvelope(mapReminder(updated));
   }
 
@@ -135,6 +160,8 @@ export class RemindersService {
       throw new ForbiddenException({ success: false, message: 'Not authorized to delete this reminder' });
     }
     await this.prisma.hr_reminders.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Reminder deleted successfully');
   }
 
@@ -146,6 +173,8 @@ export class RemindersService {
       data: { status: 'complete' },
       include: reminderInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Reminder marked as complete', mapReminder(updated));
   }
 

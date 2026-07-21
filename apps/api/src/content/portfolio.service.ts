@@ -1,12 +1,31 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { asJson, buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class PortfolioService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('portfolio', ...parts) ?? `portfolio:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async listPublic(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('public', JSON.stringify(query)), async () => {
     const where: any = { status: 'published', deleted_at: null };
     if (query.category) where.category = stringValue(query.category);
     if (query.featured === 'true') where.featured = true;
@@ -20,26 +39,34 @@ export class PortfolioService {
       this.prisma.portfolio_items.findMany({ where, orderBy: [{ sort_order: 'asc' }, { project_date: 'desc' }], ...(limit ? { skip: offset, take: limit } : {}) }),
     ]);
     return { items: items.map((i) => this.mapPortfolio(i as any, true)), pagination: { total, limit: limit || null, offset, hasMore: limit ? offset + items.length < total : false } };
+    });
   }
 
   async featured(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('featured', JSON.stringify(query)), async () => {
     const limit = numberValue(query.limit, 6);
     const items = await this.prisma.portfolio_items.findMany({ where: { status: 'published', featured: true, deleted_at: null }, orderBy: [{ sort_order: 'asc' }, { project_date: 'desc' }], take: limit });
     return { items: items.map((i) => this.mapPortfolio(i as any, true)) };
+    });
   }
 
   async categories() {
+    return this.cached(this.cacheKey('categories'), async () => {
     const rows = await this.prisma.portfolio_items.groupBy({ by: ['category'], where: { status: 'published', deleted_at: null, category: { not: null } } });
     return rows.map((r) => r.category).filter(Boolean);
+    });
   }
 
   async findBySlug(slug: string) {
+    return this.cached(this.cacheKey('detail', slug), async () => {
     const item = await this.prisma.portfolio_items.findFirst({ where: { slug, status: 'published', deleted_at: null } });
     if (!item) throw new NotFoundException({ message: 'Portfolio item not found' });
     return this.mapPortfolio(item as any);
+    });
   }
 
   async findAllAdmin(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('admin-list', JSON.stringify(query)), async () => {
     const where: any = { deleted_at: null };
     const status = stringValue(query.status);
     const category = stringValue(query.category);
@@ -54,26 +81,32 @@ export class PortfolioService {
       this.prisma.portfolio_items.findMany({ where, orderBy: { created_at: 'desc' }, skip: offset, take: limit }),
     ]);
     return { items: items.map((i) => this.mapPortfolio(i as any, false, true)), pagination: { total, limit, offset, hasMore: offset + items.length < total } };
+    });
   }
 
   async statsAdmin() {
+    return this.cached(this.cacheKey('admin-stats'), async () => {
     const stats = await this.prisma.portfolio_items.groupBy({ by: ['status'], _count: { id: true }, where: { deleted_at: null } });
     const result = { total: 0, published: 0, draft: 0, featured: 0 };
     for (const s of stats) { result.total += s._count.id; if (s.status === 'published') result.published = s._count.id; if (s.status === 'draft') result.draft = s._count.id; }
     const featured = await this.prisma.portfolio_items.count({ where: { deleted_at: null, featured: true } });
     result.featured = featured;
     return result;
+    });
   }
 
   async findOneAdmin(id: number) {
+    return this.cached(this.cacheKey('admin-detail', id), async () => {
     const item = await this.prisma.portfolio_items.findUnique({ where: { id } });
     if (!item) throw new NotFoundException({ message: 'Portfolio item not found' });
     return { item: this.mapPortfolio(item as any, false, true) };
+    });
   }
 
   async create(dto: Record<string, unknown>) {
     const data: any = this.buildPortfolioData(dto);
     const created = await this.prisma.portfolio_items.create({ data });
+    await this.invalidateCache();
     return { message: 'Portfolio item created successfully', item: this.mapPortfolio(created as any, false, true) };
   }
 
@@ -82,6 +115,8 @@ export class PortfolioService {
     if (!item) throw new NotFoundException({ message: 'Portfolio item not found' });
     const data: any = this.buildPortfolioData(dto, true);
     const updated = await this.prisma.portfolio_items.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return { message: 'Portfolio item updated successfully', item: this.mapPortfolio(updated as any, false, true) };
   }
 
@@ -89,6 +124,8 @@ export class PortfolioService {
     const item = await this.prisma.portfolio_items.findUnique({ where: { id } });
     if (!item) throw new NotFoundException({ message: 'Portfolio item not found' });
     await this.prisma.portfolio_items.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return buildMessageEnvelope('Portfolio item deleted successfully');
   }
 

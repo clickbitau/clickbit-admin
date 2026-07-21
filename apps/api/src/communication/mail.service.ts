@@ -3,6 +3,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildDataEnvelope, buildListEnvelope, buildMessageEnvelope, numberValue, stringValue } from './communication-utils';
+import { CacheService } from '../redis/cache.service';
 
 const EMAIL_PRESETS: Record<string, any> = {
   hostinger: { imap_host: 'imap.hostinger.com', imap_port: 993, imap_secure: true, smtp_host: 'smtp.hostinger.com', smtp_port: 465, smtp_secure: true },
@@ -13,15 +14,34 @@ const EMAIL_PRESETS: Record<string, any> = {
 
 @Injectable()
 export class MailService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('mail', ...parts) ?? `mail:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   getPresets() {
     return buildDataEnvelope(EMAIL_PRESETS);
   }
 
   async listAccounts(user: Profile) {
+    return this.cached(this.cacheKey('accounts', user.id), async () => {
     const accounts = await this.prisma.email_accounts.findMany({ where: { profile_id: user.id }, orderBy: { created_at: 'asc' } });
     return buildDataEnvelope(accounts);
+    });
   }
 
   async createAccount(user: Profile, dto: Record<string, unknown>) {
@@ -49,6 +69,7 @@ export class MailService {
       },
     });
 
+    await this.invalidateCache();
     return buildDataEnvelope(created);
   }
 
@@ -75,6 +96,8 @@ export class MailService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('accounts', user.id));
     return buildDataEnvelope(updated);
   }
 
@@ -82,6 +105,8 @@ export class MailService {
     const account = await this.prisma.email_accounts.findFirst({ where: { id, profile_id: user.id } });
     if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
     await this.prisma.email_accounts.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('accounts', user.id));
     return buildMessageEnvelope('Account removed');
   }
 
@@ -90,6 +115,7 @@ export class MailService {
   }
 
   async listFolders(user: Profile, accountId: string) {
+    return this.cached(this.cacheKey('folders', user.id, accountId), async () => {
     const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
     if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
 
@@ -97,9 +123,11 @@ export class MailService {
     const folders = rows.map((r) => r.folder_path || 'INBOX');
     if (!folders.includes('INBOX')) folders.unshift('INBOX');
     return buildDataEnvelope(folders.map((f) => ({ path: f, name: f })));
+    });
   }
 
   async listMessages(user: Profile, accountId: string, folderPath: string, query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('messages', user.id, accountId, folderPath, JSON.stringify(query)), async () => {
     const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
     if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
 
@@ -115,9 +143,11 @@ export class MailService {
 
     const count = await this.prisma.cached_emails.count({ where: { account_id: accountId, folder_path: folderPath } });
     return buildListEnvelope(messages, count, limit, offset);
+    });
   }
 
   async getMessage(user: Profile, accountId: string, folderPath: string, uid: string) {
+    return this.cached(this.cacheKey('message', user.id, accountId, folderPath, uid), async () => {
     const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
     if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
 
@@ -126,6 +156,7 @@ export class MailService {
     const message = await this.prisma.cached_emails.findFirst({ where: { account_id: accountId, folder_path: folderPath, uid: uidInt } });
     if (!message) throw new NotFoundException({ success: false, message: 'Message not found' });
     return buildDataEnvelope(message);
+    });
   }
 
   async send(user: Profile, accountId: string, dto: Record<string, unknown>) {
@@ -154,8 +185,10 @@ export class MailService {
   }
 
   async listTemplates(user: Profile) {
+    return this.cached(this.cacheKey('templates', user.id), async () => {
     const templates = await this.prisma.email_templates.findMany({ where: { profile_id: user.id }, orderBy: { created_at: 'desc' } });
     return buildDataEnvelope(templates);
+    });
   }
 
   async createTemplate(user: Profile, dto: Record<string, unknown>) {
@@ -166,6 +199,8 @@ export class MailService {
       data: { id: randomUUID(), profile_id: user.id, name, subject: stringValue(dto.subject) || null, body_text: stringValue(dto.body_text) || null, body_html: stringValue(dto.body_html) || null },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('templates', user.id));
     return buildDataEnvelope(created);
   }
 
@@ -183,6 +218,8 @@ export class MailService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('templates', user.id));
     return buildDataEnvelope(updated);
   }
 
@@ -190,13 +227,17 @@ export class MailService {
     const template = await this.prisma.email_templates.findFirst({ where: { id, profile_id: user.id } });
     if (!template) throw new NotFoundException({ success: false, message: 'Template not found' });
     await this.prisma.email_templates.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('templates', user.id));
     return buildMessageEnvelope('Template removed');
   }
 
   async getSignature(user: Profile, id: string) {
+    return this.cached(this.cacheKey('signature', user.id, id), async () => {
     const account = await this.prisma.email_accounts.findFirst({ where: { id, profile_id: user.id }, select: { signature_html: true, signature_text: true } });
     if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
     return buildDataEnvelope({ signature_html: account.signature_html, signature_text: account.signature_text });
+    });
   }
 
   async updateSignature(user: Profile, id: string, dto: Record<string, unknown>) {
@@ -208,13 +249,17 @@ export class MailService {
       data: { signature_html: stringValue(dto.signature_html) || null, signature_text: stringValue(dto.signature_text) || null },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('signature', user.id, id));
     return buildDataEnvelope({ signature_html: updated.signature_html, signature_text: updated.signature_text });
   }
 
   async getAliases(user: Profile, id: string) {
+    return this.cached(this.cacheKey('aliases', user.id, id), async () => {
     const account = await this.prisma.email_accounts.findFirst({ where: { id, profile_id: user.id }, select: { aliases: true } });
     if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
     return buildDataEnvelope(account.aliases || []);
+    });
   }
 
   async updateAliases(user: Profile, id: string, dto: Record<string, unknown>) {
@@ -226,6 +271,8 @@ export class MailService {
       data: { aliases: (dto.aliases || []) as any },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('aliases', user.id, id));
     return buildDataEnvelope(updated.aliases || []);
   }
 }

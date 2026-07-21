@@ -12,12 +12,31 @@ import {
   SendSupportEmailDto,
 } from './dto';
 import { asJsonInput, buildLegacyList, buildPagination, mapProjectSupportPeriod, mapSubprojectSupportPeriod, safeDate } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('projects', ...parts) ?? `projects:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: { status?: string; search?: string; company_id?: string | number; manager_id?: string | number; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const { status, search, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
     const companyId = query.company_id ? Number(query.company_id) : undefined;
     const managerId = query.manager_id ? Number(query.manager_id) : undefined;
@@ -59,9 +78,11 @@ export class ProjectsService {
     ]);
 
     return { ...buildLegacyList('projects', projects.map((p) => this.mapProject(p)), total, page, limit), stats };
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const project = await this.prisma.crm_projects.findUnique({
       where: { id },
       include: {
@@ -76,12 +97,14 @@ export class ProjectsService {
     const mapped = this.mapProject(project);
     mapped.financials = await this.projectFinancials(id);
     return { project: mapped };
+    });
   }
 
   async create(userId: number, dto: CreateProjectDto) {
     const project = await this.prisma.crm_projects.create({
       data: this.buildProjectData(userId, dto) as unknown as Prisma.crm_projectsUncheckedCreateInput,
     });
+    await this.invalidateCache();
     return this.findOne(project.id);
   }
 
@@ -94,6 +117,8 @@ export class ProjectsService {
       data: this.buildProjectData(existing.created_by || 0, dto, existing),
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -101,6 +126,8 @@ export class ProjectsService {
     const existing = await this.prisma.crm_projects.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Project not found');
     await this.prisma.crm_projects.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Project deleted successfully' };
   }
 
@@ -184,6 +211,8 @@ export class ProjectsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Task created successfully', data: task };
   }
 
@@ -211,6 +240,8 @@ export class ProjectsService {
       data: this.buildSubprojectData(id, userId, dto) as unknown as Prisma.crm_subprojectsUncheckedCreateInput,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { data: subproject };
   }
 
@@ -223,6 +254,8 @@ export class ProjectsService {
       data: this.buildSubprojectData(existing.parent_project_id, existing.created_by || 0, dto, existing),
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', existing.parent_project_id));
     return { data: await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } }) };
   }
 
@@ -230,6 +263,8 @@ export class ProjectsService {
     const existing = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
     if (!existing) throw new NotFoundException('Subproject not found');
     await this.prisma.crm_subprojects.update({ where: { id: subprojectId }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', existing.parent_project_id));
     return { message: 'Subproject deleted successfully' };
   }
 
@@ -262,6 +297,8 @@ export class ProjectsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { data: document };
   }
 
@@ -270,6 +307,8 @@ export class ProjectsService {
     const doc = await this.prisma.crm_project_documents.findUnique({ where: { id: documentId } });
     if (!doc || doc.project_id !== id) throw new NotFoundException('Document not found');
     await this.prisma.crm_project_documents.delete({ where: { id: documentId } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Document deleted successfully' };
   }
 
@@ -306,6 +345,8 @@ export class ProjectsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { data: meeting };
   }
 
@@ -327,6 +368,8 @@ export class ProjectsService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { data: await this.prisma.crm_meetings.findUnique({ where: { id: meetingId } }) };
   }
 
@@ -335,6 +378,8 @@ export class ProjectsService {
     const existing = await this.prisma.crm_meetings.findUnique({ where: { id: meetingId } });
     if (!existing || existing.crm_project_id !== id) throw new NotFoundException('Meeting not found');
     await this.prisma.crm_meetings.delete({ where: { id: meetingId } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Meeting deleted successfully' };
   }
 
@@ -349,6 +394,8 @@ export class ProjectsService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -367,6 +414,8 @@ export class ProjectsService {
       data: { progress_percentage: progress },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { data: { project_id: id, progress_percentage: progress } };
   }
 

@@ -3,12 +3,31 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAutomationDto, UpdateAutomationDto } from './dto';
 import { asJsonInput, buildLegacyList } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class AutomationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('automations', ...parts) ?? `automations:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: { trigger_type?: string; target_entity?: string; is_active?: boolean; page?: number; limit?: number }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const { trigger_type, target_entity, is_active, page = 1, limit = 50 } = query;
 
     const where: { [key: string]: unknown } = {};
@@ -27,12 +46,15 @@ export class AutomationsService {
     ]);
 
     return buildLegacyList('automations', automations, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const automation = await this.prisma.crm_automations.findUnique({ where: { id } });
     if (!automation) throw new NotFoundException('Automation not found');
     return { automation };
+    });
   }
 
   async create(userId: number, dto: CreateAutomationDto) {
@@ -51,6 +73,7 @@ export class AutomationsService {
       },
     });
 
+    await this.invalidateCache();
     return this.findOne(automation.id);
   }
 
@@ -74,6 +97,8 @@ export class AutomationsService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -86,6 +111,8 @@ export class AutomationsService {
       data: { is_active: !existing.is_active },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -105,6 +132,8 @@ export class AutomationsService {
     const existing = await this.prisma.crm_automations.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Automation not found');
     await this.prisma.crm_automations.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Automation deleted successfully' };
   }
 }

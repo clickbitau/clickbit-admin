@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { stringValue, parseJson, numberValue } from './content-utils';
+import { CacheService } from '../redis/cache.service';
 
 const DEFAULTS: Record<string, any> = {
   'site_identity': { siteTitle: 'ClickBit - Web Solutions', metaDescription: 'ClickBit - Custom Web & Software Solutions', faviconUrl: '/favicon.ico' },
@@ -62,7 +63,20 @@ const KEY_MAP: Record<string, string> = {
 
 @Injectable()
 export class PublicContentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('public-content', ...parts) ?? `public-content:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private getSettingKey(routeKey: string): string {
     const dbKey = Object.keys(KEY_MAP).find((k) => KEY_MAP[k] === routeKey);
@@ -70,13 +84,16 @@ export class PublicContentService {
   }
 
   async getContent(key: string) {
+    return this.cached(this.cacheKey('content', key), async () => {
     const dbKey = this.getSettingKey(key);
     const setting = await this.prisma.site_settings.findFirst({ where: { setting_key: dbKey } });
     const value = setting ? parseJson(setting.setting_value, DEFAULTS[dbKey]) : DEFAULTS[dbKey];
     return value || DEFAULTS[dbKey];
+    });
   }
 
   async search(user: Profile | null, query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('search', user?.id ?? 'anon', JSON.stringify(query)), async () => {
     const term = stringValue(query.q || query.query).toLowerCase();
     const limit = Math.min(numberValue(query.limit, 20), 50);
     const isAdmin = user && (user.role === 'admin' || user.role === 'manager');
@@ -111,5 +128,6 @@ export class PublicContentService {
       total: 0,
       isAdmin: isAdmin || false,
     };
+    });
   }
 }

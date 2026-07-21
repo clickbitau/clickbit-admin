@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { Profile } from '@clickbit/shared';
 import { stringValue } from './settings-utils';
+import { CacheService } from '../redis/cache.service';
 
 const DEFAULT_MANAGER_PERMISSIONS = [
   'content:list', 'content:view', 'content:create', 'content:update', 'content:delete',
@@ -97,7 +98,26 @@ const AVAILABLE_PERMISSIONS: Record<string, { key: string; label: string; descri
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService, private readonly storage: StorageService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly storage: StorageService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('users', ...parts) ?? `users:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private getSupabaseAdmin() {
     const url = this.config.get<string>('SUPABASE_URL');
@@ -107,6 +127,7 @@ export class UsersService {
   }
 
   async findAll(query: Record<string, unknown>, user: Profile) {
+    return this.cached(this.cacheKey('list', user.id, user.role, JSON.stringify(query)), async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Number(query.limit) || 50);
     const offset = (page - 1) * limit;
@@ -132,30 +153,35 @@ export class UsersService {
       this.prisma.profiles.findMany({ where, select: { id: true, first_name: true, last_name: true, email: true, role: true, status: true, avatar: true, created_at: true, auth_uid: true, email_verified: true, last_login: true, locked_until: true, login_attempts: true }, orderBy, skip: offset, take: limit }),
     ]);
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
-  }
-
-  async findTeam() {
-    return this.prisma.profiles.findMany({
-      where: { role: { in: ['admin', 'manager'] }, status: 'active', deleted_at: null },
-      select: { id: true, first_name: true, last_name: true, email: true, role: true, avatar: true },
-      orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
     });
   }
 
+  async findTeam() {
+    return this.cached(this.cacheKey('team'), async () => this.prisma.profiles.findMany({
+      where: { role: { in: ['admin', 'manager'] }, status: 'active', deleted_at: null },
+      select: { id: true, first_name: true, last_name: true, email: true, role: true, avatar: true },
+      orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
+    }));
+  }
+
   async findManagers() {
+    return this.cached(this.cacheKey('managers'), async () => {
     const managers = await this.prisma.profiles.findMany({
       where: { role: 'manager', deleted_at: null },
       select: { id: true, first_name: true, last_name: true, email: true, status: true, permissions: true, created_at: true, last_login: true },
       orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
     });
     return managers.map((m: any) => ({ ...m, permissions: m.permissions || [], usingDefaultPermissions: !m.permissions || (Array.isArray(m.permissions) && m.permissions.length === 0) }));
+    });
   }
 
   async findById(id: number, actor: Profile) {
+    return this.cached(this.cacheKey('detail', actor.id, id), async () => {
     const user = await this.prisma.profiles.findUnique({ where: { id } });
     if (!user || user.deleted_at) throw new NotFoundException({ message: 'Profile not found' });
     if (actor.role === 'manager' && user.role !== 'customer') throw new ForbiddenException({ message: 'Managers can only view customer accounts.' });
     return user;
+    });
   }
 
   async create(dto: Record<string, unknown>, actor: Profile) {
@@ -186,6 +212,8 @@ export class UsersService {
         status: 'active', created_at: new Date(), updated_at: new Date(),
       },
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', actor.id, user.id));
     return user;
   }
 
@@ -246,6 +274,8 @@ export class UsersService {
     }
 
     const updated = await this.prisma.profiles.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', actor.id, id));
     return updated;
   }
 
@@ -259,10 +289,13 @@ export class UsersService {
       if (error) throw new BadRequestException({ message: 'Failed to delete user from authentication service. ' + error.message });
     }
     await this.prisma.profiles.update({ where: { id }, data: { email: `deleted.user.${user.id}.${Date.now()}@deleted.local`, auth_uid: null, status: 'archived', deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', actor.id, id));
     return { message: 'Profile deleted successfully' };
   }
 
   async accountStatus(id: number) {
+    return this.cached(this.cacheKey('account-status', id), async () => {
     const user = await this.prisma.profiles.findUnique({ where: { id } });
     if (!user || user.deleted_at) throw new NotFoundException({ message: 'Profile not found' });
     const linkedContact = await this.prisma.contacts.findFirst({ where: { user_id: id } });
@@ -281,6 +314,7 @@ export class UsersService {
       password_reset_email: { sent: false, sent_at: null },
       linked_contact: linkedContact ? { id: linkedContact.id, name: linkedContact.name, email: linkedContact.email, lifecycle_stage: linkedContact.lifecycle_stage, company: linkedContact.company } : null,
     };
+    });
   }
 
   async resendWelcome(id: number) {
@@ -296,7 +330,9 @@ export class UsersService {
           user_metadata: { first_name: user.first_name, last_name: user.last_name },
         });
         if (error) throw new BadRequestException({ message: error.message });
-        await this.prisma.profiles.update({ where: { id: user.id }, data: { auth_uid: data.user?.id } });
+        await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id));
+    await this.prisma.profiles.update({ where: { id: user.id }, data: { auth_uid: data.user?.id } });
       }
       const { data: link, error: linkError } = await admin.auth.admin.generateLink({ type: 'magiclink', email: user.email });
       if (linkError) throw new BadRequestException({ message: linkError.message });
@@ -335,6 +371,8 @@ export class UsersService {
     const result = await this.storage.upload(file.buffer, 'avatars', file.originalname, file.mimetype, '', `user-${user.id}-${Date.now()}.webp`);
     if (!result.success) throw new InternalServerErrorException(result.error);
     await this.prisma.profiles.update({ where: { id }, data: { avatar: result.url } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', actor.id, id));
     return { success: true, message: 'Avatar uploaded successfully', data: { avatar: result.url } };
   }
 
@@ -344,6 +382,8 @@ export class UsersService {
     if (actor.role === 'manager' && user.role !== 'customer') throw new ForbiddenException({ message: 'Managers can only update customer accounts.' });
     if (user.avatar) await this.storage.deleteByUrl(user.avatar, ['avatars']);
     await this.prisma.profiles.update({ where: { id }, data: { avatar: null } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', actor.id, id));
     return { success: true, message: 'Avatar deleted successfully', data: { avatar: null } };
   }
 
@@ -352,11 +392,13 @@ export class UsersService {
   }
 
   async getPermissions(id: number) {
+    return this.cached(this.cacheKey('permissions', id), async () => {
     const user = await this.prisma.profiles.findUnique({ where: { id }, select: { id: true, first_name: true, last_name: true, email: true, role: true, permissions: true } });
     if (!user) throw new NotFoundException({ message: 'Profile not found' });
     if (user.role !== 'manager') throw new BadRequestException({ message: 'Permissions can only be customized for managers. Admins have all permissions by default.' });
     const perms = Array.isArray(user.permissions) ? user.permissions : [];
     return { user: { id: user.id, name: `${user.first_name} ${user.last_name}`, email: user.email, role: user.role }, customPermissions: perms, effectivePermissions: perms.length > 0 ? perms : DEFAULT_MANAGER_PERMISSIONS, usingDefaultPermissions: perms.length === 0 };
+    });
   }
 
   async updatePermissions(id: number, permissions: string[]) {
@@ -365,6 +407,8 @@ export class UsersService {
     if (!user) throw new NotFoundException({ message: 'Profile not found' });
     if (user.role !== 'manager') throw new BadRequestException({ message: 'Permissions can only be customized for managers. Admins have all permissions by default.' });
     const updated = await this.prisma.profiles.update({ where: { id }, data: { permissions: permissions.length > 0 ? permissions as any : [] } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('permissions', id));
     return { message: 'Permissions updated successfully', user: { id: updated.id, name: `${updated.first_name} ${updated.last_name}`, email: updated.email }, permissions: permissions.length > 0 ? permissions : DEFAULT_MANAGER_PERMISSIONS, usingDefaultPermissions: permissions.length === 0 };
   }
 
@@ -373,6 +417,8 @@ export class UsersService {
     if (!user) throw new NotFoundException({ message: 'Profile not found' });
     if (user.role !== 'manager') throw new BadRequestException({ message: 'Permissions can only be reset for managers.' });
     const updated = await this.prisma.profiles.update({ where: { id }, data: { permissions: [] as any } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('permissions', id));
     return { message: 'Permissions reset to defaults', user: { id: updated.id, name: `${updated.first_name} ${updated.last_name}`, email: updated.email }, permissions: DEFAULT_MANAGER_PERMISSIONS };
   }
 }

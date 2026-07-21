@@ -12,10 +12,28 @@ import {
   CreateProjectFromDealDto,
 } from './dto';
 import { asJsonInput, buildLegacyList, safeDate, toNumber } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class DealsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('deals', ...parts) ?? `deals:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: {
     pipeline_id?: number;
@@ -31,6 +49,7 @@ export class DealsService {
     sortBy?: string;
     sortOrder?: string;
   }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const {
       pipeline_id,
       stage_id,
@@ -82,9 +101,11 @@ export class DealsService {
     ]);
 
     return buildLegacyList('deals', deals, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const deal = await this.prisma.deals.findUnique({
       where: { id },
       include: {
@@ -110,6 +131,7 @@ export class DealsService {
       contactAssociations: deal.crm_deal_contacts?.map((dc: any) => ({ contact: dc.contacts })) ?? [],
     };
     return { deal: mapped };
+    });
   }
 
   async getRelated(id: number) {
@@ -234,6 +256,7 @@ export class DealsService {
       });
     }
 
+    await this.invalidateCache();
     return this.findOne(deal.id);
   }
 
@@ -247,6 +270,8 @@ export class DealsService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -293,6 +318,8 @@ export class DealsService {
       });
     }
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -396,6 +423,10 @@ export class DealsService {
 
     const updatedDeal = await this.findOne(id);
 
+    await this.invalidateCache();
+    await this.cache?.delPrefix(this.cache?.key('contacts') ?? 'contacts');
+    await this.cache?.delPrefix(this.cache?.key('companies') ?? 'companies');
+    await this.cache?.delPrefix(this.cache?.key('leads') ?? 'leads');
     return {
       ...updatedDeal.deal,
       portalAccess: portalResult
@@ -440,6 +471,8 @@ export class DealsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -475,6 +508,8 @@ export class DealsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -487,6 +522,8 @@ export class DealsService {
       data: { deleted_at: new Date() },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Deal deleted successfully' };
   }
 
@@ -499,6 +536,7 @@ export class DealsService {
       data: updateData,
     });
 
+    await this.invalidateCache();
     return { message: `${deal_ids.length} deals updated` };
   }
 
@@ -508,6 +546,7 @@ export class DealsService {
       data: { deleted_at: new Date() },
     });
 
+    await this.invalidateCache();
     return { message: `${dto.deal_ids.length} deals deleted` };
   }
 
@@ -537,6 +576,8 @@ export class DealsService {
       data: { is_project: true, project_status: 'not_started' },
     });
 
+    await this.invalidateCache();
+    await this.cache?.delPrefix(this.cache?.key('projects') ?? 'projects');
     return { data: project };
   }
 
@@ -550,6 +591,8 @@ export class DealsService {
       data: { value },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 

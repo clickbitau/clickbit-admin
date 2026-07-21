@@ -4,6 +4,7 @@ import * as https from 'https';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildLegacyDataEnvelope, buildLegacyMessageEnvelope } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 function parseDateOnly(value?: string | Date | null): Date | undefined {
   if (!value) return undefined;
@@ -14,13 +15,31 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 
 @Injectable()
 export class PublicHolidaysService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('public-holidays', ...parts) ?? `public-holidays:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private isAdminOrManager(user: Profile) {
     return user.role === 'admin' || user.role === 'manager';
   }
 
   async findAll(query: { start_date?: string; end_date?: string; year?: string; country?: string }, user: Profile) {
+    return this.cached(this.cacheKey('list', user.id, JSON.stringify(query)), async () => {
     const year = query.year ? Number(query.year) : new Date().getFullYear();
     const where: Prisma.hr_public_holidaysWhereInput = {
       holiday_date: {
@@ -46,6 +65,7 @@ export class PublicHolidaysService {
 
     const holidays = await this.prisma.hr_public_holidays.findMany({ where, orderBy: { holiday_date: 'asc' } });
     return { success: true, data: holidays, count: holidays.length };
+    });
   }
 
   async create(dto: Record<string, unknown>, user: Profile) {
@@ -60,6 +80,7 @@ export class PublicHolidaysService {
       updated_at: new Date(),
     };
     const created = await this.prisma.hr_public_holidays.create({ data });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(created);
   }
 
@@ -74,12 +95,16 @@ export class PublicHolidaysService {
     data.updated_at = new Date();
 
     const updated = await this.prisma.hr_public_holidays.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyDataEnvelope(updated);
   }
 
   async remove(id: number, _user: Profile) {
     await this.findOne(id);
     await this.prisma.hr_public_holidays.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Holiday deleted');
   }
 
@@ -115,13 +140,16 @@ export class PublicHolidaysService {
       }
     }
 
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope(`Successfully imported ${imported} holidays for ${locationName}.`);
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const holiday = await this.prisma.hr_public_holidays.findUnique({ where: { id } });
     if (!holiday) throw new NotFoundException({ success: false, message: 'Holiday not found' });
     return buildLegacyDataEnvelope(holiday);
+    });
   }
 
   private fetchHolidays(year: number, countryCode: string): Promise<Array<{ date: string; name: string; global: boolean }>> {

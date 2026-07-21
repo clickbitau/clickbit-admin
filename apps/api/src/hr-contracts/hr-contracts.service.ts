@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 interface UserLike {
   id: number;
@@ -52,9 +53,27 @@ function normalizeContract(c: any) {
 
 @Injectable()
 export class HrContractsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('hr-contracts', ...parts) ?? `hr-contracts:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(user: UserLike, query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('list', user.id, user.role, JSON.stringify(query)), async () => {
     const selfMode = String(query.self).toLowerCase() === 'true';
     const where: Prisma.hr_contractsWhereInput = {};
     if (typeof query.status === 'string') where.status = query.status as any;
@@ -76,9 +95,11 @@ export class HrContractsService {
     });
 
     return { success: true, data: contracts.map(normalizeContract) };
+    });
   }
 
   async findOne(user: UserLike, id: number) {
+    return this.cached(this.cacheKey('detail', user.id, id), async () => {
     const contract = await this.prisma.hr_contracts.findUnique({ where: { id }, include: contractInclude });
     if (!contract) throw new NotFoundException('Contract not found');
 
@@ -91,9 +112,11 @@ export class HrContractsService {
     }
 
     return { success: true, data: normalizeContract(contract) };
+    });
   }
 
   async findBlockedEmployeeIds(user: UserLike) {
+    return this.cached(this.cacheKey('blocked-ids', user.id), async () => {
     if (user.role.toLowerCase() === 'admin') return { blockedEmployeeIds: [] };
 
     const managerEmp = await this.prisma.employees.findUnique({ where: { user_id: user.id } });
@@ -122,6 +145,7 @@ export class HrContractsService {
     adminEmployees.forEach((e) => blockedIds.add(e.id));
 
     return { blockedEmployeeIds: Array.from(blockedIds) };
+    });
   }
 
   async create(user: UserLike, dto: CreateContractDtoLike) {
@@ -143,6 +167,7 @@ export class HrContractsService {
 
     await this.syncToEmployee(contract.employee_id);
 
+    await this.invalidateCache();
     return { success: true, data: normalizeContract(contract) };
   }
 
@@ -164,6 +189,8 @@ export class HrContractsService {
       await this.syncToEmployee(contract.employee_id);
     }
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, data: normalizeContract(contract) };
   }
 
@@ -199,6 +226,8 @@ export class HrContractsService {
       include: contractInclude,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return {
       success: true,
       message: 'Contract accepted successfully',
@@ -224,6 +253,8 @@ export class HrContractsService {
 
     await this.syncToEmployee(updated.employee_id);
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Contract activated', data: normalizeContract(updated) };
   }
 
@@ -245,6 +276,8 @@ export class HrContractsService {
       include: contractInclude,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Contract terminated', data: normalizeContract(updated) };
   }
 

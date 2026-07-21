@@ -1,31 +1,55 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildMessageEnvelope, numberValue, stringValue } from './content-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class TeamService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('team', ...parts) ?? `team:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async listPublic() {
+    return this.cached(this.cacheKey('public'), async () => {
     return this.prisma.teams.findMany({ where: { is_active: true }, orderBy: [{ display_order: 'asc' }, { id: 'asc' }] });
+    });
   }
 
   async findById(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const member = await this.prisma.teams.findUnique({ where: { id } });
     if (!member) throw new NotFoundException({ message: 'Team member not found' });
     return member;
+    });
   }
 
   async findAllAdmin() {
-    return this.prisma.teams.findMany({ orderBy: [{ display_order: 'asc' }, { id: 'asc' }] });
+    return this.cached(this.cacheKey('admin-list'), async () => this.prisma.teams.findMany({ orderBy: [{ display_order: 'asc' }, { id: 'asc' }] }));
   }
 
   async statsAdmin() {
+    return this.cached(this.cacheKey('admin-stats'), async () => {
     const [total, active] = await this.prisma.$transaction([
       this.prisma.teams.count(),
       this.prisma.teams.count({ where: { is_active: true } }),
     ]);
     return { total, active, inactive: total - active };
+    });
   }
 
   async create(dto: Record<string, unknown>) {
@@ -44,7 +68,9 @@ export class TeamService {
       created_at: new Date(),
       updated_at: new Date(),
     };
-    return this.prisma.teams.create({ data });
+    const created = await this.prisma.teams.create({ data });
+    await this.invalidateCache();
+    return created;
   }
 
   async update(id: number, dto: Record<string, unknown>) {
@@ -63,13 +89,18 @@ export class TeamService {
     if (dto.is_active !== undefined) data.is_active = dto.is_active === true;
     if (dto.user_id !== undefined) data.user_id = numberValue(dto.user_id) || null;
     data.updated_at = new Date();
-    return this.prisma.teams.update({ where: { id }, data });
+    const updated = await this.prisma.teams.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
+    return updated;
   }
 
   async remove(id: number) {
     const member = await this.prisma.teams.findUnique({ where: { id } });
     if (!member) throw new NotFoundException({ message: 'Team member not found' });
     await this.prisma.teams.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildMessageEnvelope('Team member deleted successfully');
   }
 }
