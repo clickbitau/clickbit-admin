@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException 
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 interface UserLike {
   id: number;
@@ -51,9 +52,27 @@ const SCALE_2_WEEKLY = [
 
 @Injectable()
 export class PayslipsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('payslips', ...parts) ?? `payslips:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
 
   async findMyPayslips(_user: UserLike) {
+    const cacheKey = this.cacheKey('my', _user.id);
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindMyPayslips(_user), this.CACHE_TTL_SECONDS) ?? this.fetchFindMyPayslips(_user);
+  }
+
+  private async fetchFindMyPayslips(_user: UserLike) {
     const emp = await this.prisma.employees.findFirst({ where: { user_id: _user.id } });
     if (!emp) return [];
 
@@ -66,6 +85,11 @@ export class PayslipsService {
   }
 
   async findPayslips(query: Record<string, unknown>, _user: UserLike) {
+    const cacheKey = this.cacheKey('list', _user.id, _user.role, JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindPayslips(query, _user), this.CACHE_TTL_SECONDS) ?? this.fetchFindPayslips(query, _user);
+  }
+
+  private async fetchFindPayslips(query: Record<string, unknown>, _user: UserLike) {
     const where: Prisma.payslipsWhereInput = {};
     const employeeId = this.asNumber(query.employee_id);
     if (employeeId) where.employee_id = employeeId;
@@ -137,6 +161,11 @@ export class PayslipsService {
   }
 
   async findOne(id: number, user: UserLike) {
+    const cacheKey = this.cacheKey('detail', user.id, id);
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindOne(id, user), this.CACHE_TTL_SECONDS) ?? this.fetchFindOne(id, user);
+  }
+
+  private async fetchFindOne(id: number, user: UserLike) {
     const payslip = await this.prisma.payslips.findUnique({
       where: { id },
       include: {
@@ -358,6 +387,7 @@ export class PayslipsService {
       }
     }
 
+    await this.invalidateCache();
     return { success: true, message: `Successfully created ${created.length} payslips`, count: created.length };
   }
 
@@ -381,6 +411,8 @@ export class PayslipsService {
     const payslip = await this.prisma.payslips.findUnique({ where: { id } });
     if (!payslip) throw new NotFoundException('Payslip not found');
     await this.prisma.payslips.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', undefined, id));
     return { success: true, message: `Payslip ${id} has been permanently deleted` };
   }
 
@@ -394,6 +426,8 @@ export class PayslipsService {
     if (!payslip) throw new NotFoundException('Payslip not found');
     const mappedStatus = status === 'pending' ? 'generated' : status;
     const updated = await this.prisma.payslips.update({ where: { id }, data: { status: mappedStatus as any } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', undefined, id));
     return { success: true, message: 'Status updated', payslip: this.mapPayslip(updated) };
   }
 
@@ -410,6 +444,8 @@ export class PayslipsService {
     this.emailPayslip(payslip, payslip.employees);
     if ((payslip.status as any) === 'generated') {
       await this.prisma.payslips.update({ where: { id }, data: { status: 'sent' as any } });
+      await this.invalidateCache();
+      await this.cache?.del(this.cacheKey('detail', undefined, id));
     }
     return { success: true, message: 'Email sent successfully' };
   }

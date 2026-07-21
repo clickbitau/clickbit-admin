@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildLegacyDataEnvelope, buildLegacyMessageEnvelope, parseNumber } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -45,7 +46,10 @@ function mapTimeEntry(entry: any) {
 
 @Injectable()
 export class TimesheetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
 
   private async findEmployee(userId: number) {
     return this.prisma.employees.findFirst({ where: { user_id: userId, deleted_at: null } });
@@ -77,12 +81,27 @@ export class TimesheetsService {
     }
   }
 
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('timesheets', ...parts) ?? `timesheets:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
   private employeeName(employee: any) {
     const p = employee?.profiles || employee?.user;
     return `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || p?.email || 'Unknown Employee';
   }
 
   async findAll(query: any, user: Profile) {
+    const cacheKey = this.cacheKey('list', user.id, user.role, JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindAll(query, user), this.CACHE_TTL_SECONDS) ?? this.fetchFindAll(query, user);
+  }
+
+  private async fetchFindAll(query: any, user: Profile) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
     const offset = (page - 1) * limit;
@@ -208,6 +227,11 @@ export class TimesheetsService {
   }
 
   async findOne(id: number, user: Profile) {
+    const cacheKey = this.cacheKey('detail', user.id, id);
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindOne(id, user), this.CACHE_TTL_SECONDS) ?? this.fetchFindOne(id, user);
+  }
+
+  private async fetchFindOne(id: number, user: Profile) {
     const entry = await this.prisma.hr_time_entries.findUnique({
       where: { id },
       include: {
@@ -310,6 +334,8 @@ export class TimesheetsService {
 
       const updated = await this.prisma.hr_time_entries.update({ where: { id }, data: updates });
       await this.audit('update', 'hr_time_entry', id, user, previous, updates, req);
+      await this.invalidateCache();
+      await this.cache?.del(this.cacheKey('detail', user.id, id));
       return { success: true, message: 'Time entry updated', data: updated };
     }
 
@@ -333,6 +359,8 @@ export class TimesheetsService {
     });
 
     this.notifyManager(entry.employee_id, 'Timesheet Edit Request', `${this.employeeName(await this.prisma.employees.findFirst({ where: { id: entry.employee_id }, include: { profiles: true } }))} requested a timesheet edit: ${dto.reason?.substring(0, 100)}`, `/admin/hr/timesheets`, { entry_id: id });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Edit request submitted — pending manager approval', data: updated };
   }
 
@@ -371,6 +399,8 @@ export class TimesheetsService {
 
     const updated = await this.prisma.hr_time_entries.update({ where: { id }, data: updates });
     await this.audit('approve', 'hr_time_entry', id, user, previous, updates, req);
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Time entry approved', data: updated };
   }
 
@@ -384,6 +414,8 @@ export class TimesheetsService {
       data: { status: 'rejected', approved_by: user.id, approved_at: new Date(), admin_notes: dto.reason || entry.admin_notes },
     });
     await this.audit('reject', 'hr_time_entry', id, user, previous, { reason: dto.reason }, req);
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Time entry rejected', data: updated };
   }
 
@@ -516,6 +548,8 @@ export class TimesheetsService {
       });
     }
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, data: workItem };
   }
 
@@ -535,6 +569,7 @@ export class TimesheetsService {
       await this.prisma.project_tasks.update({ where: { id: item.task_id }, data: { actual_hours: new Prisma.Decimal(total) } });
     }
 
+    await this.invalidateCache();
     return { success: true };
   }
 
@@ -571,6 +606,7 @@ export class TimesheetsService {
       this.notifyManager(targetEmployeeId, 'Manual Timesheet Entry', `A manual time entry was submitted${dto.reason ? `: ${dto.reason.substring(0, 100)}` : ''}`, `/admin/hr/timesheets`, { entry_id: entry.id });
     }
 
+    await this.invalidateCache();
     return { success: true, message: 'Manual time entry created', data: entry };
   }
 
@@ -578,6 +614,7 @@ export class TimesheetsService {
     const previous = await this.prisma.hr_time_entries.findMany({ where: { id: { in: ids } } });
     const { count } = await this.prisma.hr_time_entries.deleteMany({ where: { id: { in: ids } } });
     await this.audit('bulk_delete', 'hr_time_entry', ids.join(','), user, previous, { count }, req);
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope(`${count} time entries deleted`, { deleted: count });
   }
 
@@ -587,6 +624,8 @@ export class TimesheetsService {
 
     await this.prisma.hr_time_entries.delete({ where: { id } });
     await this.audit('delete', 'hr_time_entry', id, user, entry, null, req);
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return buildLegacyMessageEnvelope('Time entry deleted');
   }
 
