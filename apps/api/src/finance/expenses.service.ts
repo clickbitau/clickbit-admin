@@ -20,10 +20,28 @@ import {
   receiptInclude,
   safeDate,
 } from './finance-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class ExpensesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('expenses', ...parts) ?? `expenses:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private get expenses() {
     return this.prisma.expenses;
@@ -76,6 +94,8 @@ export class ExpensesService {
   }
 
   async getStats(startDate?: string, endDate?: string) {
+    const cacheKey = this.cacheKey('stats', startDate, endDate);
+    return this.cached(cacheKey, async () => {
     const where = this.whereDateClause('expenses', startDate, endDate);
 
     type TotalRow = { total_count: bigint; total_amount: Prisma.Decimal | number };
@@ -148,9 +168,12 @@ export class ExpensesService {
       pending_reimbursement: Number(special.pending_reimbursement),
       billable_unbilled: Number(special.billable_unbilled),
     };
+    });
   }
 
   async findAll(query: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'ASC' | 'DESC'; [key: string]: unknown }, user: Profile) {
+    const cacheKey = this.cacheKey('list', user.id, user.role, JSON.stringify(query));
+    return this.cached(cacheKey, async () => {
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(250, Math.max(1, Number(query.limit ?? 20)));
     const sortBy = (query.sortBy as string) || 'expense_date';
@@ -204,33 +227,42 @@ export class ExpensesService {
     ]);
 
     return buildLegacyListEnvelope(rows.map(mapExpense), total, page, limit);
+    });
   }
 
   async findPendingApproval() {
+    return this.cached(this.cacheKey('pending'), async () => {
     const rows = await this.expenses.findMany({
       where: { status: 'pending' },
       include: expenseInclude,
       orderBy: { expense_date: 'desc' },
     });
     return buildLegacyDataEnvelope(rows.map(mapExpense));
+    });
   }
 
   async findReimbursable(employeeId?: number) {
+    return this.cached(this.cacheKey('reimbursable', employeeId ?? 'all'), async () => {
     const where: Prisma.expensesWhereInput = { is_reimbursable: true, status: 'approved' };
     if (employeeId) where.employee_id = employeeId;
     const rows = await this.expenses.findMany({ where, include: expenseInclude, orderBy: { expense_date: 'desc' } });
     return buildLegacyDataEnvelope(rows.map(mapExpense));
+    });
   }
 
   async findBillable(contactId?: number, companyId?: number) {
+    return this.cached(this.cacheKey('billable', contactId ?? 'all', companyId ?? 'all'), async () => {
     const where: Prisma.expensesWhereInput = { is_billable: true, invoice_id: null };
     if (contactId) where.billed_to_contact_id = contactId;
     if (companyId) where.billed_to_company_id = companyId;
     const rows = await this.expenses.findMany({ where, include: expenseInclude, orderBy: { expense_date: 'desc' } });
     return buildLegacyDataEnvelope(rows.map(mapExpense));
+    });
   }
 
   async findOne(id: number, user: Profile) {
+    const cacheKey = this.cacheKey('detail', user.id, id);
+    return this.cached(cacheKey, async () => {
     const expense = await this.expenses.findUnique({ where: { id }, include: expenseInclude });
     if (!expense) throw new NotFoundException({ success: false, message: 'Expense not found' });
 
@@ -244,6 +276,7 @@ export class ExpensesService {
     }
 
     return buildLegacyDataEnvelope(mapExpense(expense));
+    });
   }
 
   async create(userId: number, dto: Record<string, unknown>) {
@@ -290,6 +323,7 @@ export class ExpensesService {
     };
 
     const created = await this.expenses.create({ data, include: expenseInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapExpense(created));
   }
 
@@ -347,6 +381,7 @@ export class ExpensesService {
     if (dto.tax_rate !== undefined) updates.tax_rate = parseNumber(dto.tax_rate);
 
     const updated = await this.expenses.update({ where: { id }, data: updates, include: expenseInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapExpense(updated));
   }
 
@@ -361,6 +396,7 @@ export class ExpensesService {
     }
 
     await this.expenses.delete({ where: { id } });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Expense deleted');
   }
 
@@ -373,6 +409,7 @@ export class ExpensesService {
       data: { status: 'approved', approved_by: userId, approved_at: new Date() },
       include: expenseInclude,
     });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Expense approved', mapExpense(updated));
   }
 
@@ -385,6 +422,7 @@ export class ExpensesService {
       data: { status: 'rejected', approved_by: userId, approved_at: new Date(), rejection_reason: reason || null },
       include: expenseInclude,
     });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Expense rejected', mapExpense(updated));
   }
 
@@ -400,6 +438,7 @@ export class ExpensesService {
       data: { status: 'reimbursed', reimbursed_at: new Date(), reimbursement_reference: reference || null },
       include: expenseInclude,
     });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Expense marked as reimbursed', mapExpense(updated));
   }
 
@@ -418,6 +457,8 @@ export class ExpensesService {
       data: { invoice_id: invoiceId, is_billable: true },
       include: expenseInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.delPrefix(this.cache?.key('invoices') ?? 'invoices');
     return buildLegacyMessageEnvelope('Expense added to invoice', mapExpense(updated));
   }
 
@@ -457,6 +498,7 @@ export class ExpensesService {
     };
 
     const created = await this.expenses.create({ data, include: expenseInclude });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Expense duplicated', mapExpense(created));
   }
 
@@ -481,12 +523,15 @@ export class ExpensesService {
       data: { receipts: asJsonInput(receipts) },
       include: expenseInclude,
     });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Receipt added', mapExpense(updated));
   }
 
   // Receipts
 
   async findReceipts(query: { page?: number; limit?: number; status?: string; start_date?: string; end_date?: string }, user: Profile) {
+    const cacheKey = this.cacheKey('receipts', 'list', user.id, user.role, JSON.stringify(query));
+    return this.cached(cacheKey, async () => {
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(250, Math.max(1, Number(query.limit ?? 20)));
 
@@ -509,18 +554,23 @@ export class ExpensesService {
     ]);
 
     return buildLegacyListEnvelope(rows.map(mapReceipt), total, page, limit);
+    });
   }
 
   async findUnmatchedReceipts() {
+    return this.cached(this.cacheKey('receipts', 'unmatched'), async () => {
     const rows = await this.receipts.findMany({
       where: { status: 'processed', expense_id: null },
       include: receiptInclude,
       orderBy: { receipt_date: 'desc' },
     });
     return buildLegacyDataEnvelope(rows.map(mapReceipt));
+    });
   }
 
   async getReceiptStats(startDate?: string, endDate?: string) {
+    const cacheKey = this.cacheKey('receipts', 'stats', startDate, endDate);
+    return this.cached(cacheKey, async () => {
     const where = this.whereDateClause('receipts', startDate, endDate);
 
     type TotalRow = {
@@ -579,9 +629,12 @@ export class ExpensesService {
       ocr_pending: Number(total.ocr_pending),
       by_vendor: byVendor,
     };
+    });
   }
 
   async findReceipt(id: number, user: Profile) {
+    const cacheKey = this.cacheKey('receipts', 'detail', user.id, id);
+    return this.cached(cacheKey, async () => {
     const receipt = await this.receipts.findUnique({ where: { id }, include: receiptInclude });
     if (!receipt) throw new NotFoundException({ success: false, message: 'Receipt not found' });
 
@@ -590,6 +643,7 @@ export class ExpensesService {
     }
 
     return buildLegacyDataEnvelope(mapReceipt(receipt));
+    });
   }
 
   async createReceipt(userId: number, dto: Record<string, unknown>) {
@@ -616,6 +670,7 @@ export class ExpensesService {
     };
 
     const created = await this.receipts.create({ data, include: receiptInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapReceipt(created));
   }
 
@@ -644,6 +699,7 @@ export class ExpensesService {
     if (dto.vendor_id !== undefined) updates.vendor_id = dto.vendor_id ? Number(dto.vendor_id) : null;
 
     const updated = await this.receipts.update({ where: { id }, data: updates, include: receiptInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapReceipt(updated));
   }
 
@@ -656,6 +712,7 @@ export class ExpensesService {
     }
 
     await this.receipts.delete({ where: { id } });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Receipt deleted');
   }
 
@@ -672,6 +729,7 @@ export class ExpensesService {
       data: { expense_id: expenseId, status: 'matched' },
       include: receiptInclude,
     });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Receipt linked to expense', mapReceipt(updated));
   }
 
@@ -689,6 +747,7 @@ export class ExpensesService {
       data: { expense_id: null, status },
       include: receiptInclude,
     });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Receipt unlinked', mapReceipt(updated));
   }
 
@@ -743,6 +802,7 @@ export class ExpensesService {
       include: receiptInclude,
     });
 
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Expense created from receipt', { expense: mapExpense(expense), receipt: mapReceipt(updatedReceipt) });
   }
 }
