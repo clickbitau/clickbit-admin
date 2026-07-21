@@ -2,16 +2,23 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, FileText, Search, Trash2, Upload } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Pagination } from '@/components/design-system/Pagination';
+import { DocumentForm } from '@/components/documents/DocumentForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { deleteDocument, fetchDocumentSignedUrl, fetchDocuments } from '@/lib/api';
@@ -29,6 +36,7 @@ export default function AdminDocumentsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const params = useMemo(() => ({ page, limit: 20, search: search || undefined }), [page, search]);
 
@@ -83,9 +91,7 @@ export default function AdminDocumentsPage() {
             className="pl-8"
           />
         </div>
-        <Button asChild>
-          <Link href="/admin/documents/new"><Upload className="mr-2 h-4 w-4" /> Upload Document</Link>
-        </Button>
+        <Button onClick={() => setCreateOpen(true)}><Upload className="mr-2 h-4 w-4" /> Upload Document</Button>
       </div>
 
       <Card>
@@ -152,6 +158,22 @@ export default function AdminDocumentsPage() {
             totalItems={pagination.totalItems}
             onPageChange={setPage}
           />
+
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Upload Document</DialogTitle>
+                <DialogDescription>Upload a new file and set its metadata.</DialogDescription>
+              </DialogHeader>
+              {token && (
+                <DocumentForm
+                  token={token}
+                  onSuccess={() => { setCreateOpen(false); refresh(); }}
+                  onCancel={() => setCreateOpen(false)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
     </PageShell>

@@ -8,6 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -17,6 +24,7 @@ import {
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { PageShell } from '@/components/design-system/PageShell';
+import { ProjectTaskForm } from '@/components/crm/ProjectTaskForm';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { useDebounce } from '@/lib/useDebounce';
@@ -128,6 +136,7 @@ export default function ProjectTasksPage() {
   const [viewScope, setViewScope] = useState<'all' | 'my' | 'unassigned'>('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const queryParams = useMemo(() => {
     const params: Record<string, string | number | boolean> = { page, limit: 25 };
@@ -421,10 +430,8 @@ export default function ProjectTasksPage() {
               <LayoutGrid className="h-4 w-4 mr-1" /> Kanban
             </Button>
           </div>
-          <Button asChild>
-            <Link href={`${basePath}/new`}>
-              <Plus className="mr-1 h-4 w-4" /> New Task
-            </Link>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Task
           </Button>
         </div>
       }
@@ -616,6 +623,22 @@ export default function ProjectTasksPage() {
             totalItems={pagination.totalItems}
             onPageChange={setPage}
           />
+
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>New Project Task</DialogTitle>
+                <DialogDescription>Create a task inside a project.</DialogDescription>
+              </DialogHeader>
+              {token && (
+                <ProjectTaskForm
+                  token={token}
+                  onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['tasks'] }); }}
+                  onCancel={() => setCreateOpen(false)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </PageShell>
