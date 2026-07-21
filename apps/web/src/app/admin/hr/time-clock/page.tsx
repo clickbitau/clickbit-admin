@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { Clock, Coffee, MapPin, Play, Square, Users, Timer, Calendar, Plus, Trash2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +23,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { LocationMap } from '@/components/LocationMap';
@@ -520,39 +521,29 @@ export default function AdminHrTimeClockPage() {
           </CardHeader>
           <CardContent>
             {loadingActive && <Skeleton className="h-20" />}
-            {!loadingActive && activeEmployees.length === 0 && (
-              <p className="text-sm text-muted-foreground">No one is currently clocked in.</p>
-            )}
-            {!loadingActive && activeEmployees.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Clock In</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Department</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activeEmployees.map((entry: any) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium">{entry.employee_name}</TableCell>
-                      <TableCell>{formatDateTime(entry.clock_in_time)}</TableCell>
-                      <TableCell>{entry.formatted_duration || formatDurationSeconds(entry.duration_minutes ? entry.duration_minutes * 60 : 0)}</TableCell>
-                      <TableCell>
-                        {entry.is_on_break ? (
-                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">On Break</Badge>
-                        ) : (
-                          <Badge variant="default">Active</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{entry.department || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <DataTable
+              headers={[
+                { key: 'employee', label: 'Employee' },
+                { key: 'clock_in', label: 'Clock In' },
+                { key: 'duration', label: 'Duration' },
+                { key: 'status', label: 'Status' },
+                { key: 'department', label: 'Department' },
+              ]}
+              data={activeEmployees}
+              keyExtractor={(entry: any) => entry.id}
+              loading={loadingActive}
+              emptyText="No one is currently clocked in."
+              renderRow={(entry: any) => [
+                <div key="employee" className="flex items-center gap-3">
+                  <PersonAvatar name={entry.employee_name} size="sm" />
+                  <span className="font-medium">{entry.employee_name}</span>
+                </div>,
+                <span key="clock_in">{formatDateTime(entry.clock_in_time)}</span>,
+                <span key="duration">{entry.formatted_duration || formatDurationSeconds(entry.duration_minutes ? entry.duration_minutes * 60 : 0)}</span>,
+                <span key="status">{entry.is_on_break ? <Badge variant="outline" className="bg-yellow-100 text-yellow-800">On Break</Badge> : <Badge variant="default">Active</Badge>}</span>,
+                <span key="department">{entry.department || '-'}</span>,
+              ]}
+            />
           </CardContent>
         </Card>
       )}
