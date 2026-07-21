@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
 function toDec(value: unknown): Decimal | null {
@@ -31,7 +32,20 @@ function pick(body: any, fields: string[]) {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('admin', ...parts) ?? `admin:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private profileSelect = { id: true, first_name: true, last_name: true, email: true, role: true };
 
@@ -49,6 +63,7 @@ export class AdminService {
   }
 
   async getDashboardStats(user?: any) {
+    return this.cached(this.cacheKey('dashboard', user?.id ?? 'all'), async () => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -188,6 +203,7 @@ export class AdminService {
         myTaskStats,
       },
     };
+    });
   }
 
   private async getMyTaskStats(userId: number) {

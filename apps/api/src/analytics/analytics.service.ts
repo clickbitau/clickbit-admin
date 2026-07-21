@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 function getPeriodStart(period?: string | number) {
   const days = Math.min(Math.max(Number(period) || 30, 1), 365);
@@ -40,7 +41,20 @@ function asBool(v: unknown): boolean | undefined {
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('analytics', ...parts) ?? `analytics:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async track(req: any, dto: Record<string, unknown>) {
     let clientIP = asStr(dto.ip_address) || req.ip;
@@ -97,6 +111,7 @@ export class AnalyticsService {
   }
 
   async dashboard(period?: string | number) {
+    return this.cached(this.cacheKey('dashboard', period ?? 30), async () => {
     const start = getPeriodStart(period);
     const where = { created_at: { gte: start } };
 
@@ -122,6 +137,7 @@ export class AnalyticsService {
         geographicStats: geographicStats.map((g) => ({ country: g.country, visits: g._count })),
       },
     };
+    });
   }
 
   async eventsByType(type: string, period?: string | number) {
