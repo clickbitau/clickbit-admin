@@ -248,6 +248,7 @@ export interface HrStats {
     onLeave: number;
     terminated: number;
     byDepartment: Array<{ department: string; count: number }>;
+    byType: Array<{ type: string; count: number }>;
   };
   contracts: { total: number; active: number; expired: number; expiringSoon: number };
   timeOff: { total: number; pending: number; approved: number; rejected: number };
