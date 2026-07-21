@@ -7,6 +7,7 @@ import { BarChart3, Calendar, RefreshCw, Search, Trophy, Users } from 'lucide-re
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -139,7 +140,10 @@ export default function AdminHrKpiPage() {
           emptyText="No KPI data for this period."
           emptyDescription="Try another period or run the snapshot."
           renderRow={(s: KpiScore) => [
-            <span key="employee" className="font-medium">{s.employee?.name || `Employee ${s.employee_id}`}</span>,
+            <div key="employee" className="flex items-center gap-3">
+              <PersonAvatar name={s.employee?.name || `Employee ${s.employee_id}`} />
+              <span className="font-medium">{s.employee?.name || `Employee ${s.employee_id}`}</span>
+            </div>,
             <Badge key="total" variant={scoreVariant(s.total_score) as any}>{s.total_score?.toFixed(1) || 0}</Badge>,
             <span key="punctuality">{s.punctuality_score?.toFixed(1) || 0}</span>,
             <span key="efficiency">{s.task_efficiency_score?.toFixed(1) || 0}</span>,

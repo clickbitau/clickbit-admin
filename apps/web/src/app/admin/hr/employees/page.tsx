@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { EmployeeForm } from '@/components/hr/EmployeeForm';
@@ -129,10 +130,12 @@ export default function AdminHrEmployeesPage() {
     return employee.name || `Employee #${employee.id}`;
   }
 
-  function employeeInitials(employee: Employee) {
-    const first = employee.user?.first_name?.[0] || employee.name?.[0] || '#';
-    const last = employee.user?.last_name?.[0] || '';
-    return `${first}${last}`.toUpperCase();
+  function managerName(employee: Employee) {
+    if (employee.manager) {
+      const full = `${employee.manager.first_name || ''} ${employee.manager.last_name || ''}`.trim();
+      return full || employee.manager.email || '-';
+    }
+    return '-';
   }
 
   return (
@@ -215,9 +218,7 @@ export default function AdminHrEmployeesPage() {
           emptyDescription="Try adjusting your search or filters."
           renderRow={(employee) => [
             <div key="employee" className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white">
-                {employeeInitials(employee)}
-              </div>
+              <PersonAvatar name={employeeName(employee)} avatar_url={employee.user?.avatar} />
               <div>
                 <Link href={`/admin/hr/employees/${employee.id}`} className="font-medium hover:underline">{employeeName(employee)}</Link>
                 <p className="text-xs text-muted-foreground">{employee.user?.email || employee.user?.phone || '-'}</p>
@@ -226,11 +227,16 @@ export default function AdminHrEmployeesPage() {
             <span key="number" className="font-mono text-sm">{employee.employee_number || `#${employee.id}`}</span>,
             <Badge key="department" variant="outline" className="capitalize">{employee.departmentInfo?.name || employee.department || '-'}</Badge>,
             <span key="position">{employee.position || '-'}</span>,
-            <span key="manager">
-              {employee.manager
-                ? `${employee.manager.first_name || ''} ${employee.manager.last_name || ''}`.trim() || employee.manager.email || '-'
-                : '-'}
-            </span>,
+            <div key="manager" className="flex items-center gap-2">
+              {employee.manager ? (
+                <>
+                  <PersonAvatar name={managerName(employee)} size="sm" />
+                  <span>{managerName(employee)}</span>
+                </>
+              ) : (
+                <span>-</span>
+              )}
+            </div>,
             <span key="type" className="capitalize">{(employee.employment_type || '').replace(/_/g, ' ')}</span>,
             <StatusBadge key="status" status={employee.employment_status || 'active'} />,
             <span key="hire_date">{formatDate(employee.hire_date)}</span>,

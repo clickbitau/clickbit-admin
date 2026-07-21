@@ -8,6 +8,7 @@ import { CheckCircle, FileText, Plus, Power, Search, XCircle } from 'lucide-reac
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ContractForm } from '@/components/hr/ContractForm';
 import { Button } from '@/components/ui/button';
@@ -169,7 +170,10 @@ export default function AdminHrContractsPage() {
           emptyText="No contracts found."
           emptyDescription="Try adjusting your search or status filter."
           renderRow={(c: Contract) => [
-            <Link key="employee" href={`/admin/hr/contracts/${c.id}`} className="font-medium hover:underline">{c.employee?.name || `Employee ${c.employee_id}`}</Link>,
+            <div key="employee" className="flex items-center gap-3">
+              <PersonAvatar name={c.employee?.name || `Employee ${c.employee_id}`} />
+              <Link href={`/admin/hr/contracts/${c.id}`} className="font-medium hover:underline">{c.employee?.name || `Employee ${c.employee_id}`}</Link>
+            </div>,
             <span key="position">{c.position || '-'}</span>,
             <span key="type" className="capitalize">{(c.employment_type || '').replace(/_/g, ' ')}</span>,
             <span key="start">{formatDate(c.start_date)}</span>,
