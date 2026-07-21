@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -884,59 +886,52 @@ export default function AdminHrTimesheetsPage() {
               <CardTitle>Time Entries</CardTitle>
             </CardHeader>
             <CardContent>
-              {loadingEntries && <div className="text-muted-foreground">Loading...</div>}
-              {!loadingEntries && (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Clock In</TableHead>
-                        <TableHead>Clock Out</TableHead>
-                        <TableHead>Duration</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pagedList.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground">No entries found.</TableCell>
-                        </TableRow>
-                      )}
-                      {pagedList.map((entry) => (
-                        <TableRow key={entry.id} className="cursor-pointer hover:bg-primary/5" onClick={() => openDetail(entry)}>
-                          <TableCell>{entry.employee?.name || entry.employee?.email || `Employee ${entry.employee_id}`}</TableCell>
-                          <TableCell>{entry.clock_in_time ? new Date(entry.clock_in_time).toLocaleDateString('en-AU') : '-'}</TableCell>
-                          <TableCell>{formatTimeOnly(entry.clock_in_time)}</TableCell>
-                          <TableCell>{formatTimeOnly(entry.clock_out_time)}</TableCell>
-                          <TableCell>{formatDuration(entry.total_minutes)}</TableCell>
-                          <TableCell><Badge variant={(statusColor[entry.status] as any) || 'secondary'}>{entry.status}</Badge></TableCell>
-                          <TableCell className="text-right space-x-1" onClick={(e) => e.stopPropagation()}>
-                            <Button size="sm" variant="ghost" onClick={() => openDetail(entry)}><Eye className="h-4 w-4" /></Button>
-                            {entry.status !== 'approved' && entry.clock_out_time && (
-                              <Button size="sm" variant="ghost" onClick={() => approve.mutate(entry.id)} disabled={approve.isPending}><CheckCircle className="h-4 w-4" /></Button>
-                            )}
-                            {entry.status !== 'rejected' && (
-                              <Button size="sm" variant="ghost" onClick={() => reject.mutate(entry.id)} disabled={reject.isPending}><XCircle className="h-4 w-4" /></Button>
-                            )}
-                            <Button size="sm" variant="ghost" onClick={() => openEdit(entry)}><Edit className="h-4 w-4" /></Button>
-                            {!entry.clock_out_time && <Button size="sm" variant="ghost" onClick={() => handleQuickSignOut(entry)}><Square className="h-4 w-4" /></Button>}
-                            {isManager && <Button size="sm" variant="ghost" onClick={() => remove.mutate(entry.id)} disabled={remove.isPending}><Trash2 className="h-4 w-4" /></Button>}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <Pagination
-                    currentPage={listPage}
-                    totalPages={listPages}
-                    totalItems={filteredListEntries.length}
-                    onPageChange={setListPage}
-                  />
-                </>
-              )}
+              <DataTable
+                headers={[
+                  { key: 'employee', label: 'Employee' },
+                  { key: 'date', label: 'Date' },
+                  { key: 'clock_in', label: 'Clock In' },
+                  { key: 'clock_out', label: 'Clock Out' },
+                  { key: 'duration', label: 'Duration' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'actions', label: '', className: 'text-right' },
+                ]}
+                data={pagedList}
+                keyExtractor={(entry: TimeEntry) => entry.id}
+                loading={loadingEntries}
+                onRowClick={(entry: TimeEntry) => openDetail(entry)}
+                emptyText="No entries found."
+                renderRow={(entry: TimeEntry) => [
+                  <div key="employee" className="flex items-center gap-3">
+                    <PersonAvatar name={entry.employee?.name || entry.employee?.email || `Employee ${entry.employee_id}`} size="sm" />
+                    <span className="font-medium">{entry.employee?.name || entry.employee?.email || `Employee ${entry.employee_id}`}</span>
+                  </div>,
+                  <span key="date">{entry.clock_in_time ? new Date(entry.clock_in_time).toLocaleDateString('en-AU') : '-'}</span>,
+                  <span key="clock_in">{formatTimeOnly(entry.clock_in_time)}</span>,
+                  <span key="clock_out">{formatTimeOnly(entry.clock_out_time)}</span>,
+                  <span key="duration">{formatDuration(entry.total_minutes)}</span>,
+                  <span key="status"><Badge variant={(statusColor[entry.status] as any) || 'secondary'}>{entry.status}</Badge></span>,
+                  <div key="actions" className="text-right space-x-1" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => openDetail(entry)}><Eye className="h-4 w-4" /></Button>
+                    {entry.status !== 'approved' && entry.clock_out_time && (
+                      <Button size="sm" variant="ghost" onClick={() => approve.mutate(entry.id)} disabled={approve.isPending}><CheckCircle className="h-4 w-4" /></Button>
+                    )}
+                    {entry.status !== 'rejected' && (
+                      <Button size="sm" variant="ghost" onClick={() => reject.mutate(entry.id)} disabled={reject.isPending}><XCircle className="h-4 w-4" /></Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(entry)}><Edit className="h-4 w-4" /></Button>
+                    {!entry.clock_out_time && <Button size="sm" variant="ghost" onClick={() => handleQuickSignOut(entry)}><Square className="h-4 w-4" /></Button>}
+                    {isManager && <Button size="sm" variant="ghost" onClick={() => remove.mutate(entry.id)} disabled={remove.isPending}><Trash2 className="h-4 w-4" /></Button>}
+                  </div>,
+                ]}
+              />
+              <Pagination
+                className="mt-4"
+                currentPage={listPage}
+                totalPages={listPages}
+                totalItems={filteredListEntries.length}
+                onPageChange={setListPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
