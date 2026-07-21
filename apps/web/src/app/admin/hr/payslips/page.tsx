@@ -3,21 +3,27 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Banknote, Calendar, Calculator, Download, FileText, Mail, Trash2 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { DataTable } from '@/components/design-system/DataTable';
+import { Pagination } from '@/components/design-system/Pagination';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { calculatePayslip, deletePayslip, fetchHrStats, fetchPayslips, nextPayRun, resendPayslipEmail } from '@/lib/api';
-
-function formatCurrency(value: number | string | undefined, currency?: string) {
-  const n = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : 0;
-  return `${currency || 'AUD'} ${isNaN(n) ? '0.00' : n.toFixed(2)}`;
-}
+import {
+  calculatePayslip,
+  deletePayslip,
+  fetchHrStats,
+  fetchPayslips,
+  fetchPayslipPdf,
+  nextPayRun,
+  resendPayslipEmail,
+} from '@/lib/api';
+import { formatCurrency, formatDate } from '@/lib/format';
 
 export default function AdminHrPayslipsPage() {
   const { token } = useAuth();
@@ -91,6 +97,23 @@ export default function AdminHrPayslipsPage() {
     onSuccess: refresh,
   });
 
+  const downloadPdf = async (id: number) => {
+    if (!token) return;
+    try {
+      const blob = await fetchPayslipPdf(token, id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payslip-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast?.error?.(err?.response?.data?.message || 'Failed to download PDF');
+    }
+  };
+
   const statCards = stats ? [
     { label: 'Total', value: stats.payslips.total, icon: FileText, onClick: () => { setStatus(''); setPage(1); } },
     { label: 'Generated', value: stats.payslips.generated, icon: FileText, accent: 'warning' as const, onClick: () => { setStatus('generated'); setPage(1); } },
@@ -102,14 +125,6 @@ export default function AdminHrPayslipsPage() {
     { label: 'Total Net', value: formatCurrency(totalNet), icon: Banknote, accent: 'success' as const },
     { label: 'Overdue', value: 0, icon: Calendar },
   ];
-
-  const statusColor: Record<string, string> = {
-    draft: 'secondary',
-    generated: 'secondary',
-    pending: 'warning',
-    paid: 'default',
-    sent: 'outline',
-  };
 
   return (
     <PageShell title="Payslips" icon={Banknote} description="Calculate, review, and manage employee payslips.">
@@ -154,71 +169,53 @@ export default function AdminHrPayslipsPage() {
         <CardHeader>
           <CardTitle>Payslips</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {error && <div className="text-destructive">Failed to load payslips.</div>}
-          {isLoading && <div className="text-muted-foreground">Loading...</div>}
 
-          {!isLoading && (
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="whitespace-nowrap">Employee</TableHead>
-                  <TableHead className="whitespace-nowrap">Period</TableHead>
-                  <TableHead className="whitespace-nowrap">Payment Date</TableHead>
-                  <TableHead className="whitespace-nowrap">Gross</TableHead>
-                  <TableHead className="whitespace-nowrap">Tax</TableHead>
-                  <TableHead className="whitespace-nowrap">Net</TableHead>
-                  <TableHead className="whitespace-nowrap">Status</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payslips.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">No payslips found.</TableCell>
-                  </TableRow>
-                )}
-                {payslips.map((p: any) => (
-                  <TableRow
-                    key={p.id}
-                    className="cursor-pointer hover:bg-primary/5"
-                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/payslips/${p.id}`); }}
-                  >
-                    <TableCell>{p.employee?.name || `Employee ${p.employee_id}`}</TableCell>
-                    <TableCell>{new Date(p.pay_period_start).toLocaleDateString()} — {new Date(p.pay_period_end).toLocaleDateString()}</TableCell>
-                    <TableCell>{new Date(p.payment_date).toLocaleDateString()}</TableCell>
-                    <TableCell>{formatCurrency(p.gross_pay, p.currency)}</TableCell>
-                    <TableCell>{formatCurrency(p.tax_withheld, p.currency)}</TableCell>
-                    <TableCell>{formatCurrency(p.net_pay, p.currency)}</TableCell>
-                    <TableCell>
-                      <Badge variant={(statusColor[p.status || ''] as any) || 'secondary'}>{p.status || 'generated'}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      {p.pdf_url && (
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={p.pdf_url} target="_blank" rel="noreferrer"><Download className="h-4 w-4" /></a>
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => resendMutation.mutate(p.id)} disabled={resendMutation.isPending}>
-                        <Mail className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => removeMutation.mutate(p.id)} disabled={removeMutation.isPending}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            headers={[
+              { key: 'employee', label: 'Employee' },
+              { key: 'period', label: 'Period' },
+              { key: 'payment_date', label: 'Payment Date' },
+              { key: 'gross', label: 'Gross' },
+              { key: 'tax', label: 'Tax' },
+              { key: 'net', label: 'Net' },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: '', className: 'w-40 text-right' },
+            ]}
+            data={payslips}
+            keyExtractor={(p: any) => p.id}
+            loading={isLoading}
+            emptyText="No payslips found."
+            onRowClick={(p: any) => router.push(`/admin/hr/payslips/${p.id}`)}
+            renderRow={(p: any) => [
+              <span key="employee">{p.employee?.name || `Employee ${p.employee_id}`}</span>,
+              <span key="period">{formatDate(p.pay_period_start)} — {formatDate(p.pay_period_end)}</span>,
+              <span key="payment_date">{formatDate(p.payment_date)}</span>,
+              <span key="gross">{formatCurrency(Number(p.gross_pay), p.currency)}</span>,
+              <span key="tax">{formatCurrency(Number(p.tax_withheld), p.currency)}</span>,
+              <span key="net">{formatCurrency(Number(p.net_pay), p.currency)}</span>,
+              <StatusBadge key="status" status={p.status || 'generated'} />,
+              <div key="actions" className="flex items-center justify-end gap-1">
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); p.pdf_url ? window.open(p.pdf_url, '_blank') : downloadPdf(p.id); }}>
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); resendMutation.mutate(p.id); }} disabled={resendMutation.isPending}>
+                  <Mail className="h-4 w-4" />
+                </Button>
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); removeMutation.mutate(p.id); }} disabled={removeMutation.isPending}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>,
+            ]}
+          />
 
-          <div className="flex items-center justify-between mt-4">
-            <p className="text-sm text-muted-foreground">Page {pagination.page} of {pagination.pages} ({pagination.total} total)</p>
-            <div className="space-x-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="outline" size="sm" disabled={page >= pagination.pages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-            </div>
-          </div>
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.pages}
+            totalItems={pagination.total}
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
     </PageShell>
