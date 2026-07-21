@@ -247,7 +247,7 @@ export default function DealsPage() {
   ];
 
   return (
-    <PageShell title="Deals" icon={Briefcase} description="Manage opportunities and sales pipeline" actions={<Button asChild><Link href="/admin/crm/deals/new"><Plus className="mr-1 h-4 w-4" /> New Deal</Link></Button>}>
+    <PageShell title="Deals" icon={Briefcase} description="Manage opportunities and sales pipeline" actions={<Button onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> New Deal</Button>}>
       <StatCards cards={stats} />
       <div className="nm-raised p-4">
         {filters}
