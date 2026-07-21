@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import {
   BookOpen,
+  Plus,
   Calendar,
   Eye,
   PenLine,
@@ -21,7 +22,16 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ContentListPage } from '@/components/content/ContentListPage';
+import { BlogPostForm } from '@/components/content/BlogPostForm';
 import { fetchAdminBlogPosts, fetchAdminBlogStats, fetchTeam, updateBlogPost, deleteBlogPost } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { BlogPost } from '@clickbit/shared/src/content';
@@ -141,6 +151,7 @@ export default function AdminContentBlogPage() {
   const { token } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState('');
 
@@ -309,8 +320,7 @@ export default function AdminContentBlogPage() {
       title="Blog"
       description="Create, schedule, and manage blog articles."
       icon={BookOpen}
-      newHref="/admin/content/blog/new"
-      newLabel="New Post"
+      actions={<Button onClick={() => setCreateOpen(true)} className="gap-1"><Plus className="h-4 w-4" /> New Post</Button>}
       items={posts}
       isLoading={isLoading}
       statCards={statCards}
@@ -337,6 +347,23 @@ export default function AdminContentBlogPage() {
       renderTableRow={renderTableRow}
       onRowClick={(p) => router.push(`/admin/content/blog/${p.id}`)}
       emptyText="No blog posts found."
+      footer={
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>New Blog Post</DialogTitle>
+              <DialogDescription>Create a new blog article.</DialogDescription>
+            </DialogHeader>
+            {token && (
+              <BlogPostForm
+                token={token}
+                onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-blog'] }); }}
+                onCancel={() => setCreateOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      }
     />
   );
 }

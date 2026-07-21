@@ -19,10 +19,22 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Badge } from '@/components/ui/badge';
+import {
+  Button,
+} from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ContentListPage } from '@/components/content/ContentListPage';
+import { PortfolioForm } from '@/components/content/PortfolioForm';
 import { fetchAdminPortfolio, fetchAdminPortfolioStats, updatePortfolioItem, deletePortfolioItem } from '@/lib/api';
 import type { PortfolioItem } from '@clickbit/shared/src/content';
 import { toast } from 'sonner';
+import { Plus } from 'lucide-react';
 
 const statusOptions = [
   { value: 'published', label: 'Published' },
@@ -62,6 +74,7 @@ export default function AdminContentPortfolioPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [category, setCategory] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-portfolio', token],
@@ -222,8 +235,7 @@ export default function AdminContentPortfolioPage() {
       title="Portfolio"
       description="Manage portfolio projects, showcases, and case studies."
       icon={FolderKanban}
-      newHref="/admin/content/portfolio/new"
-      newLabel="New Item"
+      actions={<Button onClick={() => setCreateOpen(true)} className="gap-1"><Plus className="h-4 w-4" /> New Item</Button>}
       items={items}
       isLoading={isLoading}
       statCards={statCards}
@@ -243,6 +255,23 @@ export default function AdminContentPortfolioPage() {
       renderTableRow={renderTableRow}
       onRowClick={(p) => router.push(`/admin/content/portfolio/${p.id}`)}
       emptyText="No portfolio items found."
+      footer={
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>New Portfolio Item</DialogTitle>
+              <DialogDescription>Add a project to the portfolio.</DialogDescription>
+            </DialogHeader>
+            {token && (
+              <PortfolioForm
+                token={token}
+                onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-portfolio'] }); }}
+                onCancel={() => setCreateOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      }
     />
   );
 }

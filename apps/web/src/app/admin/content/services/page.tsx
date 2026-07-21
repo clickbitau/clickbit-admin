@@ -30,8 +30,16 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { ServiceForm } from '@/components/content/ServiceForm';
 import { fetchAdminServices, fetchAdminServiceStats, updateService, deleteService } from '@/lib/api';
 import type { Service } from '@clickbit/shared/src/content';
 import { toast } from 'sonner';
@@ -103,6 +111,7 @@ export default function AdminContentServicesPage() {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-services', token],
@@ -202,9 +211,7 @@ export default function AdminContentServicesPage() {
       title="Service Management"
       icon={Briefcase}
       actions={
-        <Button asChild className="gap-1">
-          <Link href="/admin/content/services/new"><Plus className="h-4 w-4" /> Add Service</Link>
-        </Button>
+        <Button onClick={() => setCreateOpen(true)} className="gap-1"><Plus className="h-4 w-4" /> Add Service</Button>
       }
     >
       <StatCards cards={statCards} />
@@ -468,6 +475,22 @@ export default function AdminContentServicesPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Service</DialogTitle>
+            <DialogDescription>Add a service to the public site.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <ServiceForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-services'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

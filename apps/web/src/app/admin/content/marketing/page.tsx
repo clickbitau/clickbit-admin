@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import {
   Megaphone,
+  Plus,
   Calendar,
   Eye,
   PenLine,
@@ -19,7 +20,16 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ContentListPage } from '@/components/content/ContentListPage';
+import { MarketingPostForm } from '@/components/content/MarketingPostForm';
 import { fetchMarketingPosts, fetchAdminMarketingStats, fetchTeam, updateMarketingPost, deleteMarketingPost } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { BlogPost } from '@clickbit/shared/src/content';
@@ -60,6 +70,7 @@ export default function AdminContentMarketingPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [author, setAuthor] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
   const [category, setCategory] = useState('');
 
   const { data, isLoading } = useQuery({
@@ -225,8 +236,7 @@ export default function AdminContentMarketingPage() {
       title="Marketing"
       description="Create and manage marketing content."
       icon={Megaphone}
-      newHref="/admin/content/marketing/new"
-      newLabel="New Post"
+      actions={<Button onClick={() => setCreateOpen(true)} className="gap-1"><Plus className="h-4 w-4" /> New Post</Button>}
       items={posts}
       isLoading={isLoading}
       statCards={statCards}
@@ -252,6 +262,23 @@ export default function AdminContentMarketingPage() {
       renderTableRow={renderTableRow}
       onRowClick={(p) => router.push(`/admin/content/marketing/${p.id}`)}
       emptyText="No marketing posts found."
+      footer={
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>New Marketing Post</DialogTitle>
+              <DialogDescription>Create a marketing update or announcement.</DialogDescription>
+            </DialogHeader>
+            {token && (
+              <MarketingPostForm
+                token={token}
+                onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-marketing'] }); }}
+                onCancel={() => setCreateOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      }
     />
   );
 }
