@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildLegacyMessageEnvelope, mapPayment, parseNumber, safeDate } from './finance-utils';
+import { CacheService } from '../redis/cache.service';
 
 const paymentInclude = {
   invoices: {
@@ -41,7 +42,20 @@ export interface PaymentStats {
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('payments', ...parts) ?? `payments:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
 
   private get payments() {
     return this.prisma.payments;
@@ -91,6 +105,11 @@ export class PaymentsService {
   }
 
   async findAll(query: Record<string, unknown>): Promise<PaymentsListEnvelope> {
+    const cacheKey = this.cacheKey('list', JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindAll(query), this.CACHE_TTL_SECONDS) ?? this.fetchFindAll(query);
+  }
+
+  private async fetchFindAll(query: Record<string, unknown>): Promise<PaymentsListEnvelope> {
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(250, Math.max(1, Number(query.limit ?? 20)));
     const sortBy = (query.sortBy as string) || 'payment_date';
@@ -173,6 +192,11 @@ export class PaymentsService {
   }
 
   async findOne(id: string | number) {
+    const cacheKey = this.cacheKey('detail', id);
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindOne(id), this.CACHE_TTL_SECONDS) ?? this.fetchFindOne(id);
+  }
+
+  private async fetchFindOne(id: string | number) {
     const payment = await this.payments.findUnique({
       where: { transaction_id: String(id), deleted_at: null },
       include: paymentInclude,
@@ -182,6 +206,11 @@ export class PaymentsService {
   }
 
   async getStats(query: { dateFrom?: string; dateTo?: string }): Promise<PaymentStats> {
+    const cacheKey = this.cacheKey('stats', JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchGetStats(query), this.CACHE_TTL_SECONDS) ?? this.fetchGetStats(query);
+  }
+
+  private async fetchGetStats(query: { dateFrom?: string; dateTo?: string }): Promise<PaymentStats> {
     const where: Prisma.paymentsWhereInput = { deleted_at: null };
 
     if (query.dateFrom || query.dateTo) {
@@ -294,7 +323,9 @@ export class PaymentsService {
 
     if (invoiceId) {
       await this.recalcInvoicePaymentStatus(invoiceId);
+      await this.cache?.delPrefix(this.cache?.key('invoices') ?? 'invoices');
     }
+    await this.invalidateCache();
 
     return {
       message: 'Payment recorded successfully',
@@ -324,7 +355,9 @@ export class PaymentsService {
 
     if (invoiceId) {
       await this.recalcInvoicePaymentStatus(invoiceId);
+      await this.cache?.delPrefix(this.cache?.key('invoices') ?? 'invoices');
     }
+    await this.invalidateCache();
 
     return buildLegacyMessageEnvelope('Payment deleted successfully');
   }
