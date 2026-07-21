@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from './pdf.service';
+import { PdfTemplatesService } from '../settings/pdf-templates.service';
 import { invoiceInclude, mapInvoice, parseNumber } from './finance-utils';
 import { CacheService } from '../redis/cache.service';
 
@@ -15,6 +16,7 @@ export class PublicInvoicesService {
 
   constructor(private readonly prisma: PrismaService,
     private readonly pdfService: PdfService,
+    private readonly pdfTemplatesService: PdfTemplatesService,
     private readonly config: ConfigService,
     private readonly cache?: CacheService) {
     const secret = this.config.get<string>('STRIPE_SECRET_KEY');
@@ -149,7 +151,8 @@ export class PublicInvoicesService {
     await this.invalidateCache();
 
     const { packageData, billingSettings, verificationCode, filename } = await this.buildPdfData(invoiceOrId);
-    const buffer = await this.pdfService.generateInvoicePDF(packageData, billingSettings, {}, verificationCode);
+    const templateSettings = await this.pdfTemplatesService.getDefaultTemplateSettings('invoice');
+    const buffer = await this.pdfService.generateInvoicePDF(packageData, billingSettings, templateSettings, verificationCode);
     return { buffer, filename };
   }
 

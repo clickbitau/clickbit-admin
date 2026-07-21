@@ -18,7 +18,7 @@ const FONTS = {
   bold: path.join(FONTS_DIR, 'Sora-Bold.ttf')
 };
 
-const COLORS = {
+const BASE_COLORS = {
   teal: '#1FBBD2',
   orange: '#F39C12',
   black: '#0F172A',
@@ -26,7 +26,9 @@ const COLORS = {
   lightGray: '#94A3B8',
   bgSlate: '#F8FAFC',
   borderSlate: '#E2E8F0',
-  white: '#FFFFFF'
+  white: '#FFFFFF',
+  success: '#16A34A',
+  paid: '#22C55E'
 };
 
 const PAGE = {
@@ -38,12 +40,30 @@ const PAGE = {
 const FOOTER_Y = 803;
 const MAX_Y = 760;
 
+function getColors(settings) {
+  return { ...BASE_COLORS, ...(settings?.colors || {}) };
+}
+
+function getLabel(settings, key, fallback) {
+  return settings?.labels?.[key] ?? fallback;
+}
+
+function isVisible(settings, key, fallback = true) {
+  return settings?.visibility?.[key] ?? fallback;
+}
+
+function getSectionOrder(settings) {
+  const defaults = ['header', 'itemsTable', 'totals', 'paymentHistory', 'notesAndTerms', 'paymentGrid', 'statusStamp'];
+  const order = settings?.sectionOrder || defaults;
+  return Array.isArray(order) && order.length ? order : defaults;
+}
+
 /**
  * Main PDF Generation
  */
 async function generateInvoicePDF(packageData, billingSettings = {}, templateSettings = {}, verificationCode: string | null = null): Promise<Buffer> {
   let qrBuffer = null;
-  if (verificationCode) {
+  if (verificationCode && isVisible(templateSettings, 'showVerification', true)) {
     try {
       qrBuffer = await generateVerificationQRBuffer(verificationCode, { width: 80 });
     } catch (err) {
@@ -76,23 +96,35 @@ async function generateInvoicePDF(packageData, billingSettings = {}, templateSet
         fonts = { regular: 'Sora', medium: 'Sora-Medium', semiBold: 'Sora-SemiBold', bold: 'Sora-Bold' };
       }
 
+      // Attach template settings so every renderer can read colors/labels/visibility
+      packageData.templateSettings = templateSettings || {};
+
       let y = PAGE.margin;
 
-      // Render content
-      y = renderFirstPageHeader(doc, packageData, fonts, billingSettings);
-      y = renderItemsTable(doc, packageData, fonts, y);
-      y = renderTotals(doc, packageData, fonts, billingSettings, y);
-      y = renderPaymentHistory(doc, packageData, fonts, y);
-      y = renderNotesAndTerms(doc, packageData, fonts, y);
-      y = renderPaymentGrid(doc, packageData, fonts, billingSettings, verificationCode, qrBuffer, y);
-      renderStatusStamp(doc, packageData, fonts, y);
+      const sectionOrder = getSectionOrder(templateSettings);
+      const sections = {
+        header: () => renderFirstPageHeader(doc, packageData, fonts, billingSettings),
+        itemsTable: () => renderItemsTable(doc, packageData, fonts, y),
+        totals: () => renderTotals(doc, packageData, fonts, billingSettings, y),
+        paymentHistory: () => renderPaymentHistory(doc, packageData, fonts, y),
+        notesAndTerms: () => renderNotesAndTerms(doc, packageData, fonts, y),
+        paymentGrid: () => renderPaymentGrid(doc, packageData, fonts, billingSettings, verificationCode, qrBuffer, y),
+        statusStamp: () => { renderStatusStamp(doc, packageData, fonts, y); return y; },
+      };
+
+      for (const key of sectionOrder) {
+        const fn = sections[key];
+        if (!fn) continue;
+        if (isVisible(templateSettings, key, true) === false) continue;
+        y = fn();
+      }
 
       // CRITICAL FIX: Draw footer AFTER getting final page count
       // Save current position before footer
       const currentPageBeforeFooter = doc.bufferedPageRange().count - 1;
 
       // Draw footer using a different approach
-      renderFooterOnAllPagesSafe(doc, billingSettings, fonts);
+      renderFooterOnAllPagesSafe(doc, billingSettings, fonts, templateSettings);
 
       doc.end();
     } catch (err) {
@@ -124,21 +156,25 @@ function drawFittedAmount(doc, amountText, x, y, width, requestedFontSize, color
 }
 
 function getInvoiceTemplateLabels(data) {
+  const settings = data.templateSettings || {};
+  const labels = settings.labels || {};
   const documentType = (data.document_type || 'invoice').toLowerCase();
   const taxRate = parseFloat(data.tax_rate) || 0;
   const taxIncludedTemplate = data.template_type === 'tax_included';
   const isInvoice = documentType === 'invoice';
 
   return {
-    header: isInvoice ? (taxIncludedTemplate ? 'TAX INVOICE' : 'INVOICE') : documentType.toUpperCase(),
-    unitPriceLabel: taxIncludedTemplate ? 'UNIT PRICE (EXCL. GST)' : 'UNIT PRICE',
-    subtotalLabel: taxIncludedTemplate ? 'Subtotal (EXCL. GST)' : 'Subtotal',
-    gstLabel: `GST (${taxRate.toFixed(0)}%)`,
-    amountDueLabel: taxIncludedTemplate ? 'Amount Due (INCL. GST)' : 'Amount Due'
+    header: labels.header || (isInvoice ? (taxIncludedTemplate ? 'TAX INVOICE' : 'INVOICE') : documentType.toUpperCase()),
+    unitPriceLabel: labels.unitPriceLabel || (taxIncludedTemplate ? 'UNIT PRICE (EXCL. GST)' : 'UNIT PRICE'),
+    subtotalLabel: labels.subtotalLabel || (taxIncludedTemplate ? 'Subtotal (Excl. GST)' : 'Subtotal'),
+    gstLabel: labels.gstLabel || `GST (${taxRate.toFixed(0)}%)`,
+    amountDueLabel: labels.amountDueLabel || (taxIncludedTemplate ? 'Amount Due (Incl. GST)' : 'Amount Due')
   };
 }
 
 function renderFirstPageHeader(doc, data, fonts, billingSettings) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   // Logo
   const logoPath = path.join(process.cwd(), 'public', 'images', 'logos', 'logo-full.png');
   const logoPathAlt = path.join(process.cwd(), 'images', 'logos', 'logo-full.png');
@@ -161,7 +197,7 @@ function renderFirstPageHeader(doc, data, fonts, billingSettings) {
   // Billing info
   const y = 110;
   doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8)
-    .text('BILLED TO:', PAGE.margin, y, { lineBreak: false });
+    .text(getLabel(settings, 'billedToLabel', 'BILLED TO:'), PAGE.margin, y, { lineBreak: false });
   doc.fillColor(COLORS.black).font(fonts.bold).fontSize(12)
     .text(data.client_name || 'N/A', PAGE.margin, y + 15, { lineBreak: false });
 
@@ -179,10 +215,11 @@ function renderFirstPageHeader(doc, data, fonts, billingSettings) {
     ? formatDate(data.valid_until)
     : formatDate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000));
 
+  const docTypeLabel = data.document_type === 'estimate' ? 'Estimate' : getLabel(settings, 'documentLabel', 'Invoice');
   const labels = [
-    { l: `${data.document_type === 'estimate' ? 'Estimate' : 'Invoice'} No.`, v: data.package_code },
-    { l: 'Issue Date:', v: issueDate },
-    { l: 'Due Date:', v: dueDate, highlight: true }
+    { l: `${docTypeLabel} No.`, v: data.package_code },
+    { l: getLabel(settings, 'issueDateLabel', 'Issue Date:'), v: issueDate },
+    { l: getLabel(settings, 'dueDateLabel', 'Due Date:'), v: dueDate, highlight: true }
   ];
 
   labels.forEach((item, i) => {
@@ -197,6 +234,8 @@ function renderFirstPageHeader(doc, data, fonts, billingSettings) {
 }
 
 function renderItemsTable(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const labels = getInvoiceTemplateLabels(data);
   const hasLongUnitPriceLabel = labels.unitPriceLabel.length > 'UNIT PRICE'.length;
   const cols = hasLongUnitPriceLabel
@@ -207,10 +246,10 @@ function renderItemsTable(doc, data, fonts, startY) {
 
   function drawHeader(yPos) {
     doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8)
-      .text('ITEM', startX, yPos, { lineBreak: false })
-      .text('QTY', startX + cols.item, yPos, { width: cols.qty, align: 'center', lineBreak: false })
+      .text(getLabel(settings, 'itemLabel', 'ITEM'), startX, yPos, { lineBreak: false })
+      .text(getLabel(settings, 'qtyLabel', 'QTY'), startX + cols.item, yPos, { width: cols.qty, align: 'center', lineBreak: false })
       .text(labels.unitPriceLabel, startX + cols.item + cols.qty, yPos, { width: cols.price, align: 'right', lineBreak: false })
-      .text('TOTAL', startX + cols.item + cols.qty + cols.price, yPos, { width: cols.total, align: 'right', lineBreak: false });
+      .text(getLabel(settings, 'totalLabel', 'TOTAL'), startX + cols.item + cols.qty + cols.price, yPos, { width: cols.total, align: 'right', lineBreak: false });
 
     doc.strokeColor(COLORS.borderSlate).lineWidth(0.5)
       .moveTo(startX, yPos + 12)
@@ -247,7 +286,7 @@ function renderItemsTable(doc, data, fonts, startY) {
       doc.addPage();
 
       doc.fillColor(COLORS.lightGray).font(fonts.regular).fontSize(8)
-        .text('Continued...', PAGE.margin, PAGE.margin, {
+        .text(getLabel(settings, 'continuedLabel', 'Continued...'), PAGE.margin, PAGE.margin, {
           width: PAGE.width - PAGE.margin * 2,
           align: 'center',
           lineBreak: false
@@ -286,6 +325,8 @@ function renderItemsTable(doc, data, fonts, startY) {
 }
 
 function renderTotals(doc, data, fonts, billingSettings, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   let y = startY;
   const labels = getInvoiceTemplateLabels(data);
 
@@ -326,8 +367,8 @@ function renderTotals(doc, data, fonts, billingSettings, startY) {
   }
 
   if (discountAmount > 0) {
-    const discountLabel = discountType === 'percentage' ? `Discount (${discountInput}%)` : 'Discount';
-    rows.push({ l: discountLabel, v: `-$${discountAmount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, color: '#16A34A' });
+    const discountLabel = discountType === 'percentage' ? `Discount (${discountInput}%)` : getLabel(settings, 'discountLabel', 'Discount');
+    rows.push({ l: discountLabel, v: `-$${discountAmount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, color: COLORS.success });
   }
 
   rows.forEach((row, i) => {
@@ -349,7 +390,7 @@ function renderTotals(doc, data, fonts, billingSettings, startY) {
 
   if (amountPaid > 0 && amountDue > 0) {
     doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(9)
-      .text('Amount Paid', x, totalY + 12, { lineBreak: false });
+      .text(getLabel(settings, 'amountPaidLabel', 'Amount Paid'), x, totalY + 12, { lineBreak: false });
     doc.font(fonts.bold);
     drawFittedAmount(
       doc,
@@ -358,7 +399,7 @@ function renderTotals(doc, data, fonts, billingSettings, startY) {
       totalY + 12,
       width - valueOffset,
       9,
-      '#16A34A'
+      COLORS.success
     );
 
     doc.fillColor(COLORS.black).font(fonts.bold).fontSize(10)
@@ -392,6 +433,8 @@ function renderTotals(doc, data, fonts, billingSettings, startY) {
 }
 
 function renderPaymentHistory(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const payments = data.payment_history || [];
   if (payments.length === 0) return startY;
 
@@ -408,16 +451,16 @@ function renderPaymentHistory(doc, data, fonts, startY) {
 
   // Section header
   doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9)
-    .text('PAYMENT HISTORY', PAGE.margin, y, { lineBreak: false });
+    .text(getLabel(settings, 'paymentHistoryLabel', 'PAYMENT HISTORY'), PAGE.margin, y, { lineBreak: false });
   y += 15;
 
   // Table header
   const cols = { date: 100, method: 110, ref: 180, amount: 100 };
   doc.fillColor(COLORS.lightGray).font(fonts.bold).fontSize(7)
-    .text('DATE', PAGE.margin, y, { lineBreak: false })
-    .text('METHOD', PAGE.margin + cols.date, y, { lineBreak: false })
-    .text('REFERENCE', PAGE.margin + cols.date + cols.method, y, { lineBreak: false })
-    .text('AMOUNT', PAGE.margin + cols.date + cols.method + cols.ref, y, { width: cols.amount, align: 'right', lineBreak: false });
+    .text(getLabel(settings, 'dateLabel', 'DATE'), PAGE.margin, y, { lineBreak: false })
+    .text(getLabel(settings, 'methodLabel', 'METHOD'), PAGE.margin + cols.date, y, { lineBreak: false })
+    .text(getLabel(settings, 'referenceLabel', 'REFERENCE'), PAGE.margin + cols.date + cols.method, y, { lineBreak: false })
+    .text(getLabel(settings, 'amountLabel', 'AMOUNT'), PAGE.margin + cols.date + cols.method + cols.ref, y, { width: cols.amount, align: 'right', lineBreak: false });
 
   y += 10;
   doc.strokeColor(COLORS.borderSlate).lineWidth(0.5)
@@ -441,7 +484,7 @@ function renderPaymentHistory(doc, data, fonts, startY) {
       .text(dateStr, PAGE.margin, y, { lineBreak: false })
       .text(methodStr, PAGE.margin + cols.date, y, { lineBreak: false })
       .text(refStr, PAGE.margin + cols.date + cols.method, y, { lineBreak: false });
-    doc.fillColor('#16A34A').font(fonts.bold).fontSize(8)
+    doc.fillColor(COLORS.success).font(fonts.bold).fontSize(8)
       .text(amountStr, PAGE.margin + cols.date + cols.method + cols.ref, y, { width: cols.amount, align: 'right', lineBreak: false });
 
     y += rowHeight;
@@ -451,6 +494,8 @@ function renderPaymentHistory(doc, data, fonts, startY) {
 }
 
 function renderNotesAndTerms(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   let y = startY;
 
   if (data.client_notes && data.client_notes.trim()) {
@@ -464,7 +509,7 @@ function renderNotesAndTerms(doc, data, fonts, startY) {
     }
 
     doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8)
-      .text('NOTES:', PAGE.margin, y, { lineBreak: false });
+      .text(getLabel(settings, 'notesLabel', 'NOTES:'), PAGE.margin, y, { lineBreak: false });
 
     const boxY = y + 12;
     const boxHeight = doc.heightOfString(data.client_notes, { width: contentWidth - 20 }) + 15;
@@ -486,10 +531,10 @@ function renderNotesAndTerms(doc, data, fonts, startY) {
 
   const termsText = (data.terms && data.terms.trim())
     ? data.terms.trim()
-    : 'Payment is due within 14 days of invoice date.';
+    : getLabel(settings, 'termsText', 'Payment is due within 14 days of invoice date.');
 
   doc.fillColor(COLORS.black).font(fonts.bold).fontSize(8)
-    .text('PS:', PAGE.margin, y, { continued: true, lineBreak: false });
+    .text(getLabel(settings, 'psLabel', 'PS:'), PAGE.margin, y, { continued: true, lineBreak: false });
   doc.fillColor(COLORS.gray).font(fonts.regular)
     .text(` ${termsText}`, { lineBreak: false });
 
@@ -497,6 +542,8 @@ function renderNotesAndTerms(doc, data, fonts, startY) {
 }
 
 function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffer, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const templateSettings = data.templateSettings || {};
   let y = startY;
 
   const isInvoice = (data.document_type || 'invoice') !== 'estimate';
@@ -525,9 +572,9 @@ function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffe
       .strokeColor(COLORS.borderSlate).lineWidth(0.5).stroke();
 
     doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8)
-      .text('DOCUMENT VERIFICATION', PAGE.margin + 12, y + 12, { lineBreak: false });
+      .text(getLabel(templateSettings, 'documentVerificationLabel', 'DOCUMENT VERIFICATION'), PAGE.margin + 12, y + 12, { lineBreak: false });
     doc.fillColor(COLORS.lightGray).font(fonts.regular).fontSize(7)
-      .text('Scan QR or visit clickbit.com.au/verify', PAGE.margin + 12, y + 25, { lineBreak: false });
+      .text(getLabel(templateSettings, 'scanQRLabel', 'Scan QR or visit clickbit.com.au/verify'), PAGE.margin + 12, y + 25, { lineBreak: false });
 
     const displayCode = verificationCode || data.verification_code || 'CB-XXXX-XXX';
     doc.fillColor(COLORS.black).font(fonts.bold).fontSize(10)
@@ -547,7 +594,7 @@ function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffe
       .stroke();
 
     doc.fillColor(COLORS.lightGray).font(fonts.regular).fontSize(7)
-      .text('This estimate is valid for the period stated above. Prices may change after expiry.', PAGE.margin + 12, y + 78, { lineBreak: false });
+      .text(getLabel(templateSettings, 'estimateValidityText', 'This estimate is valid for the period stated above. Prices may change after expiry.'), PAGE.margin + 12, y + 78, { lineBreak: false });
 
     return y + vHeight;
   }
@@ -568,17 +615,17 @@ function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffe
   y += 20;
 
   doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(12)
-    .text('Bank Transfer', PAGE.margin, y, { lineBreak: false });
+    .text(getLabel(templateSettings, 'bankTransferLabel', 'Bank Transfer'), PAGE.margin, y, { lineBreak: false });
 
   const bankY = y + 20;
-  const accountName = settings.bankAccountName || 'Kauser Ahmed Methel';
-  const bsb = settings.bankBSB || '013-017';
-  const accountNumber = settings.bankAccountNumber || '167658357';
+  const accountName = settings.bankAccountName || getLabel(templateSettings, 'bankAccountName', 'Kauser Ahmed Methel');
+  const bsb = settings.bankBSB || getLabel(templateSettings, 'bankBSB', '013-017');
+  const accountNumber = settings.bankAccountNumber || getLabel(templateSettings, 'bankAccountNumber', '167658357');
 
   const bankDetails = [
-    { l: 'Account:', v: accountName },
-    { l: 'BSB:', v: bsb },
-    { l: 'Number:', v: accountNumber }
+    { l: getLabel(templateSettings, 'accountLabel', 'Account:'), v: accountName },
+    { l: getLabel(templateSettings, 'bsbLabel', 'BSB:'), v: bsb },
+    { l: getLabel(templateSettings, 'accountNumberLabel', 'Number:'), v: accountNumber }
   ];
 
   bankDetails.forEach((row, i) => {
@@ -596,7 +643,7 @@ function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffe
     doc.roundedRect(PAGE.margin, btnY, 80, 24, 4)
       .fillColor(COLORS.teal).fill();
     doc.fillColor(COLORS.white).font(fonts.bold).fontSize(9)
-      .text('Pay Here', PAGE.margin, btnY + 7, { width: 80, align: 'center', lineBreak: false });
+      .text(getLabel(templateSettings, 'payHereLabel', 'Pay Here'), PAGE.margin, btnY + 7, { width: 80, align: 'center', lineBreak: false });
 
     try {
       doc.link(PAGE.margin, btnY, 80, 24, paymentLink);
@@ -614,9 +661,9 @@ function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffe
     .strokeColor(COLORS.borderSlate).lineWidth(0.5).stroke();
 
   doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8)
-    .text('DOCUMENT VERIFICATION', vX + 12, vY + 12, { lineBreak: false });
+    .text(getLabel(templateSettings, 'documentVerificationLabel', 'DOCUMENT VERIFICATION'), vX + 12, vY + 12, { lineBreak: false });
   doc.fillColor(COLORS.lightGray).font(fonts.regular).fontSize(7)
-    .text('Scan QR or visit clickbit.com.au/verify', vX + 12, vY + 25, { lineBreak: false });
+    .text(getLabel(templateSettings, 'scanQRLabel', 'Scan QR or visit clickbit.com.au/verify'), vX + 12, vY + 25, { lineBreak: false });
 
   const displayCode = verificationCode || data.verification_code || 'CB-XXXX-XXX';
   doc.fillColor(COLORS.black).font(fonts.bold).fontSize(10)
@@ -636,30 +683,34 @@ function renderPaymentGrid(doc, data, fonts, settings, verificationCode, qrBuffe
     .stroke();
 
   const accountLast4 = accountNumber.slice(-4);
-  doc.fillColor('#D97706').font(fonts.bold).fontSize(7)
-    .text('! Bank details NEVER change', vX + 12, vY + 75, { lineBreak: false });
+  doc.fillColor(COLORS.orange).font(fonts.bold).fontSize(7)
+    .text(getLabel(templateSettings, 'bankSecurityWarning', '! Bank details NEVER change'), vX + 12, vY + 75, { lineBreak: false });
   doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(7)
-    .text(`BSB: ${bsb} | Account: ***${accountLast4}`, vX + 12, vY + 88, { lineBreak: false });
+    .text(`${getLabel(templateSettings, 'bsbShortLabel', 'BSB')}: ${bsb} | ${getLabel(templateSettings, 'accountShortLabel', 'Account')}: ***${accountLast4}`, vX + 12, vY + 88, { lineBreak: false });
 
   return y + vHeight;
 }
 
 function renderStatusStamp(doc, data, fonts, currentY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isPaid = data.payment_status === 'paid' || data.status === 'paid';
   const stampY = Math.min(currentY + 20, MAX_Y - 60);
   const stampX = PAGE.width - PAGE.margin - 120;
+  const paidColor = COLORS.paid || '#22C55E';
+  const dueColor = COLORS.due || COLORS.orange;
 
   doc.save();
   doc.rotate(-12, { origin: [stampX + 50, stampY + 25] });
   doc.roundedRect(stampX, stampY, 100, 50, 8)
     .lineWidth(3)
     .dash(5, { space: 3 })
-    .strokeColor(isPaid ? '#22C55E' : COLORS.orange)
+    .strokeColor(isPaid ? paidColor : dueColor)
     .stroke();
-  doc.fillColor(isPaid ? '#22C55E' : COLORS.orange)
+  doc.fillColor(isPaid ? paidColor : dueColor)
     .font(fonts.bold)
     .fontSize(24)
-    .text(isPaid ? 'PAID' : 'DUE', stampX, stampY + 12, { width: 100, align: 'center', lineBreak: false });
+    .text(isPaid ? getLabel(settings, 'paidStampLabel', 'PAID') : getLabel(settings, 'dueStampLabel', 'DUE'), stampX, stampY + 12, { width: 100, align: 'center', lineBreak: false });
   doc.restore();
 }
 
@@ -667,10 +718,13 @@ function renderStatusStamp(doc, data, fonts, currentY) {
  * CRITICAL FIX: Footer that doesn't create extra pages
  * Uses manual text positioning to bypass PDFKit's automatic page flow
  */
-function renderFooterOnAllPagesSafe(doc, settings, fonts) {
+function renderFooterOnAllPagesSafe(doc, settings, fonts, templateSettings = {}) {
+  const COLORS = getColors(templateSettings);
   const contentWidth = PAGE.width - (PAGE.margin * 2);
-  const abn = settings.companyAbn || settings.abn || '59 267 698 766';
-  const footerText = `© ${new Date().getFullYear()} ClickBit  ·  ABN: ${abn}  ·  INNOVATION IN EVERY BIT`;
+  const abn = settings.companyAbn || settings.abn || getLabel(templateSettings, 'companyAbn', '59 267 698 766');
+  const companyName = settings.companyName || getLabel(templateSettings, 'footerCompanyName', 'ClickBit');
+  const tagline = getLabel(templateSettings, 'footerTagline', 'INNOVATION IN EVERY BIT');
+  const footerText = `© ${new Date().getFullYear()} ${companyName}  ·  ABN: ${abn}  ·  ${tagline}`;
 
   // Get ACTUAL page count before starting - CRITICAL: Do this ONCE
   const range = doc.bufferedPageRange();

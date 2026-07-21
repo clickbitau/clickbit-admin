@@ -16,6 +16,7 @@ export interface PdfTemplate {
   header_html?: string | null;
   /** @deprecated use footer */
   footer_html?: string | null;
+  settings?: any;
   created_at?: string;
   updated_at?: string;
 }

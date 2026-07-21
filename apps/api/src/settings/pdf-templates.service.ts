@@ -7,11 +7,172 @@ import {
   DEFAULT_PAYSLIP_HTML,
 } from './default-pdf-templates';
 import { CacheService } from '../redis/cache.service';
+import { generateInvoicePDF } from '../common/pdf/invoice-pdf';
+import { generatePayslipPDF } from '../common/pdf/payslip-pdf';
+import { generateContractPDF } from '../common/pdf/contract-pdf';
+import { getInvoiceSampleData, getPayslipSampleData, getContractSampleData } from '../common/pdf/pdf-samples';
 
 const KEY = 'pdf_templates';
 
 const DEFAULT_HEADER = '';
 const DEFAULT_FOOTER = '';
+
+const DEFAULT_TEMPLATE_SETTINGS: Record<string, any> = {
+  invoice: {
+    colors: {
+      teal: '#1FBBD2',
+      orange: '#F39C12',
+      black: '#0F172A',
+      gray: '#475569',
+      lightGray: '#94A3B8',
+      bgSlate: '#F8FAFC',
+      borderSlate: '#E2E8F0',
+      white: '#FFFFFF',
+      success: '#16A34A',
+      paid: '#22C55E',
+    },
+    labels: {
+      header: 'TAX INVOICE',
+      billedToLabel: 'Billed To',
+      documentLabel: 'Invoice',
+      issueDateLabel: 'Issue Date',
+      dueDateLabel: 'Due Date',
+      itemLabel: 'Item',
+      qtyLabel: 'Qty',
+      totalLabel: 'Total',
+      unitPriceLabel: 'Unit Price',
+      subtotalLabel: 'Subtotal',
+      gstLabel: 'GST',
+      amountDueLabel: 'Amount Due',
+      amountPaidLabel: 'Amount Paid',
+      discountLabel: 'Discount',
+      notesLabel: 'Notes',
+      psLabel: 'P.S.',
+      termsText: 'Payment Terms',
+      paymentHistoryLabel: 'Payment History',
+      dateLabel: 'Date',
+      methodLabel: 'Method',
+      referenceLabel: 'Reference',
+      amountLabel: 'Amount',
+      bankTransferLabel: 'Bank Transfer',
+      accountLabel: 'Account:',
+      bsbLabel: 'BSB:',
+      accountNumberLabel: 'Account No:',
+      payHereLabel: 'Pay Here',
+      documentVerificationLabel: 'Document Verification',
+      scanQRLabel: 'Scan QR code to verify',
+      estimateValidityText: 'This estimate is valid for 30 days.',
+      bankSecurityWarning: 'Please do not share BSB/Account details via email.',
+      bsbShortLabel: 'BSB',
+      accountShortLabel: 'ACC',
+      paidStampLabel: 'PAID',
+      dueStampLabel: 'DUE',
+      footerCompanyName: 'ClickBit',
+      companyAbn: '59 267 698 766',
+      footerTagline: 'INNOVATION IN EVERY BIT',
+      continuedLabel: '(continued)',
+    },
+    visibility: {
+      header: true,
+      itemsTable: true,
+      totals: true,
+      paymentHistory: true,
+      notesAndTerms: true,
+      paymentGrid: true,
+      statusStamp: true,
+      showVerification: true,
+    },
+    sectionOrder: ['header', 'itemsTable', 'totals', 'paymentHistory', 'notesAndTerms', 'paymentGrid', 'statusStamp'],
+    bankAccountName: 'Kauser Ahmed Methel',
+    bankBSB: '013-017',
+    bankAccountNumber: '167658357',
+  },
+  payslip: {
+    colors: {
+      teal: '#1FBBD2',
+      tealDark: '#0EA5B7',
+      orange: '#F39C12',
+      navy: '#1E3A5F',
+      black: '#0F172A',
+      gray: '#475569',
+      lightGray: '#94A3B8',
+      border: '#E2E8F0',
+      bgLight: '#F8FAFC',
+      success: '#10B981',
+      white: '#FFFFFF',
+    },
+    labels: {
+      payslipTitle: 'PAYSLIP',
+      payPeriodLabel: 'PAY PERIOD:',
+      datePaidLabel: 'DATE PAID:',
+      employeeProfileLabel: 'EMPLOYEE PROFILE',
+      earningsDeductionsLabel: 'EARNINGS & DEDUCTIONS',
+      leaveBalancesLabel: 'LEAVE BALANCES',
+      bankDisbursementLabel: 'BANK DISBURSEMENT',
+      superannuationLabel: 'SUPERANNUATION',
+      netPayLabel: 'NET PAY',
+      documentVerificationLabel: 'DOCUMENT VERIFICATION',
+      paidStampLabel: 'PAID',
+      descriptionLabel: 'Description',
+      hoursYtdLabel: 'Hours/YTD',
+      rateLabel: 'Rate',
+      amountLabel: 'Amount',
+      ytdLabel: 'YTD',
+    },
+    visibility: {
+      showVerification: true,
+      showPaidStamp: true,
+    },
+  },
+  contract: {
+    colors: {
+      teal: '#1FBBD2',
+      orange: '#F39C12',
+      navy: '#1E3A5F',
+      black: '#0F172A',
+      gray: '#475569',
+      lightGray: '#94A3B8',
+      bgSlate: '#F8FAFC',
+      borderSlate: '#E2E8F0',
+      white: '#FFFFFF',
+    },
+    labels: {
+      offerTitle: 'OFFER OF EMPLOYMENT',
+      agreementTitle: 'EMPLOYMENT AGREEMENT',
+      responsibilitiesTitle: 'Key Responsibilities',
+      remunerationTitle: 'Remuneration',
+      hoursScheduleTitle: 'Hours & Schedule',
+      dutiesConductTitle: 'Duties, Conduct & Obligations',
+      confidentialityTitle: 'Confidentiality & Intellectual Property',
+      restraintTitle: 'Restraint of Trade & Non-Competition',
+      propertyTitle: 'Return of Company Property',
+      noticesTitle: 'Notices',
+      terminationTitle: 'Termination of Employment',
+      superannuationTitle: 'Superannuation',
+      nationalEmploymentStandardsTitle: 'National Employment Standards',
+      postEmploymentTitle: 'Post-Employment Obligations',
+      disputeResolutionTitle: 'Dispute Resolution',
+      governingLawTitle: 'Governing Law',
+      additionalTermsTitle: 'Additional Terms & Special Conditions',
+      signaturesTitle: 'Signatures',
+      footerCompanyName: 'ClickBit',
+      companyAbn: '59 267 698 766',
+    },
+    visibility: {
+      header: true,
+      responsibilities: true,
+      remuneration: true,
+      schedule: true,
+      duties: true,
+      confidentiality: true,
+      restraint: true,
+      property: true,
+      notices: true,
+      termination: true,
+      signatures: true,
+    },
+  },
+};
 
 function normalizeTemplateData(data: any) {
   const type = data.template_type || data.type || 'invoice';
@@ -24,6 +185,7 @@ function normalizeTemplateData(data: any) {
     header: data.header ?? data.header_html ?? '',
     footer: data.footer ?? data.footer_html ?? '',
     is_default: data.is_default,
+    settings: data.settings ?? {},
   };
 }
 
@@ -174,6 +336,15 @@ export class PdfTemplatesService {
     });
   }
 
+  async getDefaultTemplateSettings(templateType: string) {
+    return this.cached(this.cacheKey('default-settings', templateType), async () => {
+      const templates = await this.getTemplates();
+      const template = templates.find((t: any) => t.template_type === templateType && t.is_default)
+        || templates.find((t: any) => t.template_type === templateType);
+      return template?.settings || {};
+    });
+  }
+
   async create(data: any) {
     const templates = await this.getTemplates();
     const normalized = normalizeTemplateData(data);
@@ -243,6 +414,37 @@ export class PdfTemplatesService {
     return { success: true, preview_html: this.renderPreviewHtml(normalized) };
   }
 
+  async previewPdf(id: number) {
+    const templates = await this.getTemplates();
+    const template = templates.find((t: any) => t.id === id);
+    if (!template) throw new NotFoundException('Template not found');
+    const settings = template?.settings || {};
+    const buffer = await this.generatePdfForType(template.template_type, settings);
+    return { buffer, template };
+  }
+
+  async previewPdfWithData(data: any) {
+    const normalized = normalizeTemplateData(data);
+    const buffer = await this.generatePdfForType(normalized.template_type, normalized.settings);
+    return { buffer, template: normalized };
+  }
+
+  private async generatePdfForType(type: string, settings: any): Promise<Buffer> {
+    switch (type) {
+      case 'invoice':
+      case 'estimate':
+        return generateInvoicePDF(getInvoiceSampleData(), {}, settings, null);
+      case 'payslip': {
+        const { employee, payslip } = getPayslipSampleData();
+        return generatePayslipPDF(payslip, employee, {}, settings, null);
+      }
+      case 'contract':
+        return generateContractPDF({ ...getContractSampleData(), templateSettings: settings });
+      default:
+        return generateInvoicePDF(getInvoiceSampleData(), {}, settings, null);
+    }
+  }
+
   async seedDefaults() {
     const templates = await this.getTemplates();
     if (templates.length > 0) {
@@ -259,6 +461,7 @@ export class PdfTemplatesService {
         header: DEFAULT_HEADER,
         footer: DEFAULT_FOOTER,
         is_default: true,
+        settings: DEFAULT_TEMPLATE_SETTINGS.invoice,
       },
       {
         name: 'Default Estimate',
@@ -269,6 +472,7 @@ export class PdfTemplatesService {
         header: DEFAULT_HEADER,
         footer: DEFAULT_FOOTER,
         is_default: true,
+        settings: { ...DEFAULT_TEMPLATE_SETTINGS.invoice, labels: { ...DEFAULT_TEMPLATE_SETTINGS.invoice.labels, header: 'ESTIMATE', documentLabel: 'Estimate' } },
       },
       {
         name: 'Default Payslip',
@@ -279,6 +483,18 @@ export class PdfTemplatesService {
         header: DEFAULT_HEADER,
         footer: DEFAULT_FOOTER,
         is_default: true,
+        settings: DEFAULT_TEMPLATE_SETTINGS.payslip,
+      },
+      {
+        name: 'Default Contract',
+        template_type: 'contract',
+        description: 'Standard employment contract layout',
+        html: '<p>{{document_title}}</p>',
+        css: 'body { font-family: Sora, sans-serif; padding: 48px; }',
+        header: DEFAULT_HEADER,
+        footer: DEFAULT_FOOTER,
+        is_default: true,
+        settings: DEFAULT_TEMPLATE_SETTINGS.contract,
       },
     ];
 

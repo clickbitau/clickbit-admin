@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
+import { PdfTemplatesService } from '../settings/pdf-templates.service';
 import { generateContractPDF } from '../common/pdf/contract-pdf';
 
 interface UserLike {
@@ -55,6 +56,7 @@ function normalizeContract(c: any) {
 export class HrContractsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly pdfTemplatesService: PdfTemplatesService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -331,6 +333,8 @@ export class HrContractsService {
     };
 
     const filename = `contract-${contract.contract_number || id}.pdf`;
+    const templateSettings = await this.pdfTemplatesService.getDefaultTemplateSettings('contract');
+    contractData.templateSettings = templateSettings;
     const buffer = await generateContractPDF(contractData);
     return { buffer, filename };
   }

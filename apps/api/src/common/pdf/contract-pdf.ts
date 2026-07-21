@@ -19,7 +19,7 @@ const FONTS = {
   cursive: path.join(FONTS_DIR, 'DancingScript-Regular.ttf')
 };
 
-const COLORS = {
+const BASE_COLORS = {
   teal: '#1FBBD2',
   orange: '#F39C12',
   navy: '#0F172A',
@@ -40,6 +40,18 @@ const PAGE = {
 const FOOTER_Y = 803;
 const MAX_Y = 758;
 const CONTENT_WIDTH = PAGE.width - (PAGE.margin * 2);
+
+function getColors(settings) {
+  return { ...BASE_COLORS, ...(settings?.colors || {}) };
+}
+
+function getLabel(settings, key, fallback) {
+  return settings?.labels?.[key] ?? fallback;
+}
+
+function isVisible(settings, key, fallback = true) {
+  return settings?.visibility?.[key] ?? fallback;
+}
 
 /**
  * Format date to human readable
@@ -64,6 +76,9 @@ function fmtCurrency(amount, currency = 'AUD') {
  * Main: Generate Employment Contract PDF
  */
 async function generateContractPDF(contractData): Promise<Buffer> {
+  contractData.templateSettings = contractData.templateSettings || {};
+  const settings = contractData.templateSettings;
+  const COLORS = getColors(settings);
   const companyAddress = contractData.companyAddress || '19 Drysdale Approach Baldivis WA 6171';
 
   return new Promise((resolve, reject) => {
@@ -121,7 +136,7 @@ async function generateContractPDF(contractData): Promise<Buffer> {
       y = renderSignatures(doc, contractData, fonts, y);
 
       // Footer on all pages
-      renderFooterOnAllPages(doc, fonts, companyAddress);
+      renderFooterOnAllPages(doc, fonts, companyAddress, settings);
 
       doc.end();
     } catch (err) {
@@ -135,6 +150,8 @@ async function generateContractPDF(contractData): Promise<Buffer> {
 // ============================================================================
 
 function renderOfferLetter(doc, data, fonts, companyAddress) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const employee = data.employee || {};
   const user = employee.user || {};
   const employeeName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Employee';
@@ -159,7 +176,7 @@ function renderOfferLetter(doc, data, fonts, companyAddress) {
 
   // Title (left side, clear of logo)
   doc.fillColor(COLORS.navy).font(fonts.bold).fontSize(22)
-    .text('Offer of Employment', PAGE.margin, y + 8, { width: CONTENT_WIDTH - 120 });
+    .text(getLabel(settings, 'offerOfEmploymentTitle', 'Offer of Employment'), PAGE.margin, y + 8, { width: CONTENT_WIDTH - 120 });
   y += 55;
 
   // Company address
@@ -367,6 +384,8 @@ We look forward to welcoming you to the ClickBit team.`;
 }
 
 function renderContractHeader(doc, data, fonts) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const employee = data.employee || {};
   const user = employee.user || {};
   const employeeName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Employee';
@@ -375,7 +394,7 @@ function renderContractHeader(doc, data, fonts) {
 
   // Contract title
   doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(24)
-    .text('Employment Contract', PAGE.margin, y, { width: CONTENT_WIDTH });
+    .text(getLabel(settings, 'employmentContractTitle', 'Employment Contract'), PAGE.margin, y, { width: CONTENT_WIDTH });
   y += 35;
 
   // Contract number badge
@@ -438,7 +457,8 @@ function renderContractHeader(doc, data, fonts) {
   return y;
 }
 
-function renderSectionTitle(doc, title, fonts, y) {
+function renderSectionTitle(doc, title, fonts, y, settings = {}) {
+  const COLORS = getColors(settings);
   if (y + 40 > MAX_Y) {
     doc.addPage();
     y = PAGE.margin;
@@ -457,11 +477,15 @@ function renderSectionTitle(doc, title, fonts, y) {
 }
 
 function renderKeyTerms(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   return startY;
 }
 
 function renderResponsibilities(doc, data, fonts, startY) {
-  let y = renderSectionTitle(doc, 'Key Responsibilities', fonts, startY);
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
+  let y = renderSectionTitle(doc, getLabel(settings, 'keyResponsibilitiesTitle', 'Key Responsibilities'), fonts, startY, settings);
 
   // Use custom responsibilities from contract, fall back to generic
   let responsibilities;
@@ -491,10 +515,12 @@ function renderResponsibilities(doc, data, fonts, startY) {
 }
 
 function renderCompensation(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isCasual = data.employment_type === 'casual';
   const isContractor = data.employment_type === 'contractor';
 
-  let y = renderSectionTitle(doc, 'Remuneration', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'remunerationTitle', 'Remuneration'), fonts, startY, settings);
 
   if (y + 80 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
 
@@ -548,11 +574,13 @@ function renderCompensation(doc, data, fonts, startY) {
 }
 
 function renderScheduleAndLeave(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isCasual = data.employment_type === 'casual';
   const isPartTime = data.employment_type === 'part_time';
   const isContractor = data.employment_type === 'contractor';
 
-  let y = renderSectionTitle(doc, 'Hours & Schedule', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'hoursScheduleTitle', 'Hours & Schedule'), fonts, startY, settings);
 
   if (y + 60 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
 
@@ -600,10 +628,12 @@ function renderScheduleAndLeave(doc, data, fonts, startY) {
 }
 
 function renderDutiesAndConduct(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isCasual = data.employment_type === 'casual';
   const isContractor = data.employment_type === 'contractor';
 
-  let y = renderSectionTitle(doc, 'Duties, Conduct & Obligations', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'dutiesConductTitle', 'Duties, Conduct & Obligations'), fonts, startY, settings);
 
   const duties = [
     'Perform all duties faithfully, diligently, and in the best interests of the Employer.',
@@ -631,11 +661,13 @@ function renderDutiesAndConduct(doc, data, fonts, startY) {
 }
 
 function renderConfidentiality(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isContractor = data.employment_type === 'contractor';
   const isCasual = data.employment_type === 'casual';
   const party = isContractor ? 'Contractor' : 'Employee';
 
-  let y = renderSectionTitle(doc, 'Confidentiality & Intellectual Property', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'confidentialityTitle', 'Confidentiality & Intellectual Property'), fonts, startY, settings);
 
   // 1. Definition
   if (y + 20 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
@@ -686,12 +718,14 @@ function renderConfidentiality(doc, data, fonts, startY) {
 }
 
 function renderRestraintAndCompetition(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isContractor = data.employment_type === 'contractor';
   const isCasual = data.employment_type === 'casual';
   const party = isContractor ? 'Contractor' : 'Employee';
   const engagement = isContractor ? 'engagement' : 'employment';
 
-  let y = renderSectionTitle(doc, 'Restraint of Trade & Non-Competition', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'restraintTitle', 'Restraint of Trade & Non-Competition'), fonts, startY, settings);
 
   // During employment
   if (y + 20 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
@@ -745,10 +779,12 @@ function renderRestraintAndCompetition(doc, data, fonts, startY) {
 }
 
 function renderPropertyAndNotices(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isContractor = data.employment_type === 'contractor';
   const party = isContractor ? 'Contractor' : 'Employee';
 
-  let y = renderSectionTitle(doc, 'Return of Company Property', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'returnPropertyTitle', 'Return of Company Property'), fonts, startY, settings);
 
   if (y + 20 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
   doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(9)
@@ -772,7 +808,7 @@ function renderPropertyAndNotices(doc, data, fonts, startY) {
   y += 6;
 
   // Notices
-  y = renderSectionTitle(doc, 'Notices', fonts, y);
+  y = renderSectionTitle(doc, getLabel(settings, 'noticesTitle', 'Notices'), fonts, y, settings);
   if (y + 20 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
   doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(9)
     .text('Any notice required or permitted under this contract must be given in writing and delivered by one of the following methods:', PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
@@ -800,11 +836,13 @@ function renderPropertyAndNotices(doc, data, fonts, startY) {
 }
 
 function renderTermination(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   const isCasual = data.employment_type === 'casual';
   const isContractor = data.employment_type === 'contractor';
   const isAustralian = !data.work_country || data.work_country === 'Australia';
 
-  let y = renderSectionTitle(doc, 'Termination of Employment', fonts, startY);
+  let y = renderSectionTitle(doc, getLabel(settings, 'terminationTitle', 'Termination of Employment'), fonts, startY, settings);
   if (y + 50 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
 
   let termText;
@@ -824,7 +862,7 @@ function renderTermination(doc, data, fonts, startY) {
 
   // Superannuation (Australian employees / permanent only)
   if (isAustralian && !isContractor) {
-    y = renderSectionTitle(doc, 'Superannuation', fonts, y);
+    y = renderSectionTitle(doc, getLabel(settings, 'superannuationTitle', 'Superannuation'), fonts, y, settings);
     const superText = isCasual
       ? 'The Employer will make Superannuation Guarantee contributions on the Employee\u2019s behalf in accordance with the Superannuation Guarantee (Administration) Act 1992 (Cth), at the rate prescribed by law from time to time.'
       : 'The Employer will make Superannuation Guarantee (SG) contributions in accordance with the Superannuation Guarantee (Administration) Act 1992 (Cth), currently 11.5% of ordinary time earnings, into the Employee\u2019s nominated complying superannuation fund. If no fund is nominated, contributions will be made to the Employer\u2019s default fund.';
@@ -835,7 +873,7 @@ function renderTermination(doc, data, fonts, startY) {
 
   // National Employment Standards (Australian permanent/part-time)
   if (isAustralian && !isContractor) {
-    y = renderSectionTitle(doc, 'National Employment Standards', fonts, y);
+    y = renderSectionTitle(doc, getLabel(settings, 'nationalEmploymentStandardsTitle', 'National Employment Standards'), fonts, y, settings);
     const nesText = isCasual
       ? 'This engagement is subject to the National Employment Standards (NES) under the Fair Work Act 2009 (Cth) to the extent they apply to casual employees, including the right to request conversion to permanent employment after 12 months of regular and systematic engagement.'
       : 'This contract is subject to the National Employment Standards (NES) under the Fair Work Act 2009 (Cth). The NES provides the following minimum entitlements (pro-rated for part-time employees where applicable): Annual Leave (4 weeks per year); Personal/Carer\u2019s Leave (10 days per year); Compassionate Leave; Parental Leave; Community Service Leave; Long Service Leave (under applicable state legislation); and Public Holidays. Any applicable Modern Award or Enterprise Agreement also applies and prevails over this contract to the extent of any inconsistency.';
@@ -844,7 +882,7 @@ function renderTermination(doc, data, fonts, startY) {
     y = doc.y + 20;
   }
 
-  y = renderSectionTitle(doc, 'Post-Employment Obligations', fonts, y);
+  y = renderSectionTitle(doc, getLabel(settings, 'postEmploymentObligationsTitle', 'Post-Employment Obligations'), fonts, y, settings);
   const postText = isContractor
     ? 'For six (6) months following the end of this engagement, the Contractor must not solicit any employee, contractor, or client of ClickBit. This obligation is limited to contacts made in the course of this engagement.'
     : 'For a period of six (6) months following termination of employment, the Employee must not: (a) solicit or entice any ClickBit employee or contractor to leave; (b) solicit or service any ClickBit client with whom the Employee had material dealings in the last 12 months of employment; or (c) disparage ClickBit or its directors, employees, or clients in any public or professional forum. ClickBit acknowledges these restraints are reasonable and necessary to protect its legitimate business interests.';
@@ -852,7 +890,7 @@ function renderTermination(doc, data, fonts, startY) {
     .text(postText, PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
   y = doc.y + 20;
 
-  y = renderSectionTitle(doc, 'Dispute Resolution', fonts, y);
+  y = renderSectionTitle(doc, getLabel(settings, 'disputeResolutionTitle', 'Dispute Resolution'), fonts, y, settings);
   const disputeText = isAustralian
     ? 'In the event of a workplace dispute, the parties agree to first attempt to resolve the matter internally through good-faith discussion. If unresolved within 14 days, the matter may be escalated to a mediator agreed by both parties. If still unresolved, either party may refer the dispute to the Fair Work Commission for conciliation and, if necessary, arbitration as permitted by the Fair Work Act 2009.'
     : 'Disputes will first be addressed through good-faith internal discussion. If unresolved, matters may be referred to an agreed mediator or relevant tribunal in the applicable jurisdiction.';
@@ -860,13 +898,13 @@ function renderTermination(doc, data, fonts, startY) {
     .text(disputeText, PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
   y = doc.y + 20;
 
-  y = renderSectionTitle(doc, 'Governing Law', fonts, y);
+  y = renderSectionTitle(doc, getLabel(settings, 'governingLawTitle', 'Governing Law'), fonts, y, settings);
   doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(9)
     .text('This contract is governed by and construed in accordance with the laws of Western Australia. Both parties submit to the non-exclusive jurisdiction of the courts of Western Australia and of the Federal Court of Australia.', PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
   y = doc.y + 20;
 
   if (data.terms_summary) {
-    y = renderSectionTitle(doc, 'Additional Terms & Special Conditions', fonts, y);
+    y = renderSectionTitle(doc, getLabel(settings, 'additionalTermsTitle', 'Additional Terms & Special Conditions'), fonts, y, settings);
     doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(9)
       .text(data.terms_summary, PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
     y = doc.y + 20;
@@ -876,11 +914,13 @@ function renderTermination(doc, data, fonts, startY) {
 }
 
 function renderSignatures(doc, data, fonts, startY) {
+  const COLORS = getColors(data.templateSettings);
+  const settings = data.templateSettings || {};
   let y = startY + 5;
 
   if (y + 150 > MAX_Y) { doc.addPage(); y = PAGE.margin; }
 
-  y = renderSectionTitle(doc, 'Signatures', fonts, y);
+  y = renderSectionTitle(doc, getLabel(settings, 'signaturesTitle', 'Signatures'), fonts, y, settings);
 
   const employee = data.employee || {};
   const user = employee.user || {};
@@ -996,9 +1036,13 @@ function renderSignatures(doc, data, fonts, startY) {
   return y + 10;
 }
 
-function renderFooterOnAllPages(doc, fonts, companyAddress) {
+function renderFooterOnAllPages(doc, fonts, companyAddress, settings = {}) {
+  const COLORS = getColors(settings);
   const shortAddr = companyAddress.split(',').slice(0, 2).join(', ').trim();
-  const footerText = `© ${new Date().getFullYear()} ClickBit  ·  ABN: 59 267 698 766  ·  ${shortAddr}`;
+  const footerCompany = getLabel(settings, 'footerCompanyName', 'ClickBit');
+  const footerAbn = getLabel(settings, 'companyAbn', '59 267 698 766');
+
+  const footerText = `© ${new Date().getFullYear()} ${footerCompany}  ·  ABN: ${footerAbn}  ·  ${shortAddr}`;
 
   const range = doc.bufferedPageRange();
   const totalPages = range.count;

@@ -15,5 +15,6 @@ import { PdfTemplatesController } from './pdf-templates.controller';
   imports: [StorageModule],
   controllers: [SettingsController, UsersController, ProfileController, AuditLogsController, PdfTemplatesController],
   providers: [SettingsService, UsersService, ProfileService, AuditLogsService, PdfTemplatesService],
+  exports: [PdfTemplatesService],
 })
 export class SettingsModule {}

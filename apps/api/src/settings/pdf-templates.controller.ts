@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, Res, ParseIntPipe, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -48,6 +49,22 @@ export class PdfTemplatesController {
   @Post('preview')
   previewWithData(@Body() body: any) {
     return this.pdfTemplatesService.previewWithData(body || {});
+  }
+
+  @Post(':id/preview-pdf')
+  async previewPdf(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const { buffer } = await this.pdfTemplatesService.previewPdf(id);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="preview.pdf"');
+    res.send(buffer);
+  }
+
+  @Post('preview-pdf')
+  async previewPdfWithData(@Body() body: any, @Res() res: Response) {
+    const { buffer } = await this.pdfTemplatesService.previewPdfWithData(body || {});
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="preview.pdf"');
+    res.send(buffer);
   }
 
   @Post('seed')

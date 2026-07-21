@@ -11,7 +11,7 @@ import { generateVerificationQRBuffer } from '@/finance/qr.helper';
 import { formatDate } from '@/common/date-formatter';
 
 // Configuration & Design Tokens
-const COLORS = {
+const BASE_COLORS = {
   teal: '#1FBBD2',
   tealDark: '#0EA5B7',
   orange: '#F39C12',
@@ -30,6 +30,18 @@ const PAGE = {
   height: 841.89,
   margin: 48
 };
+
+function getColors(settings) {
+  return { ...BASE_COLORS, ...(settings?.colors || {}) };
+}
+
+function getLabel(settings, key, fallback) {
+  return settings?.labels?.[key] ?? fallback;
+}
+
+function isVisible(settings, key, fallback = true) {
+  return settings?.visibility?.[key] ?? fallback;
+}
 
 // Font paths
 const FONTS_DIR = process.env.FONTS_DIR || path.join(process.cwd(), 'fonts');
@@ -82,9 +94,13 @@ const fmtMoney = (val, currency = 'AUD', dec = 2) => {
 /**
  * Generate Payslip PDF
  */
-async function generatePayslipPDF(payslip, employee, company = {}, options = {}, verificationCode: string | null = null): Promise<Buffer> {
+async function generatePayslipPDF(payslip, employee, company = {}, templateSettings = {}, verificationCode: string | null = null): Promise<Buffer> {
+  payslip.templateSettings = templateSettings || {};
+  const settings = payslip.templateSettings;
+  const COLORS = getColors(settings);
+
   let qrBuffer = null;
-  if (verificationCode) {
+  if (verificationCode && isVisible(settings, 'showVerification', true)) {
     try {
       qrBuffer = await generateVerificationQRBuffer(verificationCode, { width: 60 });
     } catch (err) {
@@ -143,7 +159,7 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
       const payslipNumber = `PS-${payYear}-${payMonth}${payDay}-${String(payslip.id).padStart(3, '0')}`;
 
       // Header Text
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(26).text('PAYSLIP', PAGE.width - PAGE.margin - 200, y, { width: 200, align: 'right' });
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(26).text(getLabel(settings, 'payslipHeader', 'PAYSLIP'), PAGE.width - PAGE.margin - 200, y, { width: 200, align: 'right' });
       doc.fillColor(COLORS.lightGray).font(fonts.bold).fontSize(9).text(payslipNumber, PAGE.width - PAGE.margin - 200, y + 30, { width: 200, align: 'right' });
 
       // Company Info (Left) - 2 lines down from logo (+24 extra)
@@ -157,18 +173,18 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
       doc.roundedRect(periodX, y - 5, 170, 45, 8).fillColor(COLORS.bgLight).fill().strokeColor(COLORS.border).lineWidth(0.5).stroke();
 
       // Pay period: label left, date right
-      doc.fillColor(COLORS.lightGray).font(fonts.bold).fontSize(7).text('PAY PERIOD:', periodX + 8, y + 6);
+      doc.fillColor(COLORS.lightGray).font(fonts.bold).fontSize(7).text(getLabel(settings, 'payPeriodLabel', 'PAY PERIOD:'), periodX + 8, y + 6);
       doc.fillColor(COLORS.black).font(fonts.bold).fontSize(7).text(`${formatDate(payslip.pay_period_start)} - ${formatDate(payslip.pay_period_end)}`, periodX + 8, y + 6, { width: 154, align: 'right' });
 
       doc.strokeColor(COLORS.border).lineWidth(0.5).moveTo(periodX + 8, y + 20).lineTo(periodX + 162, y + 20).stroke();
 
       // Date paid: label left, date right
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(7).text('DATE PAID:', periodX + 8, y + 28);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(7).text(getLabel(settings, 'datePaidLabel', 'DATE PAID:'), periodX + 8, y + 28);
       doc.text(formatDate(payslip.payment_date), periodX + 8, y + 28, { width: 154, align: 'right' });
 
       // 2. Employee Info - 2 more lines down (+24 = total 4 lines)
       y += 70;
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text('EMPLOYEE PROFILE', PAGE.margin, y);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text(getLabel(settings, 'employeeProfileLabel', 'EMPLOYEE PROFILE'), PAGE.margin, y);
       y += 14;
 
       doc.fillColor(COLORS.black).font(fonts.bold).fontSize(13).text(`${employee.user?.first_name || ''} ${employee.user?.last_name || ''}`, PAGE.margin, y);
@@ -223,7 +239,7 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
 
       // 3. Earnings Table
       y += 65;
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9).text('EARNINGS & DEDUCTIONS', PAGE.margin, y);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9).text(getLabel(settings, 'earningsDeductionsLabel', 'EARNINGS & DEDUCTIONS'), PAGE.margin, y);
       y += 14;
 
       const tblCols = { desc: PAGE.margin, hrs: 250, rate: 310, cur: 390, ytd: 470 };
@@ -259,7 +275,7 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
 
       // 4. Leave Balances Section - 2 more lines down (+24 = total 6 lines)
       y += 28;
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9).text('LEAVE BALANCES', PAGE.margin, y);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9).text(getLabel(settings, 'leaveBalancesLabel', 'LEAVE BALANCES'), PAGE.margin, y);
       y += 14;
 
       const lvCols = { type: PAGE.margin, open: 210, added: 290, taken: 370, balance: 460 };
@@ -310,19 +326,19 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
       const gridW = (contentWidth - 16) / 2;
 
       doc.roundedRect(PAGE.margin, y, gridW, 55, 8).fillColor(COLORS.bgLight).fill().strokeColor(COLORS.border).stroke();
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text('BANK DISBURSEMENT', PAGE.margin + 10, y + 8);
-      doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(7).text(`Disbursed to ${employee.bank_name || 'Bank'}`, PAGE.margin + 10, y + 20);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text(getLabel(settings, 'bankDisbursementLabel', 'BANK DISBURSEMENT'), PAGE.margin + 10, y + 8);
+      doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(7).text(getLabel(settings, 'disbursedToLabel', 'Disbursed to') + ` ${employee.bank_name || 'Bank'}`, PAGE.margin + 10, y + 20);
       doc.fillColor(COLORS.black).font(fonts.bold).fontSize(8).text(employee.bank_account_name || 'Employee', PAGE.margin + 10, y + 32);
       doc.text(`BSB: ${censor(employee.bank_bsb, 3)} | ACC: ${censor(employee.bank_account_number, 3)}`, PAGE.margin + 10, y + 44);
 
       const superX = PAGE.margin + gridW + 16;
       doc.roundedRect(superX, y, gridW, 55, 8).fillColor(COLORS.bgLight).fill().strokeColor(COLORS.border).stroke();
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text('SUPERANNUATION', superX + 10, y + 8);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text(getLabel(settings, 'superannuationLabel', 'SUPERANNUATION'), superX + 10, y + 8);
       doc.fillColor(COLORS.black).font(fonts.bold).fontSize(8).text(employee.super_fund_name || 'N/A', superX + 10, y + 20);
 
       doc.strokeColor(COLORS.border).moveTo(superX + 8, y + 34).lineTo(superX + gridW - 8, y + 34).stroke();
 
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9).text('NET PAY', superX + 10, y + 40);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(9).text(getLabel(settings, 'netPayLabel', 'NET PAY'), superX + 10, y + 40);
       doc.fontSize(16).text(`${currencySymbol}${fmt(payslip.net_pay)}`, superX + 60, y + 36, { width: gridW - 78, align: 'right' });
 
       // 6. Security Footer & Verification
@@ -330,8 +346,8 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
       doc.strokeColor(COLORS.border).lineWidth(1).moveTo(PAGE.margin, y).lineTo(PAGE.width - PAGE.margin, y).stroke();
       y += 10;
 
-      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text('DOCUMENT VERIFICATION', PAGE.margin, y);
-      doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(7).text('Verify at clickbit.com.au/verify', PAGE.margin, y + 11);
+      doc.fillColor(COLORS.teal).font(fonts.bold).fontSize(8).text(getLabel(settings, 'documentVerificationLabel', 'DOCUMENT VERIFICATION'), PAGE.margin, y);
+      doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(7).text(getLabel(settings, 'verifyUrlLabel', 'Verify at clickbit.com.au/verify'), PAGE.margin, y + 11);
 
       // Use verification code if available, otherwise generate display code from payslip number
       const displayCode = verificationCode || payslipNumber;
@@ -343,18 +359,20 @@ async function generatePayslipPDF(payslip, employee, company = {}, options = {},
 
       const msgX = PAGE.width - PAGE.margin - 160;
       doc.roundedRect(msgX, y, 160, 40, 8).fillColor(COLORS.bgLight).fill().strokeColor(COLORS.border).stroke();
-      doc.fillColor(COLORS.black).font(fonts.bold).fontSize(7).text('HR MESSAGE', msgX + 8, y + 5);
-      doc.fillColor(COLORS.gray).font(fonts.medium).fontSize(7).text('Innovation is at our core. Thank you for your continued contribution.', msgX + 8, y + 16, { width: 144, lineGap: 1 });
+      doc.fillColor(COLORS.black).font(fonts.bold).fontSize(7).text(getLabel(settings, 'hrMessageLabel', 'HR MESSAGE'), msgX + 8, y + 5);
+      doc.fillColor(COLORS.gray).font(fonts.medium).fontSize(7).text(getLabel(settings, 'hrMessageText', 'Innovation is at our core. Thank you for your continued contribution.'), msgX + 8, y + 16, { width: 144, lineGap: 1 });
 
       // 7. PAID Stamp
       const stampY = y + 48;
       doc.save().rotate(-12, { origin: [PAGE.width - 90, stampY + 20] });
-      doc.roundedRect(PAGE.width - 125, stampY, 85, 40, 6).lineWidth(2.5).dash(4, { space: 2 }).strokeColor(COLORS.success).stroke();
-      doc.fillColor(COLORS.success).font(fonts.bold).fontSize(20).text('PAID', PAGE.width - 125, stampY + 10, { width: 85, align: 'center' });
+      if (isVisible(settings, 'showPaidStamp', true)) {
+        doc.roundedRect(PAGE.width - 125, stampY, 85, 40, 6).lineWidth(2.5).dash(4, { space: 2 }).strokeColor(COLORS.success).stroke();
+        doc.fillColor(COLORS.success).font(fonts.bold).fontSize(20).text(getLabel(settings, 'paidStampLabel', 'PAID'), PAGE.width - 125, stampY + 10, { width: 85, align: 'center' });
+      }
       doc.restore();
 
       // Final Footer - ABSOLUTELY positioned at page bottom, no new page trigger
-      const footerText = `© ${new Date().getFullYear()} ClickBit  ·  ABN: ${company.abn || '59 267 698 766'}  ·  INNOVATION IN EVERY BIT`;
+      const footerText = `© ${new Date().getFullYear()} ${getLabel(settings, 'footerCompanyName', 'ClickBit')}  ·  ABN: ${company.abn || getLabel(settings, 'companyAbn', '59 267 698 766')}  ·  ${getLabel(settings, 'footerTagline', 'INNOVATION IN EVERY BIT')}`;
       doc.strokeColor(COLORS.border).lineWidth(0.5).moveTo(PAGE.margin, PAGE.height - 38).lineTo(PAGE.width - PAGE.margin, PAGE.height - 38).stroke();
       doc.fillColor(COLORS.gray).font(fonts.regular).fontSize(8);
       doc.page.margins.bottom = 0; // Disable bottom margin to prevent new page

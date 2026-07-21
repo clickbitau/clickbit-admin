@@ -22,9 +22,10 @@ import { KpiService } from './kpi.service';
 import { TimeClockService } from './time-clock.service';
 import { TimesheetsService } from './timesheets.service';
 import { ShiftsService } from './shifts.service';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [AuthModule, StorageModule],
+  imports: [AuthModule, StorageModule, SettingsModule],
   controllers: [
     HrController,
     EmployeesController,
