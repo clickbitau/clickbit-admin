@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
+import { PdfTemplatesService } from '../settings/pdf-templates.service';
 import { generatePayslipPDF } from '../common/pdf/payslip-pdf';
 
 interface UserLike {
@@ -55,6 +56,7 @@ const SCALE_2_WEEKLY = [
 export class PayslipsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly pdfTemplatesService: PdfTemplatesService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -414,7 +416,8 @@ export class PayslipsService {
       address: this.buildAddress(companyInfo),
     };
 
-    const buffer = await generatePayslipPDF(payslip, employee, company, {}, null);
+    const templateSettings = await this.pdfTemplatesService.getDefaultTemplateSettings('payslip');
+    const buffer = await generatePayslipPDF(payslip, employee, company, templateSettings, null);
     return { buffer, filename: this.payslipNumber(payslip) };
   }
 

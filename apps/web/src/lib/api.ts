@@ -2419,6 +2419,16 @@ export async function previewPdfTemplateWithData(
   return (await api.post('/api/settings/pdf-templates/preview', data, { headers: authHeaders(token) })).data;
 }
 
+export async function previewPdfTemplatePdf(token: string, id: string | number): Promise<Blob> {
+  const res = await api.post(`/api/settings/pdf-templates/${id}/preview-pdf`, {}, { headers: authHeaders(token), responseType: 'blob' });
+  return res.data;
+}
+
+export async function previewPdfTemplateWithDataPdf(token: string, data: Partial<PdfTemplate>): Promise<Blob> {
+  const res = await api.post('/api/settings/pdf-templates/preview-pdf', data, { headers: authHeaders(token), responseType: 'blob' });
+  return res.data;
+}
+
 export async function seedPdfTemplates(token: string): Promise<{ success: boolean; templates: PdfTemplate[]; message: string }> {
   return (await api.post('/api/settings/pdf-templates/seed', {}, { headers: authHeaders(token) })).data;
 }

@@ -12,9 +12,10 @@ import { InvoicesService } from './invoices.service';
 import { PublicInvoicesController } from './public-invoices.controller';
 import { PublicInvoicesService } from './public-invoices.service';
 import { PdfService } from './pdf.service';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, SettingsModule],
   exports: [PublicInvoicesService, PdfService],
   controllers: [
     ExpensesController,

@@ -41,6 +41,8 @@ import {
   LayoutTemplate,
   X,
   Sparkles,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -53,6 +55,7 @@ import {
   setDefaultPdfTemplate,
   clonePdfTemplate,
   previewPdfTemplateWithData,
+  previewPdfTemplateWithDataPdf,
   seedPdfTemplates,
 } from '@/lib/api';
 
@@ -60,6 +63,7 @@ const TEMPLATE_TYPES = [
   { value: 'invoice', label: 'Invoice', icon: FileText, color: 'text-blue-600' },
   { value: 'estimate', label: 'Estimate', icon: FileText, color: 'text-emerald-600' },
   { value: 'payslip', label: 'Payslip', icon: FileText, color: 'text-amber-600' },
+  { value: 'contract', label: 'Contract', icon: FileText, color: 'text-purple-600' },
 ];
 
 const PDF_TEMPLATE_VARIABLES = [
@@ -171,8 +175,101 @@ const emptyTemplate: PdfTemplate = {
   css: DEFAULT_CSS,
   header: DEFAULT_HEADER,
   footer: DEFAULT_FOOTER,
+  settings: {},
   is_default: false,
 };
+
+const DEFAULT_SECTION_ORDER = ['header', 'itemsTable', 'totals', 'paymentHistory', 'notesAndTerms', 'paymentGrid', 'statusStamp'];
+const SECTION_LABELS: Record<string, string> = {
+  header: 'Header',
+  itemsTable: 'Items Table',
+  totals: 'Totals',
+  paymentHistory: 'Payment History',
+  notesAndTerms: 'Notes & Terms',
+  paymentGrid: 'Payment / Verification',
+  statusStamp: 'Status Stamp',
+};
+
+function TemplateSettingsPanel({ form, setForm }: { form: PdfTemplate; setForm: (updater: (prev: PdfTemplate) => PdfTemplate) => void }) {
+  const [json, setJson] = useState(() => JSON.stringify(form.settings || {}, null, 2));
+
+  useEffect(() => {
+    setJson(JSON.stringify(form.settings || {}, null, 2));
+  }, [form.settings]);
+
+  const settings = form.settings || {};
+  const sectionOrder = Array.isArray(settings.sectionOrder) && settings.sectionOrder.length ? settings.sectionOrder : DEFAULT_SECTION_ORDER;
+  const visibility = settings.visibility || {};
+  const isInvoiceLike = (form.template_type || 'invoice') === 'invoice' || (form.template_type || 'invoice') === 'estimate';
+
+  function updateSettings(next: any) {
+    setForm((prev) => ({ ...prev, settings: next }));
+  }
+
+  function setSectionOrder(order: string[]) {
+    updateSettings({ ...settings, sectionOrder: order });
+  }
+
+  function toggleSection(key: string) {
+    updateSettings({ ...settings, visibility: { ...visibility, [key]: visibility[key] === false ? true : false } });
+  }
+
+  function moveSection(index: number, direction: -1 | 1) {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= sectionOrder.length) return;
+    const next = [...sectionOrder];
+    [next[index], next[newIndex]] = [next[newIndex], next[index]];
+    setSectionOrder(next);
+  }
+
+  function handleJsonBlur() {
+    try {
+      const parsed = JSON.parse(json);
+      updateSettings(parsed);
+    } catch (e) {
+      toast.error('Invalid JSON in settings');
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {isInvoiceLike && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Section Order</Label>
+          <p className="text-xs text-muted-foreground">Reorder sections and toggle visibility for the generated PDF.</p>
+          <div className="space-y-1">
+            {sectionOrder.map((key: string, i: number) => (
+              <div key={key} className="flex items-center gap-2 nm-raised-sm px-2 py-1.5">
+                <button onClick={() => moveSection(i, -1)} disabled={i === 0} className="p-1 hover:bg-muted rounded disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
+                <button onClick={() => moveSection(i, 1)} disabled={i === sectionOrder.length - 1} className="p-1 hover:bg-muted rounded disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>
+                <span className="flex-1 text-xs">{SECTION_LABELS[key] || key}</span>
+                <button
+                  onClick={() => toggleSection(key)}
+                  className={cn('text-xs px-2 py-0.5 rounded', visibility[key] === false ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary')}
+                >
+                  {visibility[key] === false ? 'Hidden' : 'Visible'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Settings JSON</Label>
+        <p className="text-xs text-muted-foreground">Edit colors, labels and other PDF overrides. Use the Section Order controls above for invoice templates.</p>
+        <Textarea
+          value={json}
+          onChange={(e) => setJson(e.target.value)}
+          onBlur={handleJsonBlur}
+          rows={10}
+          className="font-mono text-xs resize-none"
+          placeholder='{"colors":{"teal":"#1FBBD2"},"labels":{"header":"INVOICE"}}'
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function AdminPdfTemplatesPage() {
   const { token } = useAuth();
@@ -184,6 +281,9 @@ export default function AdminPdfTemplatesPage() {
   const [activeField, setActiveField] = useState<keyof PdfTemplate>('html');
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewTab, setPreviewTab] = useState<'html' | 'pdf'>('html');
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
 
   const debouncedForm = useDebounce(form, 600);
 
@@ -249,6 +349,16 @@ export default function AdminPdfTemplatesPage() {
     onError: () => { setPreviewLoading(false); toast.error('Preview failed'); },
   });
 
+  const previewPdfMutation = useMutation({
+    mutationFn: (data: Partial<PdfTemplate>) => previewPdfTemplateWithDataPdf(token!, data),
+    onSuccess: (blob) => {
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(URL.createObjectURL(blob));
+      setPdfPreviewLoading(false);
+    },
+    onError: () => { setPdfPreviewLoading(false); toast.error('PDF preview failed'); },
+  });
+
   function openEditor(template?: PdfTemplate) {
     const t = template ? { ...template } : { ...emptyTemplate, id: Date.now() };
     setForm({
@@ -257,10 +367,12 @@ export default function AdminPdfTemplatesPage() {
       css: t.css ?? DEFAULT_CSS,
       header: t.header ?? DEFAULT_HEADER,
       footer: t.footer ?? DEFAULT_FOOTER,
+      settings: t.settings || {},
       template_type: t.template_type || t.type || 'invoice',
     });
     setEditing(template || null);
     setPreviewHtml('');
+    setPdfPreviewUrl('');
     setActiveField('html');
     if (template && template.id) {
       setPreviewLoading(true);
@@ -272,6 +384,7 @@ export default function AdminPdfTemplatesPage() {
     setEditing(null);
     setForm(emptyTemplate);
     setPreviewHtml('');
+    setPdfPreviewUrl('');
   }
 
   function handleSave() {
@@ -302,8 +415,11 @@ export default function AdminPdfTemplatesPage() {
   }, [previewHtml]);
 
   useEffect(() => {
-    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
-  }, [previewUrl]);
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [previewUrl, pdfPreviewUrl]);
 
   function insertVariable(variable: string) {
     const field = activeField;
@@ -332,6 +448,7 @@ export default function AdminPdfTemplatesPage() {
       { label: 'Invoice', value: byType('invoice'), icon: FileText, onClick: () => setTypeFilter('invoice') },
       { label: 'Estimate', value: byType('estimate'), icon: FileText, onClick: () => setTypeFilter('estimate') },
       { label: 'Payslip', value: byType('payslip'), icon: FileText, onClick: () => setTypeFilter('payslip') },
+      { label: 'Contract', value: byType('contract'), icon: FileText, onClick: () => setTypeFilter('contract') },
     ];
   }, [templates]);
 
@@ -340,6 +457,7 @@ export default function AdminPdfTemplatesPage() {
     { key: 'css' as const, label: 'CSS', rows: 6 },
     { key: 'header' as const, label: 'Header HTML', rows: 4 },
     { key: 'footer' as const, label: 'Footer HTML', rows: 4 },
+    { key: 'settings' as const, label: 'PDF Settings', rows: 0 },
   ];
 
   const typeMeta = (type?: string) => TEMPLATE_TYPES.find((t) => t.value === (type || 'other')) ?? TEMPLATE_TYPES[TEMPLATE_TYPES.length - 1];
@@ -551,8 +669,12 @@ export default function AdminPdfTemplatesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  {fields.map((f) => (
-                    activeField === f.key && (
+                  {fields.map((f) => {
+                    if (activeField !== f.key) return null;
+                    if (f.key === 'settings') {
+                      return <TemplateSettingsPanel key="settings" form={form} setForm={setForm} />;
+                    }
+                    return (
                       <Textarea
                         key={f.key}
                         id={`pdf-${f.key}`}
@@ -562,8 +684,8 @@ export default function AdminPdfTemplatesPage() {
                         className="font-mono text-xs resize-none"
                         placeholder={`Enter ${f.label.toLowerCase()}...`}
                       />
-                    )
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div>
@@ -594,23 +716,47 @@ export default function AdminPdfTemplatesPage() {
             {/* Preview */}
             <div className="flex flex-col bg-muted/30">
               <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
-                <span className="text-sm font-medium flex items-center gap-2"><Eye className="h-4 w-4" /> Preview</span>
-                <Button variant="ghost" size="sm" onClick={() => { setPreviewLoading(true); previewMutation.mutate(form); }} disabled={previewLoading}>
-                  <RefreshCw className={cn('h-4 w-4', previewLoading && 'animate-spin')} />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium flex items-center gap-2"><Eye className="h-4 w-4" /> Preview</span>
+                  <div className="flex items-center gap-1 ml-2">
+                    <button
+                      onClick={() => setPreviewTab('html')}
+                      className={cn('px-2 py-1 text-xs rounded', previewTab === 'html' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')}
+                    >HTML</button>
+                    <button
+                      onClick={() => {
+                        setPreviewTab('pdf');
+                        if (!pdfPreviewUrl) { setPdfPreviewLoading(true); previewPdfMutation.mutate(form); }
+                      }}
+                      className={cn('px-2 py-1 text-xs rounded', previewTab === 'pdf' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')}
+                    >PDF</button>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  if (previewTab === 'html') { setPreviewLoading(true); previewMutation.mutate(form); }
+                  else { setPdfPreviewLoading(true); previewPdfMutation.mutate(form); }
+                }} disabled={previewLoading || pdfPreviewLoading}>
+                  <RefreshCw className={cn('h-4 w-4', (previewLoading || pdfPreviewLoading) && 'animate-spin')} />
                 </Button>
               </div>
               <div className="flex-1 p-4 overflow-hidden">
-                {previewUrl ? (
+                {previewTab === 'html' && previewUrl ? (
                   <iframe
                     src={previewUrl}
-                    title="PDF preview"
+                    title="HTML preview"
                     className="w-full h-full rounded-lg border border-border bg-white"
                     sandbox="allow-same-origin"
+                  />
+                ) : previewTab === 'pdf' && pdfPreviewUrl ? (
+                  <iframe
+                    src={pdfPreviewUrl}
+                    title="PDF preview"
+                    className="w-full h-full rounded-lg border border-border bg-white"
                   />
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground nm-raised-sm m-4">
                     <FileText className="h-12 w-12 mb-3 opacity-50" />
-                    <p className="text-sm">Start editing to generate a preview</p>
+                    <p className="text-sm">{previewTab === 'pdf' ? 'Click refresh to generate PDF preview' : 'Start editing to generate a preview'}</p>
                   </div>
                 )}
               </div>
