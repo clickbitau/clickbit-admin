@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PageShell } from '@/components/design-system/PageShell';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
@@ -41,7 +42,7 @@ import {
   logTaskTime,
   addTaskAttachment,
 } from '@/lib/api';
-import { formatDate, formatDateTime, getInitials } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 import type { ProjectTask, User, CrmProject, CrmSubproject, TaskMicrotask, TaskComment, TaskWorkLog } from '@/types/crm';
 import Link from 'next/link';
 import {
@@ -639,9 +640,7 @@ function CommentsTab({ taskId, token, isManager, currentUserId }: { taskId: numb
               <div key={c.id} className="p-3 nm-raised-sm rounded-lg">
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold">
-                      {getInitials(`${c.profiles?.first_name ?? ''} ${c.profiles?.last_name ?? ''}`)}
-                    </div>
+                    <PersonAvatar name={`${c.profiles?.first_name ?? ''} ${c.profiles?.last_name ?? ''}`.trim()} avatar_url={c.profiles?.avatar} size="sm" />
                     <span className="text-sm font-medium">{c.profiles?.first_name} {c.profiles?.last_name}</span>
                     {c.is_internal && <Badge variant="secondary" className="text-xs">Internal</Badge>}
                   </div>

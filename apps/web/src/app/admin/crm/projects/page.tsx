@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Image from 'next/image';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +17,7 @@ import {
 import { DataTable } from '@/components/design-system/DataTable';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { FormDialog } from '@/components/design-system/FormDialog';
 import { ConfirmDialog } from '@/components/design-system/ConfirmDialog';
 import { useDebounce } from '@/lib/useDebounce';
@@ -57,11 +57,6 @@ function getProgressColor(pct: number) {
   if (pct >= 50) return 'bg-blue-500';
   if (pct >= 25) return 'bg-amber-500';
   return 'bg-gray-400';
-}
-
-function getInitials(name?: string) {
-  if (!name) return '?';
-  return name.charAt(0).toUpperCase();
 }
 
 export default function ProjectsPage() {
@@ -345,13 +340,7 @@ export default function ProjectsPage() {
             const managerName = p.manager ? `${p.manager.first_name || ''} ${p.manager.last_name || ''}`.trim() : '';
             return [
               <div key="project" className="flex items-center gap-3">
-                {p.company?.logo_url ? (
-                  <Image src={p.company.logo_url} alt={p.company.name} width={36} height={36} unoptimized className="h-9 w-9 rounded-lg object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
-                ) : (
-                  <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                    {getInitials(p.name)}
-                  </div>
-                )}
+                <PersonAvatar name={p.company?.name || p.name} avatar_url={p.company?.logo_url} size="md" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{p.name}</p>
                   <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 dark:text-gray-400">
@@ -362,8 +351,9 @@ export default function ProjectsPage() {
                       </span>
                     )}
                     {managerName && (
-                      <span className="flex items-center gap-0.5">
-                        <UserIcon className="h-3 w-3" /> {managerName}
+                      <span className="flex items-center gap-1">
+                        <PersonAvatar name={managerName} avatar_url={p.manager?.avatar} size="sm" />
+                        {managerName}
                       </span>
                     )}
                   </div>

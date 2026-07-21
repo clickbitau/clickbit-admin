@@ -26,6 +26,7 @@ import {
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { ConfirmDialog } from '@/components/design-system/ConfirmDialog';
 import { UserForm } from '@/components/settings/UserForm';
 import { Button } from '@/components/ui/button';
@@ -44,7 +45,7 @@ import { useDebounce } from '@/lib/useDebounce';
 import { formatDate } from '@/lib/format';
 import { toast } from 'sonner';
 import type { User } from '@/types/crm';
-import Image from 'next/image';
+
 
 const PAGE_SIZE = 20;
 const TEAM_ROLES = 'admin,manager,employee,agent';
@@ -237,13 +238,7 @@ function UserTable({
             <tr key={u.id} className="hover:bg-primary/5 transition-colors">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center gap-3">
-                  {u.avatar ? (
-                    <Image src={u.avatar} alt="" width={40} height={40} unoptimized className="h-10 w-10 rounded-full object-cover border-2 border-background" />
-                  ) : (
-                    <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium bg-muted text-foreground">
-                      {u.first_name?.[0] || u.last_name?.[0] || u.email?.[0] || '?'}
-                    </div>
-                  )}
+                  <PersonAvatar name={u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || `User ${u.id}`} avatar_url={u.avatar} size="md" />
                   <div>
                     <div className="text-sm font-medium">{u.first_name || u.last_name ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : u.email}</div>
                     <div className="text-sm text-muted-foreground">{u.email}</div>
@@ -278,13 +273,7 @@ function UserCard({ u, canReset2fa }: { u: User; canReset2fa: boolean }) {
   return (
     <div className="lg:hidden p-4 border-b border-border last:border-0">
       <div className="flex items-start gap-3 mb-3">
-        {u.avatar ? (
-          <Image src={u.avatar} alt="" width={40} height={40} unoptimized className="h-10 w-10 rounded-full object-cover border-2 border-background" />
-        ) : (
-          <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium bg-muted text-foreground">
-            {u.first_name?.[0] || u.last_name?.[0] || u.email?.[0] || '?'}
-          </div>
-        )}
+        <PersonAvatar name={u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || `User ${u.id}`} avatar_url={u.avatar} size="md" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{u.first_name || u.last_name ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : u.email}</p>
           <p className="text-xs text-muted-foreground truncate">{u.email}</p>

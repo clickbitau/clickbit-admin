@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { fetchCustomerTicket, replyCustomerTicket, reopenCustomerTicket } from '@/lib/api';
-import { formatDate, getInitials } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { Ticket, ArrowLeft, Send, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -128,13 +129,7 @@ export default function CustomerTicketDetailPage() {
                 return (
                   <li key={msg.id} className={`flex gap-3 ${isStaff ? '' : 'flex-row-reverse'}`}>
                     <div className="flex-shrink-0">
-                      {sender?.avatar ? (
-                        <img src={sender.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
-                      ) : (
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isStaff ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
-                          {getInitials(name)}
-                        </div>
-                      )}
+                      <PersonAvatar name={name} avatar_url={sender?.avatar} size="sm" />
                     </div>
                     <div className={`flex-1 rounded-xl p-3 text-sm ${isStaff ? 'bg-muted' : 'bg-primary/10'}`}>
                       <div className="flex items-center justify-between mb-1">

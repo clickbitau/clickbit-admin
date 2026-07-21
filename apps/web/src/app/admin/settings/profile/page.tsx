@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { UserCircle, Camera, Trash2, Lock, Bell, Link2, AlertTriangle, Building2, Globe, Save } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -255,10 +256,7 @@ export default function AdminSettingsProfilePage() {
             <CardContent className="space-y-6">
               <div className="flex flex-col sm:flex-row items-start gap-6">
                 <div className="relative">
-                  <Avatar className="h-24 w-24">
-                    <AvatarImage src={user.avatar} alt={fullName} className="object-cover" />
-                    <AvatarFallback className="text-2xl">{form.first_name?.[0] || form.last_name?.[0] || 'U'}</AvatarFallback>
-                  </Avatar>
+                  <PersonAvatar name={fullName} avatar_url={user.avatar} size="lg" className="h-24 w-24 text-2xl" />
                   <div className="absolute -bottom-2 -right-2 flex gap-1">
                     <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full" onClick={() => avatarRef.current?.click()}><Camera className="h-4 w-4" /></Button>
                     {user.avatar && <Button variant="destructive" size="icon" className="h-8 w-8 rounded-full" onClick={() => removeAvatar.mutate()}><Trash2 className="h-4 w-4" /></Button>}

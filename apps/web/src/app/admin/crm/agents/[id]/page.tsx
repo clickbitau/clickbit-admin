@@ -8,6 +8,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { FormDialog } from '@/components/design-system/FormDialog';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -46,7 +47,7 @@ import {
   deleteContactDocument,
   assignAgentToCompany,
 } from '@/lib/api';
-import { formatCurrency, formatDate, getInitials } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 import type { CrmContact } from '@/types/crm';
 import type { Company } from '@/types/crm';
 import type { Invoice, InvoiceListResponse } from '@/types/finance';
@@ -278,13 +279,7 @@ export default function AgentDetailPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4">
           <div className="relative group shrink-0">
-            {agent.avatar_url ? (
-              <img src={agent.avatar_url} alt="" className="h-16 w-16 rounded-full object-cover border" />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-xl font-bold text-white">
-                {getInitials(agent.name)}
-              </div>
-            )}
+            <PersonAvatar name={agent.name} avatar_url={agent.avatar_url} size="lg" className="h-16 w-16 text-xl" />
             <button
               onClick={() => avatarInputRef.current?.click()}
               className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"

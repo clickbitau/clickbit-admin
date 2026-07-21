@@ -8,6 +8,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/ui/button';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import {
   Home,
   Banknote,
@@ -299,7 +300,6 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const userRole = user?.role;
 
   const Nav = ({ collapsedMode = false }: { collapsedMode?: boolean }) => {
@@ -552,13 +552,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <NotificationBell />
             <ThemeToggle />
             <Link href="/admin/settings/profile" className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:nm-raised-sm transition-all">
-              {user?.avatar ? (
-                <img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground text-xs font-bold">
-                  {initials || 'A'}
-                </div>
-              )}
+              <PersonAvatar name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'Admin'} avatar_url={user?.avatar} size="sm" />
               <span className="text-sm font-medium hidden xl:inline">{user?.first_name || 'Admin'}</span>
             </Link>
             <Button variant="ghost" size="sm" onClick={logout} className="text-destructive hidden xl:flex">
