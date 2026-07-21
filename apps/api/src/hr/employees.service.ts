@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJsonInput, buildLegacyDataEnvelope, buildLegacyListEnvelope, buildLegacyMessageEnvelope, parseNumber } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 const employeeInclude = {
   profiles: {
@@ -65,13 +66,31 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('employees', ...parts) ?? `employees:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private isAdminOrManager(user: Profile) {
     return user.role === 'admin' || user.role === 'manager';
   }
 
   async getDashboardStats(_user: Profile) {
+    return this.cached(this.cacheKey('dashboard'), async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -150,6 +169,7 @@ export class EmployeesService {
         clockedInEmployees,
       },
     };
+    });
   }
 
   async getStats(_user: Profile) {
@@ -266,6 +286,7 @@ export class EmployeesService {
   }
 
   async getEmployeeDashboard(user: Profile) {
+    return this.cached(this.cacheKey('employee-dashboard', user.id), async () => {
     const employee = await this.prisma.employees.findFirst({
       where: { user_id: user.id, deleted_at: null },
       include: {
@@ -311,6 +332,7 @@ export class EmployeesService {
         activeTaskCount: 0,
       },
     };
+    });
   }
 
   private async findOneWithInclude(id: number) {
@@ -330,6 +352,7 @@ export class EmployeesService {
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
   }, user: Profile) {
+    return this.cached(this.cacheKey('list', user.id, user.role, JSON.stringify(query)), async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -383,18 +406,22 @@ export class EmployeesService {
 
     const mapped = rows.map((e) => mapEmployee(e as Prisma.employeesGetPayload<{ include: typeof employeeInclude }>));
     return buildLegacyListEnvelope(mapped, total, page, limit);
+    });
   }
 
   async findMe(user: Profile) {
+    return this.cached(this.cacheKey('me', user.id), async () => {
     const employee = await this.prisma.employees.findFirst({
       where: { user_id: user.id, deleted_at: null },
       include: employeeInclude,
     });
     if (!employee) throw new NotFoundException({ success: false, message: 'Employee profile not found' });
     return buildLegacyDataEnvelope(mapEmployee(employee));
+    });
   }
 
   async findOne(id: number, user: Profile) {
+    return this.cached(this.cacheKey('detail', user.id, id), async () => {
     const employee = await this.findOneWithInclude(id);
     const isOwner = employee.user_id === user.id;
     if (!this.isAdminOrManager(user) && !isOwner) {
@@ -433,6 +460,7 @@ export class EmployeesService {
         weeklyHours: 0,
       },
     };
+    });
   }
 
   async create(dto: Record<string, unknown>, _user: Profile) {
@@ -471,6 +499,7 @@ export class EmployeesService {
       }
     }
 
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapEmployee(created));
   }
 
@@ -486,6 +515,8 @@ export class EmployeesService {
       data: data as any,
       include: employeeInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return buildLegacyDataEnvelope(mapEmployee(updated));
   }
 
@@ -523,6 +554,7 @@ export class EmployeesService {
       }),
     );
 
+    await this.invalidateCache();
     return buildLegacyDataEnvelope({ synced: created.length, employees: created.map(mapEmployee) });
   }
 
@@ -532,6 +564,8 @@ export class EmployeesService {
     }
     await this.findOneWithInclude(id);
     await this.prisma.employees.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return buildLegacyMessageEnvelope('Employee deleted successfully');
   }
 
@@ -558,6 +592,7 @@ export class EmployeesService {
       throw new NotFoundException({ success: false, message: 'Document not found' });
     }
     await this.prisma.employee_documents.delete({ where: { id: docId } });
+    await this.invalidateCache();
     return buildLegacyMessageEnvelope('Document deleted');
   }
 
