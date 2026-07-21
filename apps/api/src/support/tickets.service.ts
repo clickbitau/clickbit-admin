@@ -11,6 +11,7 @@ import {
   safeDate,
   stringValue,
 } from './support-utils';
+import { CacheService } from '../redis/cache.service';
 
 const profileSelect: Prisma.profilesSelect = { id: true, first_name: true, last_name: true, email: true, phone: true, avatar: true, role: true };
 const profileBasic: Prisma.profilesSelect = { id: true, first_name: true, last_name: true, email: true };
@@ -74,7 +75,24 @@ function mapTicket(ticket: Record<string, unknown>): Record<string, unknown> {
 
 @Injectable()
 export class TicketsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('tickets', ...parts) ?? `tickets:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private isAdminOrManager(user: Profile) {
     return user.role === 'admin' || user.role === 'manager';
@@ -144,6 +162,7 @@ export class TicketsService {
     });
 
     await this.notifyAdminsOfNewTicket(ticket, reqUser, subject, category, priority);
+    await this.invalidateCache();
 
     return {
       message: 'Ticket created successfully',
@@ -211,6 +230,8 @@ export class TicketsService {
       where: { id },
       data: { auto_fix_status: 'manual_review', updated_at: new Date() },
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return {
       success: true,
       message: 'Ticket routed to AI fix pipeline',
@@ -264,6 +285,7 @@ export class TicketsService {
     if (ticket.status === 'waiting_customer') updates.status = 'waiting_staff';
     await this.prisma.tickets.update({ where: { id: ticket.id }, data: updates });
 
+    await this.invalidateCache();
     return { message: 'Reply added successfully', reply: created };
   }
 
@@ -283,6 +305,7 @@ export class TicketsService {
       where: { id: ticket.id },
       data: { satisfaction_rating: rating, satisfaction_feedback: feedback || null },
     });
+    await this.invalidateCache();
     return { message: 'Thank you for your feedback!' };
   }
 
@@ -384,6 +407,8 @@ export class TicketsService {
     if (ticket.status === 'waiting_customer' || ticket.status === 'resolved') updates.status = 'waiting_staff';
     await this.prisma.tickets.update({ where: { id: ticket.id }, data: updates });
 
+    await this.invalidateCache();
+
     if (ticket.assigned_to && ticket.assigned_to !== user.id) {
       await this.createNotification({
         user_id: ticket.assigned_to,
@@ -394,6 +419,7 @@ export class TicketsService {
       });
     }
 
+    await this.invalidateCache();
     return { message: 'Reply added successfully', reply: created };
   }
 
@@ -420,6 +446,7 @@ export class TicketsService {
       },
     });
 
+    await this.invalidateCache();
     return { message: 'Ticket reopened successfully', ticket: updated };
   }
 
@@ -501,6 +528,7 @@ export class TicketsService {
     if (!isInternal && (ticket.status === 'open' || ticket.status === 'waiting_staff')) updates.status = 'waiting_customer';
     await this.prisma.tickets.update({ where: { id: ticket.id }, data: updates });
 
+    await this.invalidateCache();
     return { message: 'Reply sent', reply: created };
   }
 
@@ -527,12 +555,16 @@ export class TicketsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, message: 'Status updated', status: updated.status };
   }
 
   // ─── Admin ───────────────────────────────────────────────────────────────────
 
   async findAllAdmin(user: Profile, query: Record<string, unknown>) {
+    const cacheKey = this.cacheKey('admin-list', user.id, user.role, JSON.stringify(query));
+    return this.cached(cacheKey, async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Number(query.limit) || 20);
     const skip = (page - 1) * limit;
@@ -598,19 +630,24 @@ export class TicketsService {
       }),
     ]);
 
-    const withUnread = await Promise.all(
-      rows.map(async (t) => {
-        const unread = await this.prisma.ticket_messages.count({
-          where: { ticket_id: t.id, is_staff_reply: false, read_at: null },
-        });
-        return { ...mapTicket(t), unread_count: unread };
-      }),
-    );
+    const ticketIds = rows.map((t) => t.id);
+    const unreadRows = ticketIds.length
+      ? await this.prisma.ticket_messages.groupBy({
+          by: ['ticket_id'],
+          where: { ticket_id: { in: ticketIds }, is_staff_reply: false, read_at: null },
+          _count: { ticket_id: true },
+        })
+      : [];
+    const unreadMap = new Map(unreadRows.map((u) => [u.ticket_id, u._count.ticket_id]));
+    const withUnread = rows.map((t) => ({ ...mapTicket(t), unread_count: unreadMap.get(t.id) || 0 }));
 
     return buildAdminListEnvelope(withUnread, count, page, limit);
+    });
   }
 
   async getStats(period?: number) {
+    const cacheKey = this.cacheKey('stats', period ?? 30);
+    return this.cached(cacheKey, async () => {
     const days = Number(period) || 30;
     const start = new Date();
     start.setDate(start.getDate() - days);
@@ -675,6 +712,7 @@ export class TicketsService {
       },
       period: days,
     };
+    });
   }
 
   async getStaff() {
@@ -683,17 +721,16 @@ export class TicketsService {
       select: { id: true, first_name: true, last_name: true, email: true, role: true },
     });
 
-    const withCounts = await Promise.all(
-      staff.map(async (s) => {
-        const count = await this.prisma.tickets.count({
-          where: {
-            assigned_to: s.id,
-            status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] },
-          },
-        });
-        return { ...s, open_tickets_count: count };
-      }),
-    );
+    const staffIds = staff.map((s) => s.id);
+    const openCounts = staffIds.length
+      ? await this.prisma.tickets.groupBy({
+          by: ['assigned_to'],
+          where: { assigned_to: { in: staffIds }, status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] } },
+          _count: { id: true },
+        })
+      : [];
+    const countMap = new Map(openCounts.map((c) => [c.assigned_to, c._count.id]));
+    const withCounts = staff.map((s) => ({ ...s, open_tickets_count: countMap.get(s.id) || 0 }));
 
     return withCounts;
   }
@@ -864,6 +901,8 @@ export class TicketsService {
       where: { id },
       include: { profiles_tickets_user_idToprofiles: { select: profileBasic }, profiles_tickets_assigned_toToprofiles: { select: profileBasic } },
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Ticket updated successfully', ticket: mapTicket(updated as unknown as Record<string, unknown>) };
   }
 
@@ -916,6 +955,8 @@ export class TicketsService {
       include: { profiles_tickets_user_idToprofiles: { select: profileBasic }, profiles_tickets_assigned_toToprofiles: { select: profileBasic }, ticket_messages: { orderBy: { created_at: 'asc' }, include: { profiles: { select: profileSelect } } } },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Reply added successfully', reply: created, ticket: mapTicket(updated as unknown as Record<string, unknown>) };
   }
 
@@ -971,6 +1012,7 @@ export class TicketsService {
       });
     }
 
+    await this.invalidateCache();
     return { message: `Successfully updated ${tickets.length} ticket(s)`, updated_count: tickets.length };
   }
 
@@ -1023,6 +1065,7 @@ export class TicketsService {
       },
     });
 
+    await this.invalidateCache();
     return { message: `Successfully merged ${secondaries.length} ticket(s) into ${primary.ticket_number}`, primary_ticket: primary };
   }
 
@@ -1030,6 +1073,8 @@ export class TicketsService {
     await this.findRaw(id);
     await this.prisma.ticket_messages.deleteMany({ where: { ticket_id: id } });
     await this.prisma.tickets.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Ticket deleted successfully' };
   }
 
