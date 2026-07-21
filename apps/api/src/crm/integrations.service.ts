@@ -107,28 +107,43 @@ export class IntegrationsService {
       where: { project_id: null, deleted_at: null },
       select: { id: true, company_id: true, contact_id: true },
     });
+    if (invoices.length === 0) return { message: 'Linked 0 invoices to projects' };
 
+    const companyIds = [...new Set(invoices.map((i) => i.company_id).filter(Boolean) as number[])];
+    const contactIds = [...new Set(invoices.map((i) => i.contact_id).filter(Boolean) as number[])];
+    const projects = await this.prisma.crm_projects.findMany({
+      where: { deleted_at: null, OR: [{ company_id: { in: companyIds } }, { customer_id: { in: contactIds } }] },
+      orderBy: { created_at: 'desc' },
+      select: { id: true, company_id: true, customer_id: true, created_at: true },
+    });
+
+    const latestByCompany = new Map<number, typeof projects[0]>();
+    const latestByCustomer = new Map<number, typeof projects[0]>();
+    for (const project of projects) {
+      if (project.company_id != null && !latestByCompany.has(project.company_id)) latestByCompany.set(project.company_id, project);
+      if (project.customer_id != null && !latestByCustomer.has(project.customer_id)) latestByCustomer.set(project.customer_id, project);
+    }
+
+    const updatesByProject = new Map<number, number[]>();
     let linked = 0;
     for (const invoice of invoices) {
-      const project = await this.prisma.crm_projects.findFirst({
-        where: {
-          deleted_at: null,
-          OR: [
-            { company_id: invoice.company_id },
-            { customer_id: invoice.contact_id },
-          ],
-        },
-        orderBy: { created_at: 'desc' },
-      });
-
+      const project = latestByCompany.get(invoice.company_id as number) || latestByCustomer.get(invoice.contact_id as number);
       if (project) {
-        await this.prisma.invoices.update({
-          where: { id: invoice.id },
-          data: { project_id: project.id, crm_project_id: project.id },
-        });
+        const ids = updatesByProject.get(project.id) || [];
+        ids.push(invoice.id);
+        updatesByProject.set(project.id, ids);
         linked++;
       }
     }
+
+    await Promise.all(
+      Array.from(updatesByProject.entries()).map(([projectId, ids]) =>
+        this.prisma.invoices.updateMany({
+          where: { id: { in: ids } },
+          data: { project_id: projectId, crm_project_id: projectId },
+        }),
+      ),
+    );
 
     return { message: `Linked ${linked} invoices to projects` };
   }

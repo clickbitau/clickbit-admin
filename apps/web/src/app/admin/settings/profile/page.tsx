@@ -33,21 +33,55 @@ import { MfaSection } from './MfaSection';
 import { PasskeySection } from './PasskeySection';
 import { TrustedDevicesSection } from './TrustedDevicesSection';
 
-function formatAddressInput(value: string): string {
-  if (!value) return '';
-  if (typeof value !== 'string') return String(value);
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value;
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (typeof parsed === 'string') return parsed;
-    if (Array.isArray(parsed)) return parsed.filter(Boolean).join('\n');
-    const entries = Object.entries(parsed).filter(([, v]) => v);
-    if (entries.length) return entries.map(([k, v]) => `${k}: ${v}`).join('\n');
-    return value;
-  } catch {
-    return value;
+type AddressShape = { street?: string; city?: string; state?: string; postal_code?: string; country?: string };
+
+const ADDRESS_FIELDS: { key: keyof AddressShape; label: string; placeholder?: string }[] = [
+  { key: 'street', label: 'Street', placeholder: '35 Cambewell Street' },
+  { key: 'city', label: 'City', placeholder: 'Beckenham' },
+  { key: 'state', label: 'State', placeholder: 'WA' },
+  { key: 'postal_code', label: 'Postal code', placeholder: '6107' },
+  { key: 'country', label: 'Country', placeholder: 'Australia' },
+];
+
+function parseAddress(value: unknown): AddressShape {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value as AddressShape;
+  const str = typeof value === 'string' ? value : String(value);
+  const trimmed = str.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        // Strip accidental character-index keys from a previously corrupted string
+        const cleaned: AddressShape = {};
+        for (const field of ADDRESS_FIELDS) {
+          const v = (parsed as any)[field.key];
+          if (typeof v === 'string' || typeof v === 'number') cleaned[field.key] = String(v);
+        }
+        return cleaned;
+      }
+    } catch {
+      // fallthrough to line parser
+    }
   }
+  const parsed: AddressShape = {};
+  for (const line of trimmed.split(/\r?\n/)) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim().toLowerCase();
+    const val = line.slice(idx + 1).trim();
+    if (!val) continue;
+    if (key === 'street' || key === 'address' || key === 'address_line1' || key === 'line1') parsed.street = val;
+    else if (key === 'city' || key === 'suburb') parsed.city = val;
+    else if (key === 'state' || key === 'province') parsed.state = val;
+    else if (key === 'postal_code' || key === 'postcode' || key === 'zip' || key === 'zip_code') parsed.postal_code = val;
+    else if (key === 'country') parsed.country = val;
+  }
+  return parsed;
+}
+
+function buildAddress(fields: AddressShape): string {
+  return JSON.stringify(fields);
 }
 
 const NOTIFICATION_KEYS = [
@@ -93,8 +127,11 @@ export default function AdminSettingsProfilePage() {
     address: '',
   });
 
+  const [addressFields, setAddressFields] = useState<AddressShape>({});
+
   useEffect(() => {
     if (user) {
+      const address = parseAddress(user.address);
       setForm({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
@@ -106,8 +143,9 @@ export default function AdminSettingsProfilePage() {
         website: user.website || '',
         timezone: user.timezone || '',
         language: user.language || '',
-        address: user.address || '',
+        address: buildAddress(address),
       });
+      setAddressFields(address);
     }
   }, [user]);
 
@@ -237,7 +275,25 @@ export default function AdminSettingsProfilePage() {
                   <div className="space-y-2"><Label>Website</Label><Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} /></div>
                   <div className="space-y-2"><Label>Timezone</Label><Input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="Australia/Sydney" /></div>
                   <div className="space-y-2"><Label>Language</Label><Input value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} placeholder="en" /></div>
-                  <div className="space-y-2 sm:col-span-2"><Label>Address</Label><Textarea value={formatAddressInput(form.address)} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={3} /></div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Address</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {ADDRESS_FIELDS.map((field) => (
+                        <div key={field.key} className="space-y-2" data-field={field.key}>
+                          <Label className="text-muted-foreground text-xs">{field.label}</Label>
+                          <Input
+                            value={addressFields[field.key] || ''}
+                            placeholder={field.placeholder}
+                            onChange={(e) => {
+                              const next = { ...addressFields, [field.key]: e.target.value };
+                              setAddressFields(next);
+                              setForm((prev) => ({ ...prev, address: buildAddress(next) }));
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end">

@@ -124,44 +124,47 @@ export class KpiService {
       ? { id: { in: employeeIds } }
       : { employment_status: 'active' };
     const employees = await this.prisma.employees.findMany({ where });
-    const results: any[] = [];
 
-    for (const emp of employees) {
-      try {
-        const scoreData = await this.calculateKpiScore(emp.id, start, end);
-        const data: any = {
-          employee_id: emp.id,
-          period,
-          total_score: scoreData.total_score,
-          punctuality_score: scoreData.punctuality_score,
-          task_efficiency_score: scoreData.task_efficiency_score,
-          task_timeliness_score: scoreData.task_timeliness_score,
-          support_resolution_score: scoreData.support_resolution_score,
-          leadership_score: scoreData.leadership_score,
-          documentation_score: scoreData.documentation_score,
-          metadata: scoreData.metadata,
-        };
-
+    const results = await Promise.all(
+      employees.map(async (emp) => {
         try {
-          const record = await this.prisma.hr_kpi_scores.upsert({
-            where: { employee_id_period: { employee_id: emp.id, period } },
-            update: data,
-            create: data,
-          });
-          results.push(record);
-        } catch (e: any) {
-          if (e.code !== 'P2021') throw e;
-          results.push({ ...data, id: null, created_at: new Date(), updated_at: new Date() });
-        }
-      } catch (err: any) {
-        console.error(`[KPI Snapshot] employee ${emp.id}:`, err.message);
-      }
-    }
+          const scoreData = await this.calculateKpiScore(emp.id, start, end);
+          const data: any = {
+            employee_id: emp.id,
+            period,
+            total_score: scoreData.total_score,
+            punctuality_score: scoreData.punctuality_score,
+            task_efficiency_score: scoreData.task_efficiency_score,
+            task_timeliness_score: scoreData.task_timeliness_score,
+            support_resolution_score: scoreData.support_resolution_score,
+            leadership_score: scoreData.leadership_score,
+            documentation_score: scoreData.documentation_score,
+            metadata: scoreData.metadata,
+          };
 
+          try {
+            const record = await this.prisma.hr_kpi_scores.upsert({
+              where: { employee_id_period: { employee_id: emp.id, period } },
+              update: data,
+              create: data,
+            });
+            return record;
+          } catch (e: any) {
+            if (e.code !== 'P2021') throw e;
+            return { ...data, id: null, created_at: new Date(), updated_at: new Date() };
+          }
+        } catch (err: any) {
+          console.error(`[KPI Snapshot] employee ${emp.id}:`, err.message);
+          return null;
+        }
+      }),
+    );
+
+    const generated = results.filter(Boolean);
     return {
       success: true,
-      message: `Generated ${results.length} KPI snapshots for ${period}`,
-      generatedCount: results.length,
+      message: `Generated ${generated.length} KPI snapshots for ${period}`,
+      generatedCount: generated.length,
     };
   }
 

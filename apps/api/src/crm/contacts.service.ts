@@ -199,6 +199,64 @@ export class ContactsService {
     return buildLegacyList('payments', payments, total, page, limit);
   }
 
+  async getProjects(id: number, page = 1, limit = 20) {
+    await this.ensureContactExists(id);
+    const where: Prisma.crm_projectsWhereInput = { customer_id: id, deleted_at: null };
+    const [projects, total] = await Promise.all([
+      this.prisma.crm_projects.findMany({
+        where,
+        include: {
+          companies: { select: { id: true, name: true } },
+          profiles_crm_projects_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.crm_projects.count({ where }),
+    ]);
+    return buildLegacyList('projects', projects, total, page, limit);
+  }
+
+  async getDeals(id: number, page = 1, limit = 20) {
+    await this.ensureContactExists(id);
+    const where: Prisma.dealsWhereInput = { contact_id: id, deleted_at: null };
+    const [deals, total] = await Promise.all([
+      this.prisma.deals.findMany({
+        where,
+        include: {
+          companies: { select: { id: true, name: true } },
+          crm_pipeline_stages: { select: { id: true, name: true, is_won: true, is_lost: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.deals.count({ where }),
+    ]);
+    return buildLegacyList('deals', deals, total, page, limit);
+  }
+
+  async getTickets(id: number, page = 1, limit = 20) {
+    await this.ensureContactExists(id);
+    const contact = await this.prisma.contacts.findUnique({ where: { id }, select: { email: true } });
+    const where: Prisma.ticketsWhereInput = { contact_email: contact?.email || '', deleted_at: null };
+    const [tickets, total] = await Promise.all([
+      this.prisma.tickets.findMany({
+        where,
+        include: {
+          profiles_tickets_user_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
+          profiles_tickets_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.tickets.count({ where }),
+    ]);
+    return buildLegacyList('tickets', tickets, total, page, limit);
+  }
+
   async getPortalAccess(id: number) {
     await this.ensureContactExists(id);
     const contact = await this.prisma.contacts.findUnique({
@@ -279,15 +337,16 @@ export class ContactsService {
   }
 
   async batchPortalAccess(dto: PortalAccessBatchDto) {
-    const results: unknown[] = [];
-    for (const id of dto.contact_ids) {
-      try {
-        const r = await this.createPortalAccess(id);
-        results.push({ contact_id: id, success: r.success, alreadyExists: r.alreadyExists });
-      } catch (e) {
-        results.push({ contact_id: id, success: false, error: (e as Error).message });
-      }
-    }
+    const results = await Promise.all(
+      dto.contact_ids.map(async (id) => {
+        try {
+          const r = await this.createPortalAccess(id);
+          return { contact_id: id, success: r.success, alreadyExists: r.alreadyExists };
+        } catch (e) {
+          return { contact_id: id, success: false, error: (e as Error).message };
+        }
+      }),
+    );
     return { processed: results.length, results };
   }
 

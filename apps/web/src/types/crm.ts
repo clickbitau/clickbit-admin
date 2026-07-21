@@ -89,6 +89,7 @@ export interface CrmContact {
   twitter_url?: string | null;
   preferred_contact_method?: string | null;
   date_of_birth?: string | null;
+  portalAccess?: { hasAccess: boolean; user: { id: number; email?: string | null; role?: string | null } | null; linkType?: string } | null;
 }
 
 export interface PipelineStage {

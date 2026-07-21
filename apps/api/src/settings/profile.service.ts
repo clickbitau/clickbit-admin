@@ -70,6 +70,7 @@ export class ProfileService {
     for (const field of allowed) {
       if (dto[field] !== undefined) data[field] = dto[field];
     }
+    if (data.address && typeof data.address === 'object') data.address = JSON.stringify(data.address);
 
     let emailVerificationSent = false;
     if (dto.email && stringValue(dto.email).trim().toLowerCase() !== profile.email) {

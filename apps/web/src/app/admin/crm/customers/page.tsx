@@ -1,10 +1,10 @@
 'use client';
-import { PageShell } from '@/components/design-system/PageShell';
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -23,13 +23,14 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchContacts, fetchCustomerStats } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { CrmContact } from '@/types/crm';
-import { Search, User as UserIcon } from 'lucide-react';
+import { Search, Plus, Users } from 'lucide-react';
 
 export default function CustomersPage() {
   const { token } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
+  const [status, setStatus] = useState<string>('all');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
@@ -42,8 +43,9 @@ export default function CustomersPage() {
       sortOrder,
     };
     if (debouncedSearch) params.search = debouncedSearch;
+    if (status && status !== 'all') params.status = status;
     return params;
-  }, [page, debouncedSearch, sortBy, sortOrder]);
+  }, [page, debouncedSearch, status, sortBy, sortOrder]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['customers', queryParams],
@@ -71,23 +73,38 @@ export default function CustomersPage() {
 
   function toggleSort(field: string) {
     if (sortBy === field) setSortOrder((o) => (o === 'ASC' ? 'DESC' : 'ASC'));
-    else { setSortBy(field); setSortOrder('ASC'); }
+    else { setSortBy(field); setSortOrder('DESC'); }
     setPage(1);
   }
 
   return (
     <PageShell
       title="Customers"
-      icon={UserIcon}
+      icon={Users}
       description="Manage customer accounts and revenue"
+      actions={
+        <Button size="sm" asChild>
+          <Link href="/admin/crm/contacts/new"><Plus className="mr-1 h-4 w-4" /> New Customer</Link>
+        </Button>
+      }
     >
       <StatCards cards={statCards} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search customers..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
+        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="lead">Lead</SelectItem>
+            <SelectItem value="prospect">Prospect</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setPage(1); }}>
           <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
           <SelectContent>
@@ -95,6 +112,7 @@ export default function CustomersPage() {
             <SelectItem value="became_customer_at">Customer Since</SelectItem>
             <SelectItem value="name">Name</SelectItem>
             <SelectItem value="total_revenue">Revenue</SelectItem>
+            <SelectItem value="last_contacted_at">Last Contacted</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" onClick={() => toggleSort(sortBy)}>
@@ -104,8 +122,9 @@ export default function CustomersPage() {
 
       <DataTable
         headers={[
-          { key: 'name', label: 'Customer' },
+          { key: 'customer', label: 'Customer' },
           { key: 'company', label: 'Company' },
+          { key: 'lifecycle', label: 'Lifecycle' },
           { key: 'revenue', label: 'Revenue' },
           { key: 'since', label: 'Customer Since' },
           { key: 'contacted', label: 'Last Contacted' },
@@ -113,10 +132,15 @@ export default function CustomersPage() {
         data={customers}
         keyExtractor={(c) => c.id}
         loading={isLoading}
-        renderRow={(c) => [
-          <div key="name">
-            <Link href={`/admin/crm/customers/${c.id}`} className="font-medium hover:underline">{c.name}</Link>
-            <p className="text-xs text-muted-foreground">{c.email}</p>
+        renderRow={(c: CrmContact) => [
+          <div key="customer" className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-sm font-bold text-white">
+              {c.name?.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <Link href={`/admin/crm/customers/${c.id}`} className="font-medium hover:underline">{c.name}</Link>
+              <p className="text-xs text-muted-foreground">{c.email}</p>
+            </div>
           </div>,
           <div key="company">
             {c.primary_company ? (
@@ -128,11 +152,11 @@ export default function CustomersPage() {
               <span className="text-muted-foreground">-</span>
             )}
           </div>,
+          <Badge key="lifecycle" variant="outline" className="capitalize">{c.lifecycle_stage || '-'}</Badge>,
           <span key="revenue" className="font-medium text-emerald-600">{formatCurrency(c.total_revenue ?? 0)}</span>,
           <span key="since">{formatDate(c.became_customer_at)}</span>,
           <span key="contacted">{formatDate(c.last_contacted_at)}</span>,
         ]}
-        onRowClick={(c) => { /* row is a link via Link */ }}
       />
 
       <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} onPageChange={setPage} />

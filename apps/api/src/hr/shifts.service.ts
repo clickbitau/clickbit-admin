@@ -170,28 +170,26 @@ export class ShiftsService {
   }
 
   async batch(dto: any, user: Profile, req?: any) {
-    const created = [];
-    for (const date of dto.dates) {
+    if (!Array.isArray(dto.dates) || dto.dates.length === 0) throw new BadRequestException('dates array is required');
+    const data = dto.dates.map((date: string) => {
       const { start_datetime, end_datetime } = this.computeDatetimes(date, dto.start_time, dto.end_time);
-      const shift = await this.prisma.hr_shifts.create({
-        data: {
-          employee_id: Number(dto.employee_id),
-          shift_date: new Date(date),
-          start_time: timeToDate(dto.start_time),
-          end_time: timeToDate(dto.end_time),
-          start_datetime,
-          end_datetime,
-          scheduled_break_minutes: dto.scheduled_break_minutes ?? 30,
-          shift_type: (dto.shift_type) || 'regular',
-          location: dto.location,
-          color: dto.color || '#3B82F6',
-          notes: dto.notes,
-          created_by: user.id,
-        },
-      });
-      await this.audit('create', 'hr_shift', shift.id, user, null, { ...shift }, req);
-      created.push(shift);
-    }
+      return {
+        employee_id: Number(dto.employee_id),
+        shift_date: new Date(date),
+        start_time: timeToDate(dto.start_time),
+        end_time: timeToDate(dto.end_time),
+        start_datetime,
+        end_datetime,
+        scheduled_break_minutes: dto.scheduled_break_minutes ?? 30,
+        shift_type: (dto.shift_type || 'regular') as any,
+        location: dto.location,
+        color: dto.color || '#3B82F6',
+        notes: dto.notes,
+        created_by: user.id,
+      };
+    });
+    const created = await this.prisma.hr_shifts.createManyAndReturn({ data: data as any });
+    await Promise.all(created.map((shift) => this.audit('create', 'hr_shift', shift.id, user, null, { ...shift }, req)));
     await this.invalidateCache();
     return { success: true, message: `${created.length} shift(s) created`, data: created };
   }
@@ -299,39 +297,35 @@ export class ShiftsService {
     const sourceShifts = await this.prisma.hr_shifts.findMany({ where });
     const dayDiff = Math.round((targetDate.getTime() - sourceDate.getTime()) / (1000 * 60 * 60 * 24));
 
-    const newShifts = [];
-    for (const shift of sourceShifts) {
+    const data = sourceShifts.map((shift) => {
       const shiftDate = new Date(shift.shift_date);
       const newDate = new Date(shiftDate);
       newDate.setDate(newDate.getDate() + dayDiff);
-
       const { start_datetime, end_datetime } = this.computeDatetimes(newDate.toISOString().split('T')[0], this.timeToHHMM(shift.start_time), this.timeToHHMM(shift.end_time));
+      return {
+        employee_id: shift.employee_id,
+        shift_date: newDate,
+        start_time: shift.start_time,
+        end_time: shift.end_time,
+        start_datetime,
+        end_datetime,
+        scheduled_break_minutes: shift.scheduled_break_minutes,
+        shift_type: shift.shift_type,
+        department: shift.department,
+        position: shift.position,
+        location: shift.location,
+        location_coordinates: shift.location_coordinates as any,
+        color: shift.color,
+        notes: shift.notes,
+        tasks: shift.tasks as any,
+        is_overtime: shift.is_overtime,
+        overtime_rate: shift.overtime_rate,
+        status: 'scheduled' as any,
+        created_by: user.id,
+      };
+    });
 
-      const newShift = await this.prisma.hr_shifts.create({
-        data: {
-          employee_id: shift.employee_id,
-          shift_date: newDate,
-          start_time: shift.start_time,
-          end_time: shift.end_time,
-          start_datetime,
-          end_datetime,
-          scheduled_break_minutes: shift.scheduled_break_minutes,
-          shift_type: shift.shift_type,
-          department: shift.department,
-          position: shift.position,
-          location: shift.location,
-          location_coordinates: shift.location_coordinates as any,
-          color: shift.color,
-          notes: shift.notes,
-          tasks: shift.tasks as any,
-          is_overtime: shift.is_overtime,
-          overtime_rate: shift.overtime_rate,
-          status: 'scheduled',
-          created_by: user.id,
-        },
-      });
-      newShifts.push(newShift);
-    }
+    const newShifts = data.length > 0 ? await this.prisma.hr_shifts.createManyAndReturn({ data: data as any }) : [];
 
     await this.invalidateCache();
     return { success: true, message: `${newShifts.length} shifts copied`, data: newShifts };

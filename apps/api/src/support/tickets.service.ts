@@ -995,11 +995,11 @@ export class TicketsService {
         throw new BadRequestException({ message: 'Invalid action' });
     }
 
+    await this.prisma.tickets.updateMany({ where: { id: { in: ids } }, data: { ...updates, updated_at: new Date() } });
     const tickets = await this.prisma.tickets.findMany({ where: { id: { in: ids } } });
-    for (const ticket of tickets) {
-      await this.prisma.tickets.update({ where: { id: ticket.id }, data: { ...updates, updated_at: new Date() } });
-      await this.prisma.ticket_messages.create({
-        data: {
+    if (tickets.length > 0) {
+      await this.prisma.ticket_messages.createMany({
+        data: tickets.map((ticket) => ({
           ticket_id: ticket.id,
           user_id: user.id,
           message: logMessage,
@@ -1008,7 +1008,7 @@ export class TicketsService {
           is_internal: true,
           sender_name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
           sender_email: user.email,
-        },
+        })),
       });
     }
 
@@ -1028,9 +1028,9 @@ export class TicketsService {
     });
     if (!secondaries.length) throw new NotFoundException({ message: 'No tickets found' });
 
-    for (const t of secondaries) {
-      await this.prisma.ticket_messages.create({
-        data: {
+    if (secondaries.length > 0) {
+      await this.prisma.ticket_messages.createMany({
+        data: secondaries.map((t) => ({
           ticket_id: primary.id,
           user_id: user.id,
           message: `--- Merged from ticket ${t.ticket_number} ---\nOriginal subject: ${t.subject}`,
@@ -1038,19 +1038,24 @@ export class TicketsService {
           is_staff_reply: true,
           is_internal: true,
           sender_name: 'System',
-        },
-      });
-
-      await this.prisma.ticket_messages.updateMany({
-        where: { ticket_id: t.id },
-        data: { ticket_id: primary.id },
-      });
-
-      await this.prisma.tickets.update({
-        where: { id: t.id },
-        data: { status: 'closed', internal_notes: `${t.internal_notes || ''}\n[Merged into ${primary.ticket_number}]` },
+        })),
       });
     }
+
+    await Promise.all(
+      secondaries.map((t) =>
+        this.prisma.$transaction([
+          this.prisma.ticket_messages.updateMany({
+            where: { ticket_id: t.id },
+            data: { ticket_id: primary.id },
+          }),
+          this.prisma.tickets.update({
+            where: { id: t.id },
+            data: { status: 'closed', internal_notes: `${t.internal_notes || ''}\n[Merged into ${primary.ticket_number}]` },
+          }),
+        ]),
+      ),
+    );
 
     await this.prisma.ticket_messages.create({
       data: {
