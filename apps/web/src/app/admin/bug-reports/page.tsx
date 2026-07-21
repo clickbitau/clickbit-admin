@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,10 +9,18 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { Pagination } from '@/components/design-system/Pagination';
 import { DataTable } from '@/components/design-system/DataTable';
+import { BugReportForm } from '@/components/bug-reports/BugReportForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { fetchBugReports, fetchBugReportStats, syncBugReports, fetchBugReportConfig, fetchBugReportRepos } from '@/lib/api';
 import { useDebounce } from '@/lib/useDebounce';
@@ -62,7 +69,7 @@ function priorityColor(p?: string | null) {
 }
 
 export default function AdminBugReportsPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState('all');
@@ -70,6 +77,7 @@ export default function AdminBugReportsPage() {
   const [targetRepo, setTargetRepo] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
   const limit = 25;
   const debouncedSearch = useDebounce(search, 300);
 
@@ -170,9 +178,7 @@ export default function AdminBugReportsPage() {
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} /> Sync
           </Button>
-          <Button size="sm" asChild>
-            <Link href="/admin/bug-reports/new"><Plus className="mr-1 h-4 w-4" /> New</Link>
-          </Button>
+          <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New</Button>
         </div>
       }
     >
@@ -260,6 +266,23 @@ export default function AdminBugReportsPage() {
         totalItems={total}
         onPageChange={setPage}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New Bug Report</DialogTitle>
+            <DialogDescription>Manually file a bug report and route it to the right repository.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <BugReportForm
+              token={token}
+              user={user}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['bug-reports'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }
