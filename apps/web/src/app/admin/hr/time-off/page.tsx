@@ -1,8 +1,8 @@
 'use client';
-import Link from 'next/link';
 import { Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { TimeOffForm } from '@/components/hr/TimeOffForm';
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -13,6 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TimeOffTable } from '@/components/hr/TimeOffTable';
 import { StatCards } from '@/components/design-system/StatCards';
 import { fetchTimeOff, fetchHrStats } from '@/lib/api';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const statusOptions = ['', 'pending', 'approved', 'rejected', 'cancelled', 'withdrawn'];
 
@@ -21,6 +28,7 @@ export default function AdminHrTimeOffPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['time-off', token, page, search, status],
@@ -59,7 +67,7 @@ export default function AdminHrTimeOffPage() {
       title="Time Off"
       icon={CalendarIcon}
       description="Review and manage leave requests."
-      actions={<Button asChild><Link href="/admin/hr/time-off/new"><Plus className="mr-1 h-4 w-4" /> New Request</Link></Button>}
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Request</Button>}
     >
       <StatCards cards={statCards.map((s) => ({ ...s, value: statsLoading ? '...' : s.value }))} />
 
@@ -94,6 +102,22 @@ export default function AdminHrTimeOffPage() {
         totalItems={pagination.total}
         onPageChange={setPage}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Time Off</DialogTitle>
+            <DialogDescription>Submit a leave request on behalf of an employee.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <TimeOffForm
+              token={token}
+              onSuccess={() => setCreateOpen(false)}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

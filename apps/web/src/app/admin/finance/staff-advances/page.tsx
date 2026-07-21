@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HandCoins, Plus, Wallet, CheckCircle2, XCircle, Trash2, Search } from 'lucide-react';
@@ -10,11 +9,19 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { StaffAdvanceForm } from '@/components/finance/StaffAdvanceForm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { fetchEmployees, fetchStaffAdvances, approveStaffAdvance, rejectStaffAdvance, deleteStaffAdvance } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { toast } from 'sonner';
@@ -61,6 +68,7 @@ export default function StaffAdvancesPage() {
   const [employeeId, setEmployeeId] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['staff-advances', token, status, type, employeeId, search, page],
@@ -137,8 +145,8 @@ export default function StaffAdvancesPage() {
       icon={HandCoins}
       description="Employee pay advances, loans and asset advances"
       actions={
-        <Button asChild>
-          <Link href="/admin/finance/staff-advances/new"><Plus className="mr-2 h-4 w-4" /> New Advance</Link>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" /> New Advance
         </Button>
       }
     >
@@ -253,6 +261,22 @@ export default function StaffAdvancesPage() {
           }}
         />
       )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Staff Advance</DialogTitle>
+            <DialogDescription>Create an employee advance, loan or asset advance.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <StaffAdvanceForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['staff-advances'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

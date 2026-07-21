@@ -2,6 +2,7 @@
 import { Ticket as TicketIcon, Clock, MessageSquare, AlertTriangle, CheckCircle, Users, Tag, AlertCircle, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { SupportTicketForm } from '@/components/support/SupportTicketForm';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,6 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StatCards } from '@/components/design-system/StatCards';
 import { fetchTickets, fetchTicketStats, fetchSupportStaff } from '@/lib/api';
 import { formatDate } from '@/lib/format';
@@ -27,6 +35,7 @@ export default function AdminSupportPage() {
   const [status, setStatus] = useState('open_all');
   const [priority, setPriority] = useState('all');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['tickets', token, page, status, priority, search],
@@ -78,7 +87,7 @@ export default function AdminSupportPage() {
       actions={
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild><Link href="/admin/support/automation">Automation</Link></Button>
-          <Button asChild><Link href="/admin/support/new"><Plus className="mr-1 h-4 w-4" /> New Ticket</Link></Button>
+          <Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Ticket</Button>
         </div>
       }
     >
@@ -139,11 +148,27 @@ export default function AdminSupportPage() {
           </Card>
 
           <Pagination
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.totalItems}
-        onPageChange={setPage}
-      />
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.totalItems}
+            onPageChange={setPage}
+          />
+
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>New Ticket</DialogTitle>
+                <DialogDescription>Create a support ticket on behalf of a customer or internal user.</DialogDescription>
+              </DialogHeader>
+              {token && (
+                <SupportTicketForm
+                  token={token}
+                  onSuccess={() => setCreateOpen(false)}
+                  onCancel={() => setCreateOpen(false)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </PageShell>

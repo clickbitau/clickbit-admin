@@ -1,11 +1,11 @@
 'use client';
-import Link from 'next/link';
 import {
   CreditCard as CreditCardIcon, Plus, Search, Trash2, ArrowUpDown,
   Landmark, CreditCard, Banknote, ReceiptText, Smartphone, Building2, Clock, CheckCircle2, XCircle, RefreshCw
 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PaymentForm } from '@/components/finance/PaymentForm';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/design-system/DataTable';
 import { StatCards } from '@/components/design-system/StatCards';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { fetchPayments, fetchPaymentStats, deletePayment } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { toast } from 'sonner';
@@ -82,6 +89,7 @@ export default function AdminFinancePaymentsPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('payment_date');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [createOpen, setCreateOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
@@ -169,7 +177,7 @@ export default function AdminFinancePaymentsPage() {
       title="Payments"
       icon={CreditCardIcon}
       description="Recorded and gateway payments"
-      actions={<Button asChild><Link href="/admin/finance/payments/new"><Plus className="mr-2 h-4 w-4" /> Record Payment</Link></Button>}
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-2 h-4 w-4" /> Record Payment</Button>}
     >
       <StatCards cards={statCards} />
 
@@ -267,6 +275,22 @@ export default function AdminFinancePaymentsPage() {
         totalItems={pagination.totalItems}
         onPageChange={setPage}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+            <DialogDescription>Manually record a payment against an invoice.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <PaymentForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['payments'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }
