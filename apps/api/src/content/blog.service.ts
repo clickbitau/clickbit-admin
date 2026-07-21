@@ -2,14 +2,33 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJson, buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
+import { CacheService } from '../redis/cache.service';
 
 const profileSelect = { id: true, first_name: true, last_name: true };
 
 @Injectable()
 export class BlogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('blog', ...parts) ?? `blog:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async listPublic(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('public', JSON.stringify(query)), async () => {
     const where: any = { status: 'published', deleted_at: null };
     const search = stringValue(query.search);
     const category = stringValue(query.category);
@@ -24,12 +43,15 @@ export class BlogService {
       this.prisma.blog_posts.findMany({ where, include: { profiles: { select: profileSelect } }, orderBy: { published_at: 'desc' }, ...(limit ? { skip: offset, take: limit } : {}) }),
     ]);
     return { posts: posts.map((p: any) => this.mapBlog(p)), pagination: { total, limit: limit || null, offset, hasMore: limit ? offset + posts.length < total : false } };
+    });
   }
 
   async featured(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('featured', JSON.stringify(query)), async () => {
     const limit = numberValue(query.limit, 3);
     const posts = await this.prisma.blog_posts.findMany({ where: { status: 'published', featured: true, deleted_at: null }, include: { profiles: { select: profileSelect } }, orderBy: { published_at: 'desc' }, take: limit });
     return posts.map((p: any) => this.mapBlog(p));
+    });
   }
 
   async findBySlug(slug: string) {
@@ -69,10 +91,12 @@ export class BlogService {
     const comment = await this.prisma.comments.create({
       data: { content, author_name: authorName, author_email: authorEmail, post_id: post.id, parent_id: parentId || null, status: 'pending', created_at: new Date(), updated_at: new Date() },
     });
+    await this.invalidateCache();
     return { message: 'Your comment has been submitted and is awaiting moderation', comment: { id: comment.id, author_name: comment.author_name, content: comment.content, created_at: comment.created_at, status: comment.status } };
   }
 
   async findAllAdmin(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('admin-list', JSON.stringify(query)), async () => {
     const where: any = { deleted_at: null };
     const status = stringValue(query.status);
     const author = numberValue(query.author, 0) || undefined;
@@ -89,18 +113,22 @@ export class BlogService {
       this.prisma.blog_posts.findMany({ where, include: { profiles: { select: profileSelect } }, orderBy: { created_at: 'desc' }, skip: offset, take: limit }),
     ]);
     return { posts: posts.map((p: any) => this.mapBlog(p)), pagination: { total, limit, offset, hasMore: offset + posts.length < total } };
+    });
   }
 
   async findOneAdmin(id: number) {
+    return this.cached(this.cacheKey('admin-detail', id), async () => {
     const post = await this.prisma.blog_posts.findUnique({ where: { id }, include: { profiles: { select: profileSelect } } });
     if (!post) throw new NotFoundException({ message: 'Blog post not found' });
     return { post: this.mapBlog(post as any) };
+    });
   }
 
   async create(user: Profile, dto: Record<string, unknown>) {
     const data: any = this.buildBlogData(dto, user.id);
     const created = await this.prisma.blog_posts.create({ data });
     const post = await this.prisma.blog_posts.findUnique({ where: { id: created.id }, include: { profiles: { select: profileSelect } } });
+    await this.invalidateCache();
     return { message: 'Blog post created successfully', post: this.mapBlog(post as any) };
   }
 
@@ -111,6 +139,8 @@ export class BlogService {
     if (data.status === 'published' && post.status !== 'published' && !data.published_at) data.published_at = new Date();
     await this.prisma.blog_posts.update({ where: { id }, data });
     const refreshed = await this.prisma.blog_posts.findUnique({ where: { id }, include: { profiles: { select: profileSelect } } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return { message: 'Blog post updated successfully', post: this.mapBlog(refreshed as any) };
   }
 
@@ -118,10 +148,13 @@ export class BlogService {
     const post = await this.prisma.blog_posts.findUnique({ where: { id } });
     if (!post) throw new NotFoundException({ message: 'Blog post not found' });
     await this.prisma.blog_posts.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return buildMessageEnvelope('Blog post deleted successfully');
   }
 
   async stats() {
+    return this.cached(this.cacheKey('stats'), async () => {
     const [total, published, draft, scheduled, archived, featured] = await this.prisma.$transaction([
       this.prisma.blog_posts.count({ where: { deleted_at: null } }),
       this.prisma.blog_posts.count({ where: { deleted_at: null, status: 'published' } }),
@@ -131,6 +164,7 @@ export class BlogService {
       this.prisma.blog_posts.count({ where: { deleted_at: null, featured: true } }),
     ]);
     return { total, published, draft, scheduled, archived, featured };
+    });
   }
 
   private buildBlogData(dto: Record<string, unknown>, authorId?: number, partial = false) {

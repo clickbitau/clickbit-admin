@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 const advanceInclude: any = {
   employees: { include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true, job_title: true } } } },
@@ -25,9 +26,27 @@ function toLocalDateStr(dt: Date | string) {
 
 @Injectable()
 export class StaffAdvancesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('staff-advances', ...parts) ?? `staff-advances:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const where: any = {};
     if (typeof query.status === 'string') where.status = query.status;
     if (query.employee_id) where.employee_id = Number(query.employee_id);
@@ -72,9 +91,11 @@ export class StaffAdvancesService {
       stats,
       pagination: { currentPage: page, totalPages: Math.ceil(count / limit), totalItems: count },
     };
+    });
   }
 
   async findMe(userId: number) {
+    return this.cached(this.cacheKey('me', userId), async () => {
     const emp = await this.prisma.employees.findUnique({ where: { user_id: userId } });
     if (!emp) throw new NotFoundException('No employee profile found');
     const rows = await this.prisma.staff_advances.findMany({
@@ -84,9 +105,11 @@ export class StaffAdvancesService {
     });
     const totalOwed = rows.filter((a) => a.status === 'active').reduce((s, a) => s + Number(a.remaining_balance || 0), 0);
     return { success: true, data: rows.map(normalize), totalOwed };
+    });
   }
 
   async checkEligibility(userId: number) {
+    return this.cached(this.cacheKey('eligibility', userId), async () => {
     const emp = await this.prisma.employees.findUnique({ where: { user_id: userId } });
     if (!emp) throw new NotFoundException('No employee profile found');
 
@@ -123,6 +146,7 @@ export class StaffAdvancesService {
       payslip_currency: lastPayslip.currency || 'AUD',
       existing_advance: existing ? { id: existing.id, status: existing.status, total_amount: existing.total_amount } : null,
     };
+    });
   }
 
   async request(userId: number, dto: any) {
@@ -159,6 +183,7 @@ export class StaffAdvancesService {
       },
       include: advanceInclude,
     });
+    await this.invalidateCache();
     return { success: true, data: normalize(advance), message: 'Your advance request has been submitted and is pending approval.' };
   }
 
@@ -181,10 +206,12 @@ export class StaffAdvancesService {
       },
       include: advanceInclude,
     });
+    await this.invalidateCache();
     return { success: true, data: normalize(advance) };
   }
 
   async findOne(user: any, id: number) {
+    return this.cached(this.cacheKey('detail', user.id, id), async () => {
     const advance = await this.prisma.staff_advances.findUnique({ where: { id }, include: advanceInclude });
     if (!advance) throw new NotFoundException('Advance not found');
     const role = String(user.role).toLowerCase();
@@ -192,6 +219,7 @@ export class StaffAdvancesService {
       throw new ForbiddenException('Access denied');
     }
     return { success: true, data: normalize(advance) };
+    });
   }
 
   async update(id: number, dto: any) {
@@ -205,6 +233,8 @@ export class StaffAdvancesService {
     if (dto.advance_type !== undefined) data.advance_type = dto.advance_type;
     if (dto.advance_date !== undefined) data.advance_date = new Date(dto.advance_date);
     const updated = await this.prisma.staff_advances.update({ where: { id }, data, include: advanceInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(updated) };
   }
 
@@ -217,6 +247,8 @@ export class StaffAdvancesService {
       data: { status: 'active', advance_date: new Date() },
       include: advanceInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(updated), message: 'Advance approved and is now active.' };
   }
 
@@ -227,6 +259,8 @@ export class StaffAdvancesService {
     const data: any = { status: 'rejected' };
     if (reason) data.notes = reason;
     const updated = await this.prisma.staff_advances.update({ where: { id }, data, include: advanceInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(updated), message: 'Advance request rejected.' };
   }
 
@@ -235,6 +269,7 @@ export class StaffAdvancesService {
     if (!advance) throw new NotFoundException('Advance not found');
     await this.prisma.staff_advance_deductions.deleteMany({ where: { advance_id: id } });
     await this.prisma.staff_advances.delete({ where: { id } });
+    await this.invalidateCache();
     return { success: true, message: 'Advance deleted' };
   }
 
@@ -256,6 +291,8 @@ export class StaffAdvancesService {
     });
 
     const updated = await this.recalcBalance(advanceId);
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', advanceId));
     return { success: true, data: deduction, remainingBalance: updated.remaining_balance, status: updated.status };
   }
 
@@ -264,6 +301,7 @@ export class StaffAdvancesService {
     if (!deduction) throw new NotFoundException('Deduction not found');
     await this.prisma.staff_advance_deductions.delete({ where: { id: deductionId } });
     const updated = await this.recalcBalance(advanceId);
+    await this.invalidateCache();
     return { success: true, message: 'Deduction removed', remainingBalance: updated.remaining_balance, status: updated.status };
   }
 

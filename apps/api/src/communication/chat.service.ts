@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildDataEnvelope, buildListEnvelope, buildMessageEnvelope, numberValue, profileSelect, stringValue } from './communication-utils';
+import { CacheService } from '../redis/cache.service';
 
 const workspaceInclude = {
   workspace_members: { include: { profiles: { select: profileSelect } } },
@@ -15,9 +16,27 @@ const dmInclude = {
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('chat', ...parts) ?? `chat:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async participants(user: Profile) {
+    return this.cached(this.cacheKey('participants', user.id, user.role), async () => {
     const where: any = { id: { not: user.id }, status: 'active' };
     if (user.role === 'customer') where.role = { in: ['admin', 'manager'] };
     else if (user.role === 'employee') where.role = 'employee';
@@ -43,15 +62,18 @@ export class ChatService {
     }
 
     return buildDataEnvelope([...staff, ...clients]);
+    });
   }
 
   async listWorkspaces(user: Profile) {
+    return this.cached(this.cacheKey('workspaces', user.id), async () => {
     const workspaces = await this.prisma.workspaces.findMany({
       where: { workspace_members: { some: { user_id: user.id } } },
       include: workspaceInclude as any,
       orderBy: { created_at: 'desc' },
     });
     return buildDataEnvelope(workspaces.map((w) => this.mapWorkspace(w as any)));
+    });
   }
 
   async createWorkspace(user: Profile, dto: Record<string, unknown>) {
@@ -65,10 +87,12 @@ export class ChatService {
 
     await this.prisma.workspace_members.create({ data: { workspace_id: created.id, user_id: user.id, role: 'owner' } });
 
+    await this.invalidateCache();
     return { success: true, workspace: this.mapWorkspace(created as any) };
   }
 
   async listDirectMessages(user: Profile, query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('dms', user.id, JSON.stringify(query)), async () => {
     const limit = numberValue(query.limit, 50);
     const offset = numberValue(query.offset, 0);
 
@@ -90,6 +114,7 @@ export class ChatService {
     });
 
     return buildListEnvelope(dms.map((d) => this.mapDm(d as any)), ids.length, limit, offset);
+    });
   }
 
   async createDirectMessage(user: Profile, dto: Record<string, unknown>) {
@@ -116,6 +141,7 @@ export class ChatService {
       data: allIds.map((id) => ({ direct_message_id: created.id, user_id: id })),
     });
 
+    await this.invalidateCache();
     return buildDataEnvelope(this.mapDm(created as any));
   }
 
@@ -129,6 +155,8 @@ export class ChatService {
       include: dmInclude as any,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('dms', user.id));
     return buildDataEnvelope(this.mapDm(updated as any));
   }
 
@@ -145,12 +173,14 @@ export class ChatService {
   }
 
   async listChannels(user: Profile, query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('channels', user.id, JSON.stringify(query)), async () => {
     const workspaceId = numberValue(query.workspace_id, 0);
     if (!workspaceId) throw new BadRequestException({ success: false, message: 'workspace_id is required' });
     await this.assertWorkspaceMember(workspaceId, user.id, user.role);
 
     const channels = await this.prisma.channels.findMany({ where: { workspace_id: workspaceId }, orderBy: { position: 'asc' } });
     return buildDataEnvelope(channels);
+    });
   }
 
   async createChannel(user: Profile, dto: Record<string, unknown>) {
@@ -172,6 +202,7 @@ export class ChatService {
       },
     });
 
+    await this.invalidateCache();
     return buildDataEnvelope(created);
   }
 
@@ -190,12 +221,14 @@ export class ChatService {
   }
 
   async getPreferences(user: Profile, query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('prefs', user.id, JSON.stringify(query)), async () => {
     const conversationType = stringValue(query.conversation_type) as any;
     const conversationId = numberValue(query.conversation_id, 0);
     if (!conversationType || !conversationId) throw new BadRequestException({ success: false, message: 'conversation_type and conversation_id are required' });
 
     const prefs = await this.prisma.conversation_preferences.findFirst({ where: { user_id: user.id, conversation_type: conversationType, conversation_id: conversationId } });
     return buildDataEnvelope(prefs);
+    });
   }
 
   async savePreferences(user: Profile, dto: Record<string, unknown>) {
@@ -220,6 +253,8 @@ export class ChatService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('prefs', user.id));
     return buildDataEnvelope(prefs);
   }
 

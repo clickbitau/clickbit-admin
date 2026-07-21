@@ -2,15 +2,34 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJson, buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
+import { CacheService } from '../redis/cache.service';
 
 const MARKETING_TAG = 'marketing';
 const profileSelect = { id: true, first_name: true, last_name: true };
 
 @Injectable()
 export class MarketingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('marketing', ...parts) ?? `marketing:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async listPublic(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('public', JSON.stringify(query)), async () => {
     const now = new Date();
     const limit = Math.min(numberValue(query.limit, 20), 50);
     const offset = numberValue(query.offset, 0);
@@ -19,9 +38,11 @@ export class MarketingService {
     if (type) where.categories = { contains: type, mode: 'insensitive' };
     const posts = await this.prisma.blog_posts.findMany({ where, orderBy: [{ featured: 'desc' }, { published_at: 'desc' }], skip: offset, take: limit });
     return posts.map((p: any) => this.mapPost(p));
+    });
   }
 
   async findAllAdmin(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('admin-list', JSON.stringify(query)), async () => {
     const limit = Math.min(numberValue(query.limit, 50), 100);
     const offset = numberValue(query.offset, 0);
     const status = stringValue(query.status);
@@ -32,9 +53,11 @@ export class MarketingService {
       this.prisma.blog_posts.findMany({ where, include: { profiles: { select: profileSelect } }, orderBy: { created_at: 'desc' }, skip: offset, take: limit }),
     ]);
     return { posts: rows.map((p: any) => this.mapPost(p)), total: count };
+    });
   }
 
   async statsAdmin() {
+    return this.cached(this.cacheKey('admin-stats'), async () => {
     const where: any = { deleted_at: null, tags: { contains: MARKETING_TAG, mode: 'insensitive' } };
     const [total, published, draft] = await this.prisma.$transaction([
       this.prisma.blog_posts.count({ where }),
@@ -42,12 +65,15 @@ export class MarketingService {
       this.prisma.blog_posts.count({ where: { ...where, status: 'draft' } }),
     ]);
     return { total, published, draft };
+    });
   }
 
   async findOneAdmin(id: number) {
+    return this.cached(this.cacheKey('admin-detail', id), async () => {
     const post = await this.prisma.blog_posts.findUnique({ where: { id }, include: { profiles: { select: profileSelect } } });
     if (!post || post.deleted_at) throw new NotFoundException({ message: 'Marketing post not found' });
     return { post: this.mapPost(post as any) };
+    });
   }
 
   async create(user: Profile, dto: Record<string, unknown>) {
@@ -71,6 +97,7 @@ export class MarketingService {
         updated_at: new Date(),
       } as any,
     });
+    await this.invalidateCache();
     return this.mapPost(post as any);
   }
 
@@ -94,6 +121,8 @@ export class MarketingService {
     if (dto.tags !== undefined) data.tags = asJson(dto.tags, []);
     data.updated_at = new Date();
     const updated = await this.prisma.blog_posts.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return this.mapPost(updated as any);
   }
 
@@ -101,6 +130,8 @@ export class MarketingService {
     const post = await this.prisma.blog_posts.findUnique({ where: { id } });
     if (!post || post.deleted_at) throw new NotFoundException({ message: 'Marketing post not found' });
     await this.prisma.blog_posts.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return buildMessageEnvelope('Marketing post deleted');
   }
 

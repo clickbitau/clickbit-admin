@@ -1,21 +1,42 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { asJson, buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class ServicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('services', ...parts) ?? `services:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async listPublic(query: Record<string, unknown>, mode?: string) {
+    return this.cached(this.cacheKey('public', mode ?? 'all', JSON.stringify(query)), async () => {
     const services = await this.prisma.services.findMany({
       where: { is_active: true, deleted_at: null },
       orderBy: { created_at: 'desc' },
     });
     const parsed = services.map((s) => this.mapService(s as any, mode === 'light'));
     return mode === 'light' ? parsed : parsed;
+    });
   }
 
   async byCategory() {
+    return this.cached(this.cacheKey('by-category'), async () => {
     const services = await this.prisma.services.findMany({ where: { is_active: true, deleted_at: null }, orderBy: [{ category: 'asc' }, { name: 'asc' }] });
     const grouped: Record<string, any> = {};
     for (const s of services) {
@@ -24,9 +45,11 @@ export class ServicesService {
       grouped[cat].items.push({ name: s.name, desc: s.description, href: `/services/${s.slug}`, popular: s.is_popular, slug: s.slug });
     }
     return grouped;
+    });
   }
 
   async forProjectForm() {
+    return this.cached(this.cacheKey('project-form'), async () => {
     const services = await this.prisma.services.findMany({ where: { is_active: true, deleted_at: null }, orderBy: [{ category: 'asc' }, { name: 'asc' }] });
     const formatted: Record<string, any> = {};
     for (const s of services) {
@@ -57,9 +80,11 @@ export class ServicesService {
       };
     }
     return formatted;
+    });
   }
 
   async productMapping() {
+    return this.cached(this.cacheKey('product-mapping'), async () => {
     const services = await this.prisma.services.findMany({ where: { is_active: true, deleted_at: null }, orderBy: { name: 'asc' } });
     const serviceToProductMapping: Record<string, any> = {};
     const products: any[] = [];
@@ -77,15 +102,19 @@ export class ServicesService {
       }
     }
     return { generatedAt: new Date().toISOString(), totalProducts: products.length, serviceToProductMapping, products };
+    });
   }
 
   async findBySlug(slug: string) {
+    return this.cached(this.cacheKey('detail', slug), async () => {
     const s = await this.prisma.services.findFirst({ where: { slug, deleted_at: null } });
     if (!s) throw new NotFoundException({ message: 'Service not found' });
     return this.mapService(s as any);
+    });
   }
 
   async findAllAdmin(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('admin-list', JSON.stringify(query)), async () => {
     const where: any = { deleted_at: null };
     const status = stringValue(query.status);
     const category = stringValue(query.category);
@@ -100,9 +129,11 @@ export class ServicesService {
       this.prisma.services.findMany({ where, orderBy: { created_at: 'desc' }, skip: offset, take: limit }),
     ]);
     return { items: items.map((s) => this.mapService(s as any)), pagination: { total, limit, offset, hasMore: offset + items.length < total } };
+    });
   }
 
   async statsAdmin() {
+    return this.cached(this.cacheKey('admin-stats'), async () => {
     const [total, active, inactive, popular] = await this.prisma.$transaction([
       this.prisma.services.count({ where: { deleted_at: null } }),
       this.prisma.services.count({ where: { deleted_at: null, is_active: true } }),
@@ -110,17 +141,21 @@ export class ServicesService {
       this.prisma.services.count({ where: { deleted_at: null, is_popular: true } }),
     ]);
     return { total, active, inactive, popular };
+    });
   }
 
   async findOneAdmin(id: number) {
+    return this.cached(this.cacheKey('admin-detail', id), async () => {
     const s = await this.prisma.services.findUnique({ where: { id } });
     if (!s) throw new NotFoundException({ message: 'Service not found' });
     return { item: this.mapService(s as any) };
+    });
   }
 
   async create(dto: Record<string, unknown>) {
     const data: any = this.buildServiceData(dto);
     const created = await this.prisma.services.create({ data });
+    await this.invalidateCache();
     return { message: 'Service created successfully', item: this.mapService(created as any) };
   }
 
@@ -129,6 +164,8 @@ export class ServicesService {
     if (!s) throw new NotFoundException({ message: 'Service not found' });
     const data: any = this.buildServiceData(dto, true);
     const updated = await this.prisma.services.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return { message: 'Service updated successfully', item: this.mapService(updated as any) };
   }
 
@@ -136,6 +173,8 @@ export class ServicesService {
     const s = await this.prisma.services.findUnique({ where: { id } });
     if (!s) throw new NotFoundException({ message: 'Service not found' });
     await this.prisma.services.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('admin-detail', id));
     return buildMessageEnvelope('Service deleted successfully');
   }
 

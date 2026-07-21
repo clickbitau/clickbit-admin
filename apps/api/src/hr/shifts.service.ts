@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildLegacyDataEnvelope, buildLegacyMessageEnvelope } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 function timeToDate(time: string): Date {
   return new Date(`1970-01-01T${time}:00`);
@@ -25,7 +26,24 @@ function mapShift(shift: any) {
 
 @Injectable()
 export class ShiftsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('shifts', ...parts) ?? `shifts:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private async findEmployee(userId: number) {
     return this.prisma.employees.findFirst({ where: { user_id: userId, deleted_at: null } });
@@ -61,6 +79,7 @@ export class ShiftsService {
   }
 
   async findAll(query: any, user: Profile) {
+    return this.cached(this.cacheKey('list', user.id, JSON.stringify(query)), async () => {
     let targetEmployeeId: number | undefined = query.employee_id ? Number(query.employee_id) : undefined;
     if (user.role !== 'admin' && user.role !== 'manager') {
       const employee = await this.findEmployee(user.id);
@@ -91,9 +110,11 @@ export class ShiftsService {
     });
 
     return buildLegacyDataEnvelope(shifts.map(mapShift));
+    });
   }
 
   async findOne(id: number, user: Profile) {
+    return this.cached(this.cacheKey('detail', user.id, id), async () => {
     const shift = await this.prisma.hr_shifts.findUnique({
       where: { id },
       include: {
@@ -115,6 +136,7 @@ export class ShiftsService {
     }
 
     return buildLegacyDataEnvelope(mapShift(shift));
+    });
   }
 
   async create(dto: any, user: Profile, req?: any) {
@@ -143,6 +165,7 @@ export class ShiftsService {
 
     const shift = await this.prisma.hr_shifts.create({ data });
     await this.audit('create', 'hr_shift', shift.id, user, null, data, req);
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(shift);
   }
 
@@ -169,6 +192,7 @@ export class ShiftsService {
       await this.audit('create', 'hr_shift', shift.id, user, null, { ...shift }, req);
       created.push(shift);
     }
+    await this.invalidateCache();
     return { success: true, message: `${created.length} shift(s) created`, data: created };
   }
 
@@ -191,6 +215,8 @@ export class ShiftsService {
 
     const shift = await this.prisma.hr_shifts.update({ where: { id }, data });
     await this.audit('update', 'hr_shift', id, user, previous, data, req);
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return buildLegacyDataEnvelope(shift);
   }
 
@@ -199,6 +225,8 @@ export class ShiftsService {
     if (!shift) throw new NotFoundException({ success: false, message: 'Shift not found' });
     await this.prisma.hr_shifts.delete({ where: { id } });
     await this.audit('delete', 'hr_shift', id, user, shift, null, req);
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return buildLegacyMessageEnvelope('Shift deleted');
   }
 
@@ -212,6 +240,7 @@ export class ShiftsService {
         shift_date: { gte: new Date(query.start_date), lte: new Date(query.end_date) },
       },
     });
+    await this.invalidateCache();
     return { success: true, message: `${count} shift(s) removed`, data: { deleted: count } };
   }
 
@@ -227,6 +256,8 @@ export class ShiftsService {
       where: { id },
       data: { employee_confirmed: true, employee_confirmed_at: new Date(), status: 'confirmed' as any },
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Shift confirmed', data: updated };
   }
 
@@ -239,6 +270,7 @@ export class ShiftsService {
     });
     const shifts = await this.prisma.hr_shifts.findMany({ where: { id: { in: ids } } });
     await this.audit('publish', 'hr_shift', ids.join(','), user, null, { published_at: now }, req);
+    await this.invalidateCache();
     return { success: true, message: `${shifts.length} shifts published`, data: shifts };
   }
 
@@ -301,6 +333,7 @@ export class ShiftsService {
       newShifts.push(newShift);
     }
 
+    await this.invalidateCache();
     return { success: true, message: `${newShifts.length} shifts copied`, data: newShifts };
   }
 
@@ -310,6 +343,7 @@ export class ShiftsService {
   }
 
   async openShifts(query: any) {
+    return this.cached(this.cacheKey('open-shifts', JSON.stringify(query)), async () => {
     const where: Prisma.hr_shiftsWhereInput = {
       is_open_shift: true,
       status: { notIn: ['cancelled', 'completed'] as any },
@@ -331,6 +365,7 @@ export class ShiftsService {
     });
 
     return buildLegacyDataEnvelope(shifts.map(mapShift));
+    });
   }
 
   async claim(id: number, user: Profile) {
@@ -349,6 +384,8 @@ export class ShiftsService {
 
     claimed.push(employee.id);
     const updated = await this.prisma.hr_shifts.update({ where: { id }, data: { open_shift_claimed_by: claimed as any } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { success: true, message: 'Shift claimed', data: updated };
   }
 }

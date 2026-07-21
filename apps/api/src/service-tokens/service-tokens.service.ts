@@ -1,6 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 export interface UserLike {
   id: number;
@@ -9,9 +10,27 @@ export interface UserLike {
 
 @Injectable()
 export class ServiceTokensService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('service-tokens', ...parts) ?? `service-tokens:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(user: UserLike) {
+    return this.cached(this.cacheKey('list', user.id), async () => {
     this.ensureAdmin(user);
     const tokens = await this.prisma.service_tokens.findMany({
       select: {
@@ -29,6 +48,7 @@ export class ServiceTokensService {
       orderBy: { created_at: 'desc' },
     });
     return { success: true, data: tokens };
+    });
   }
 
   async create(user: UserLike, dto: Record<string, unknown>) {
@@ -62,6 +82,7 @@ export class ServiceTokensService {
       },
     });
 
+    await this.invalidateCache();
     return {
       success: true,
       message: 'Token created. Save this token — it will not be shown again.',
@@ -82,6 +103,7 @@ export class ServiceTokensService {
     const token = await this.prisma.service_tokens.findUnique({ where: { id } });
     if (!token) throw new NotFoundException('Token not found');
     await this.prisma.service_tokens.update({ where: { id }, data: { revoked: true } });
+    await this.invalidateCache();
     return { success: true, message: `Token "${token.name}" revoked` };
   }
 

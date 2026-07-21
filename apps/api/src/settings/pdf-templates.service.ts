@@ -6,6 +6,7 @@ import {
   DEFAULT_PAYSLIP_CSS,
   DEFAULT_PAYSLIP_HTML,
 } from './default-pdf-templates';
+import { CacheService } from '../redis/cache.service';
 
 const KEY = 'pdf_templates';
 
@@ -28,7 +29,24 @@ function normalizeTemplateData(data: any) {
 
 @Injectable()
 export class PdfTemplatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('pdf-templates', ...parts) ?? `pdf-templates:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private async getTemplates() {
     const row = await this.prisma.site_settings.findFirst({ where: { setting_key: KEY } });
@@ -49,6 +67,7 @@ export class PdfTemplatesService {
         data: { setting_key: KEY, setting_value: JSON.stringify(templates), setting_type: 'system', is_public: false } as any,
       });
     }
+    await this.invalidateCache();
   }
 
   private getSampleData(): Record<string, any> {
@@ -148,9 +167,11 @@ export class PdfTemplatesService {
   }
 
   async findAll(templateType?: string) {
+    return this.cached(this.cacheKey('list', templateType ?? 'all'), async () => {
     let templates = await this.getTemplates();
     if (templateType) templates = templates.filter((t: any) => t.template_type === templateType);
     return { templates };
+    });
   }
 
   async create(data: any) {
@@ -209,10 +230,12 @@ export class PdfTemplatesService {
   }
 
   async preview(id: number) {
+    return this.cached(this.cacheKey('preview', id), async () => {
     const templates = await this.getTemplates();
     const template = templates.find((t: any) => t.id === id);
     if (!template) throw new NotFoundException('Template not found');
     return { success: true, preview_html: this.renderPreviewHtml(template), template };
+    });
   }
 
   previewWithData(data: any) {

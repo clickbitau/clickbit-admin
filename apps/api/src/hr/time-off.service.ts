@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJsonInput, buildLegacyDataEnvelope, buildLegacyListEnvelope, buildLegacyMessageEnvelope, parseNumber } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 const profileSelect = { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } as const;
 
@@ -44,7 +45,24 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 
 @Injectable()
 export class TimeOffService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('time-off', ...parts) ?? `time-off:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private isAdminOrManager(user: Profile) {
     return user.role === 'admin' || user.role === 'manager';
@@ -61,6 +79,7 @@ export class TimeOffService {
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
   }, user: Profile) {
+    return this.cached(this.cacheKey('list', user.id, JSON.stringify(query)), async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -97,6 +116,7 @@ export class TimeOffService {
     ]);
 
     return buildLegacyListEnvelope(rows.map(mapTimeOff), total, page, limit);
+    });
   }
 
   async create(dto: Record<string, unknown>, user: Profile) {
@@ -135,6 +155,7 @@ export class TimeOffService {
     };
 
     const created = await this.prisma.hr_time_off_requests.create({ data, include: timeOffInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapTimeOff(created));
   }
 
@@ -158,6 +179,8 @@ export class TimeOffService {
     await this.prisma.hr_time_off_requests.update({ where: { id }, data: { deducted_from_balance: true } });
 
     const updated = await this.prisma.hr_time_off_requests.findUniqueOrThrow({ where: { id }, include: timeOffInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Request approved', mapTimeOff(updated));
   }
 
@@ -182,6 +205,8 @@ export class TimeOffService {
       },
       include: timeOffInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Request rejected', mapTimeOff(updated));
   }
 
@@ -203,6 +228,8 @@ export class TimeOffService {
       },
       include: timeOffInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Request revoked and leave balance restored', mapTimeOff(updated));
   }
 
@@ -221,10 +248,13 @@ export class TimeOffService {
       data: { status: 'cancelled', deducted_from_balance: false },
       include: timeOffInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Request cancelled', mapTimeOff(updated));
   }
 
   async calendar(query: { start_date?: string; end_date?: string }) {
+    return this.cached(this.cacheKey('calendar', JSON.stringify(query)), async () => {
     const start = parseDateOnly(query.start_date) || new Date();
     const end = parseDateOnly(query.end_date) || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const requests = await this.prisma.hr_time_off_requests.findMany({
@@ -252,12 +282,15 @@ export class TimeOffService {
     });
 
     return buildLegacyDataEnvelope(events);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const request = await this.prisma.hr_time_off_requests.findUnique({ where: { id }, include: timeOffInclude });
     if (!request) throw new NotFoundException({ success: false, message: 'Request not found' });
     return buildLegacyDataEnvelope(mapTimeOff(request));
+    });
   }
 
   private async findOneRaw(id: number) {

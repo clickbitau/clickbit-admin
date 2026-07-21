@@ -3,10 +3,28 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateActivityDto, UpdateActivityDto, CompleteActivityDto } from './dto';
 import { asJsonInput, buildLegacyList, safeDate } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('activities', ...parts) ?? `activities:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: {
     activity_type?: string;
@@ -23,6 +41,7 @@ export class ActivitiesService {
     sortBy?: string;
     sortOrder?: string;
   }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const {
       activity_type,
       status,
@@ -72,9 +91,11 @@ export class ActivitiesService {
     ]);
 
     return buildLegacyList('activities', activities, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const activity = await this.prisma.crm_activities.findUnique({
       where: { id },
       include: {
@@ -84,6 +105,7 @@ export class ActivitiesService {
     });
     if (!activity) throw new NotFoundException('Activity not found');
     return { activity };
+    });
   }
 
   async create(userId: number, dto: CreateActivityDto) {
@@ -104,6 +126,7 @@ export class ActivitiesService {
       },
     });
 
+    await this.invalidateCache();
     return this.findOne(activity.id);
   }
 
@@ -158,6 +181,8 @@ export class ActivitiesService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -174,6 +199,8 @@ export class ActivitiesService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -181,6 +208,8 @@ export class ActivitiesService {
     const existing = await this.prisma.crm_activities.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Activity not found');
     await this.prisma.crm_activities.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Activity deleted successfully' };
   }
 }

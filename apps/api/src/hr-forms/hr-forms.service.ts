@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 export interface UserLike {
   id: number;
@@ -27,9 +28,27 @@ const submissionInclude = {
 
 @Injectable()
 export class HrFormsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('hr-forms', ...parts) ?? `hr-forms:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findTemplates(query: Record<string, unknown>, user: UserLike) {
+    return this.cached(this.cacheKey('templates', user.id, JSON.stringify(query)), async () => {
     const where: Prisma.hr_form_templatesWhereInput = {};
     const category = this.asString(query.category);
     if (category) where.category = category;
@@ -44,9 +63,11 @@ export class HrFormsService {
     });
 
     return { success: true, data: templates.map((t) => this.mapTemplate(t)) };
+    });
   }
 
   async findTemplate(id: number, user: UserLike) {
+    return this.cached(this.cacheKey('template', id), async () => {
     const template = await this.prisma.hr_form_templates.findUnique({
       where: { id },
       include: templateInclude,
@@ -56,6 +77,7 @@ export class HrFormsService {
       throw new NotFoundException('Template not found');
     }
     return { success: true, data: this.mapTemplate(template) };
+    });
   }
 
   async createTemplate(user: UserLike, dto: Record<string, unknown>) {
@@ -76,6 +98,7 @@ export class HrFormsService {
       include: templateInclude,
     });
 
+    await this.invalidateCache();
     return { success: true, data: this.mapTemplate(template) };
   }
 
@@ -100,6 +123,8 @@ export class HrFormsService {
       include: templateInclude,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('template', id));
     return { success: true, data: this.mapTemplate(template) };
   }
 
@@ -117,10 +142,12 @@ export class HrFormsService {
     }
 
     await this.prisma.hr_form_templates.delete({ where: { id } });
+    await this.invalidateCache();
     return { success: true, message: 'Template deleted' };
   }
 
   async findSubmissions(query: Record<string, unknown>, user: UserLike) {
+    return this.cached(this.cacheKey('submissions', user.id, JSON.stringify(query)), async () => {
     const employee = await this.getEmployeeForUser(user.id);
     const where: Prisma.hr_form_submissionsWhereInput = {};
 
@@ -167,9 +194,11 @@ export class HrFormsService {
         pages: Math.ceil(count / limit),
       },
     };
+    });
   }
 
   async findSubmission(id: number, user: UserLike) {
+    return this.cached(this.cacheKey('submission', user.id, id), async () => {
     const submission = await this.prisma.hr_form_submissions.findUnique({
       where: { id },
       include: submissionInclude,
@@ -184,6 +213,7 @@ export class HrFormsService {
     }
 
     return { success: true, data: this.mapSubmission(submission) };
+    });
   }
 
   async createSubmission(user: UserLike, dto: Record<string, unknown>) {
@@ -224,6 +254,7 @@ export class HrFormsService {
       include: submissionInclude,
     });
 
+    await this.invalidateCache();
     return {
       success: true,
       data: this.mapSubmission(submission),
@@ -257,6 +288,8 @@ export class HrFormsService {
       include: submissionInclude,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('submission', user.id, id));
     return { success: true, data: this.mapSubmission(updated) };
   }
 
