@@ -1,8 +1,8 @@
 'use client';
-import Link from 'next/link';
-import { Megaphone as MegaphoneIcon } from 'lucide-react';
+import { Megaphone as MegaphoneIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { AnnouncementForm } from '@/components/hr/AnnouncementForm';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,11 +12,19 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AnnouncementTable } from '@/components/hr/AnnouncementTable';
 import { fetchAnnouncements } from '@/lib/api';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function AdminHrAnnouncementsPage() {
   const { token } = useAuth();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['announcements', token, page, search],
@@ -37,7 +45,7 @@ export default function AdminHrAnnouncementsPage() {
       title="Announcements"
       icon={MegaphoneIcon}
       description="Company-wide announcements and updates."
-      actions={<Button asChild><Link href="/admin/hr/announcements/new">New Announcement</Link></Button>}
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Announcement</Button>}
     >
 
       <Input
@@ -65,6 +73,22 @@ export default function AdminHrAnnouncementsPage() {
         totalItems={pagination.total}
         onPageChange={setPage}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Announcement</DialogTitle>
+            <DialogDescription>Publish a company-wide announcement.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <AnnouncementForm
+              token={token}
+              onSuccess={() => setCreateOpen(false)}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

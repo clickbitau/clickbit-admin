@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Wallet as WalletIcon, Plus, CheckCircle, XCircle, Banknote, Trash2, Copy, Search, ArrowUpDown, Receipt, Tag } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { ExpenseForm } from '@/components/finance/ExpenseForm';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -12,6 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/design-system/DataTable';
 import { StatCards } from '@/components/design-system/StatCards';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { fetchExpenses, fetchExpenseStats, approveExpense, rejectExpense, reimburseExpense, deleteExpense, duplicateExpense } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { toast } from 'sonner';
@@ -82,6 +90,7 @@ export default function AdminFinanceExpensesPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('expense_date');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [createOpen, setCreateOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
@@ -204,8 +213,8 @@ export default function AdminFinanceExpensesPage() {
       icon={WalletIcon}
       description="Track, approve and reimburse business expenses"
       actions={
-        <Button asChild>
-          <Link href="/admin/finance/expenses/new"><Plus className="mr-2 h-4 w-4" /> New Expense</Link>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" /> New Expense
         </Button>
       }
     >
@@ -327,6 +336,23 @@ export default function AdminFinanceExpensesPage() {
         totalItems={pagination.total}
         onPageChange={setPage}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Expense</DialogTitle>
+            <DialogDescription>Record a new business expense.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <ExpenseForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['expenses'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
     </PageShell>
   );
 }

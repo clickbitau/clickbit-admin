@@ -1,8 +1,8 @@
 'use client';
-import Link from 'next/link';
-import { Bell as BellIcon } from 'lucide-react';
+import { Bell as BellIcon, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { ReminderForm } from '@/components/hr/ReminderForm';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,11 +12,19 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReminderTable } from '@/components/hr/ReminderTable';
 import { fetchReminders } from '@/lib/api';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function AdminHrRemindersPage() {
   const { token } = useAuth();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['reminders', token, page, search],
@@ -37,7 +45,7 @@ export default function AdminHrRemindersPage() {
       title="Reminders"
       icon={BellIcon}
       description="HR reminders and scheduled follow-ups."
-      actions={<Button asChild><Link href="/admin/hr/reminders/new">New Reminder</Link></Button>}
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Reminder</Button>}
     >
 
       <Input
@@ -63,6 +71,22 @@ export default function AdminHrRemindersPage() {
         totalItems={pagination.total}
         onPageChange={setPage}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Reminder</DialogTitle>
+            <DialogDescription>Schedule a reminder for a person or event.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <ReminderForm
+              token={token}
+              onSuccess={() => setCreateOpen(false)}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }
