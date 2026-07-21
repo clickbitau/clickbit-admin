@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { useDebounce } from '@/lib/useDebounce';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Banknote, Calendar, Calculator, Download, FileText, Mail, Trash2 } from 'lucide-react';
@@ -13,7 +14,15 @@ import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import {
   calculatePayslip,
   deletePayslip,
@@ -31,16 +40,17 @@ export default function AdminHrPayslipsPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [year, setYear] = useState('');
   const [page, setPage] = useState(1);
 
   const params = useMemo(() => {
     const p: Record<string, string | number> = { page, limit: 20 };
     if (status) p.status = status;
-    if (search) p.search = search;
+    if (debouncedSearch) p.search = debouncedSearch;
     if (year) p.year = year;
     return p;
-  }, [status, search, year, page]);
+  }, [status, debouncedSearch, year, page]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['payslips', token, params],
@@ -58,6 +68,8 @@ export default function AdminHrPayslipsPage() {
   });
 
   const payslips = useMemo(() => data?.data ?? [], [data?.data]);
+
+  useRealtimeRefresh(['payslips'], ['payslips'], { enabled: !!token });
   const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 20 };
   const stats = statsData?.data;
 
@@ -130,19 +142,18 @@ export default function AdminHrPayslipsPage() {
     <PageShell title="Payslips" icon={Banknote} description="Calculate, review, and manage employee payslips.">
       <StatCards cards={statCards} />
 
-      <div className="flex flex-wrap gap-2">
-        <select
-          value={status}
-          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="">All Statuses</option>
-          <option value="draft">Draft</option>
-          <option value="generated">Generated</option>
-          <option value="pending">Pending</option>
-          <option value="paid">Paid</option>
-          <option value="sent">Sent</option>
-        </select>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All statuses</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="generated">Generated</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="sent">Sent</SelectItem>
+          </SelectContent>
+        </Select>
         <Input placeholder="Search employee..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="max-w-xs" />
         <Input placeholder="FY Year" value={year} onChange={(e) => { setYear(e.target.value); setPage(1); }} className="max-w-[100px]" />
         <Button onClick={() => payRunMutation.mutate()} disabled={payRunMutation.isPending}>

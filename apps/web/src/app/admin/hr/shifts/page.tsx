@@ -3,14 +3,23 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, CheckCircle, Copy, Plus, Trash2 } from 'lucide-react';
+import { Calendar, CheckCircle, Copy, Plus, Search, Trash2 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { DataTable } from '@/components/design-system/DataTable';
+import { Pagination } from '@/components/design-system/Pagination';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ShiftForm } from '@/components/hr/ShiftForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -18,9 +27,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { confirmShift, copyShiftsWeek, createShift, deleteShift, fetchShifts, publishShifts } from '@/lib/api';
+import { confirmShift, copyShiftsWeek, createShift, deleteShift, fetchHrStats, fetchShifts, publishShifts } from '@/lib/api';
+import { useDebounce } from '@/lib/useDebounce';
+import { useRealtimeRefresh } from '@/lib/realtime';
+import { formatDate } from '@/lib/format';
+import type { Shift } from '@/types/hr';
+
+const statusOptions = [
+  { value: '', label: 'All statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+const LIMIT = 20;
 
 export default function AdminHrShiftsPage() {
   const { token } = useAuth();
@@ -29,35 +52,59 @@ export default function AdminHrShiftsPage() {
   const [page, setPage] = useState(1);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const [status, setStatus] = useState('');
   const [newShift, setNewShift] = useState<Record<string, string>>({});
   const [createOpen, setCreateOpen] = useState(false);
 
   const params = useMemo(() => {
-    const p: Record<string, string | number> = { page, limit: 20 };
+    const p: Record<string, string | number> = {};
     if (startDate) p.start_date = startDate;
     if (endDate) p.end_date = endDate;
+    if (status) p.status = status;
     return p;
-  }, [startDate, endDate, page]);
+  }, [startDate, endDate, status]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['shifts', token, params],
-    queryFn: async () => {
-      if (!token) throw new Error('No token');
-      return fetchShifts(token, params);
-    },
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchShifts(token, params); },
     enabled: !!token,
   });
 
-  const shifts = useMemo(() => data?.data ?? [], [data?.data]);
-  const stats = useMemo(() => {
-    const total = shifts.length;
-    const open = shifts.filter((s: any) => s.is_open_shift).length;
-    const published = shifts.filter((s: any) => s.status === 'published').length;
-    const confirmed = shifts.filter((s: any) => s.employee_confirmed).length;
-    return { total, open, published, confirmed };
-  }, [shifts]);
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['hr-stats', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchHrStats(token); },
+    enabled: !!token,
+  });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['shifts', token] });
+  useRealtimeRefresh(['shifts'], ['shifts'], { enabled: !!token });
+
+  const allShifts = useMemo(() => data?.data ?? [], [data?.data]);
+  const stats = statsData?.data;
+
+  const filtered = useMemo(() => {
+    let rows = [...allShifts];
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      rows = rows.filter((s) =>
+        (s.employee?.name || '').toLowerCase().includes(q) ||
+        (s.department || '').toLowerCase().includes(q) ||
+        (s.position || '').toLowerCase().includes(q)
+      );
+    }
+    return rows;
+  }, [allShifts, debouncedSearch]);
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const pageSafe = Math.min(page, totalPages);
+  const shifts = useMemo(() => filtered.slice((pageSafe - 1) * LIMIT, pageSafe * LIMIT), [filtered, pageSafe]);
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['shifts', token] });
+    queryClient.invalidateQueries({ queryKey: ['hr-stats', token] });
+  };
 
   const create = useMutation({
     mutationFn: () => createShift(token!, newShift),
@@ -88,37 +135,42 @@ export default function AdminHrShiftsPage() {
     onSuccess: refresh,
   });
 
-  const statCards = [
-    { label: 'Total Shifts', value: stats.total, icon: Calendar },
-    { label: 'Open Shifts', value: stats.open, icon: Calendar, accent: stats.open ? ('warning' as const) : undefined },
-    { label: 'Published', value: stats.published, icon: CheckCircle },
-    { label: 'Confirmed', value: stats.confirmed, icon: CheckCircle, accent: stats.confirmed ? ('success' as const) : undefined },
-  ];
+  const statCards = useMemo(() => {
+    const fromData = {
+      open: allShifts.filter((s) => s.is_open_shift).length,
+      confirmed: allShifts.filter((s) => s.employee_confirmed).length,
+      published: allShifts.filter((s) => s.status === 'published').length,
+    };
+    if (!stats) {
+      return [
+        { label: 'Total', value: allShifts.length, icon: Calendar },
+        { label: 'Open', value: fromData.open, icon: Calendar, accent: 'warning' as const },
+        { label: 'Published', value: fromData.published, icon: Calendar },
+        { label: 'Confirmed', value: fromData.confirmed, icon: CheckCircle, accent: 'success' as const },
+      ];
+    }
+    return [
+      { label: 'Total', value: stats.shifts.total, icon: Calendar },
+      { label: 'Today', value: stats.shifts.today, icon: Calendar, accent: 'primary' as const },
+      { label: 'Upcoming', value: stats.shifts.upcoming, icon: Calendar, accent: 'warning' as const },
+      { label: 'Completed', value: stats.shifts.completed, icon: CheckCircle, accent: 'success' as const },
+    ];
+  }, [stats, allShifts]);
 
   return (
-    <PageShell title="Shifts" icon={Calendar} description="Manage employee shift rosters and open shift claims." actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-2 h-4 w-4" /> New Shift</Button>}>
-      <StatCards cards={statCards} />
-
-      <div className="flex flex-wrap gap-2">
-        <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="w-auto" />
-        <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="w-auto" />
-        <Button
-          variant="outline"
-          onClick={() => {
-            const source = startDate || new Date().toISOString().slice(0, 10);
-            copy.mutate(source);
-          }}
-          disabled={copy.isPending}
-        >
-          <Copy className="mr-2 h-4 w-4" /> Copy Week
-        </Button>
-      </div>
+    <PageShell
+      title="Shifts"
+      icon={Calendar}
+      description="Manage employee shift rosters and open shift claims."
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-2 h-4 w-4" /> New Shift</Button>}
+    >
+      <StatCards cards={statCards.map((s) => ({ ...s, value: statsLoading ? '...' : s.value }))} />
 
       <Card className="nm-raised">
         <CardHeader>
           <CardTitle>Quick Add Shift</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-2">
+        <CardContent className="grid grid-cols-1 gap-2 md:grid-cols-5">
           <Input placeholder="Employee ID" value={newShift.employee_id ?? ''} onChange={(e) => setNewShift({ ...newShift, employee_id: e.target.value })} />
           <Input type="date" value={newShift.shift_date ?? ''} onChange={(e) => setNewShift({ ...newShift, shift_date: e.target.value })} />
           <Input type="time" value={newShift.start_time ?? ''} onChange={(e) => setNewShift({ ...newShift, start_time: e.target.value })} />
@@ -129,77 +181,71 @@ export default function AdminHrShiftsPage() {
         </CardContent>
       </Card>
 
-      <Card className="nm-raised">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Shifts</CardTitle>
-          <Button size="sm" variant="outline" onClick={() => publish.mutate(shifts.filter((s: any) => s.status === 'draft').map((s: any) => s.id))} disabled={publish.isPending}>
-            Publish Drafts
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {error && <div className="text-destructive">Failed to load shifts.</div>}
-          {isLoading && <div className="text-muted-foreground">Loading...</div>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search shifts..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
+        </div>
+        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>{statusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+        </Select>
+        <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} />
+        <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} />
+        <Button variant="outline" onClick={() => { const source = startDate || new Date().toISOString().slice(0, 10); copy.mutate(source); }} disabled={copy.isPending}>
+          <Copy className="mr-2 h-4 w-4" /> Copy Week
+        </Button>
+        <Button variant="outline" onClick={() => publish.mutate(allShifts.filter((s) => s.status === 'draft').map((s) => s.id))} disabled={publish.isPending}>
+          Publish Drafts
+        </Button>
+      </div>
 
-          {!isLoading && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>End</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shifts.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">No shifts found.</TableCell>
-                  </TableRow>
+      {error ? (
+        <div className="text-destructive text-sm">Failed to load shifts.</div>
+      ) : (
+        <>
+          <DataTable
+            headers={[
+              { key: 'employee', label: 'Employee' },
+              { key: 'date', label: 'Date' },
+              { key: 'start', label: 'Start' },
+              { key: 'end', label: 'End' },
+              { key: 'department', label: 'Department' },
+              { key: 'status', label: 'Status' },
+              { key: 'actions', label: '' },
+            ]}
+            data={shifts}
+            keyExtractor={(s) => s.id}
+            loading={isLoading}
+            onRowClick={(s) => router.push(`/admin/hr/shifts/${s.id}`)}
+            emptyText="No shifts found."
+            emptyDescription="Try adjusting date range or search."
+            renderRow={(s: Shift) => [
+              <span key="employee">{s.employee?.name || `Employee ${s.employee_id}`}</span>,
+              <span key="date">{formatDate(s.shift_date)}</span>,
+              <span key="start">{s.start_time || '-'}</span>,
+              <span key="end">{s.end_time || '-'}</span>,
+              <span key="department">{s.department || '-'}</span>,
+              <div key="status" className="flex flex-wrap gap-1">
+                <StatusBadge status={s.status} />
+                {s.is_open_shift && <StatusBadge status="open" />}
+                {s.employee_confirmed && <StatusBadge status="confirmed" />}
+              </div>,
+              <div key="actions" className="flex justify-end gap-1">
+                {s.status !== 'cancelled' && !s.employee_confirmed && (
+                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); confirm.mutate(s.id); }} disabled={confirm.isPending}>
+                    <CheckCircle className="h-4 w-4" />
+                  </Button>
                 )}
-                {shifts.map((shift: any) => (
-                  <TableRow
-                    key={shift.id}
-                    className="cursor-pointer hover:bg-primary/5"
-                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/shifts/${shift.id}`); }}
-                  >
-                    <TableCell>{shift.employee?.name || `Employee ${shift.employee_id}`}</TableCell>
-                    <TableCell>{shift.shift_date ? new Date(shift.shift_date).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>{shift.start_time || '-'}</TableCell>
-                    <TableCell>{shift.end_time || '-'}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 flex-wrap">
-                        <Badge variant={shift.status === 'published' ? 'default' : 'secondary'}>{shift.status}</Badge>
-                        {shift.is_open_shift && <Badge variant="outline">Open</Badge>}
-                        {shift.employee_confirmed && <Badge variant="outline">Confirmed</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      {!shift.employee_confirmed && (
-                        <Button size="sm" variant="outline" onClick={() => confirm.mutate(shift.id)} disabled={confirm.isPending}>
-                          <CheckCircle className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => remove.mutate(shift.id)} disabled={remove.isPending}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-
-          <div className="flex items-center justify-between mt-4">
-            <p className="text-sm text-muted-foreground">Page {page}</p>
-            <div className="space-x-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)}>Next</Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); remove.mutate(s.id); }} disabled={remove.isPending}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>,
+            ]}
+          />
+          <Pagination currentPage={pageSafe} totalPages={totalPages} totalItems={total} onPageChange={setPage} />
+        </>
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">

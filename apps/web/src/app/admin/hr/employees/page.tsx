@@ -1,39 +1,71 @@
 'use client';
-import { Users as UsersIcon, Plus, RefreshCw } from 'lucide-react';
-import { PageShell } from '@/components/design-system/PageShell';
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog';
-import { EmployeeTable } from '@/components/hr/EmployeeTable';
-import { EmployeeForm } from '@/components/hr/EmployeeForm';
-import { StatCards } from '@/components/design-system/StatCards';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { StatCards } from '@/components/design-system/StatCards';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
+import { EmployeeForm } from '@/components/hr/EmployeeForm';
+import { useDebounce } from '@/lib/useDebounce';
+import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchEmployees, fetchHrStats, fetchDepartments } from '@/lib/api';
+import { formatDate } from '@/lib/format';
+import type { Employee } from '@/types/hr';
+import { Users as UsersIcon, Plus, RefreshCw, Search } from 'lucide-react';
 
-const statusOptions = ['', 'active', 'inactive', 'on_leave', 'terminated'];
-const typeOptions = ['', 'full_time', 'part_time', 'contract', 'casual', 'intern'];
+const statusOptions = [
+  { value: '', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'on_leave', label: 'On leave' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'terminated', label: 'Terminated' },
+];
+
+const typeOptions = [
+  { value: '', label: 'All types' },
+  { value: 'full_time', label: 'Full-time' },
+  { value: 'part_time', label: 'Part-time' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'contractor', label: 'Contractor' },
+  { value: 'intern', label: 'Intern' },
+];
+
 const sortOptions = [
-  { key: 'hire_date', label: 'Hire date' },
-  { key: 'created_at', label: 'Created' },
-  { key: 'last_name', label: 'Last name' },
+  { value: 'hire_date', label: 'Hire date' },
+  { value: 'created_at', label: 'Created' },
+  { value: 'last_name', label: 'Last name' },
+  { value: 'employment_status', label: 'Status' },
+  { value: 'employment_type', label: 'Type' },
 ];
 
 export default function AdminHrEmployeesPage() {
   const { token } = useAuth();
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
   const [department, setDepartment] = useState('');
   const [employmentType, setEmploymentType] = useState('');
@@ -42,16 +74,20 @@ export default function AdminHrEmployeesPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
+  const queryParams = useMemo(() => {
+    const params: Record<string, string | number> = { page, limit: 12, sortBy, sortOrder };
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (status) params.employment_status = status;
+    if (department) params.department = department;
+    if (employmentType) params.employment_type = employmentType;
+    return params;
+  }, [page, debouncedSearch, status, department, employmentType, sortBy, sortOrder]);
+
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['employees', token, page, search, status, department, employmentType, sortBy, sortOrder],
+    queryKey: ['employees', queryParams],
     queryFn: async () => {
       if (!token) throw new Error('No token');
-      const params: Record<string, string | number> = { page, limit: 12, sortBy, sortOrder };
-      if (search) params.search = search;
-      if (status) params.employment_status = status;
-      if (department) params.department = department;
-      if (employmentType) params.employment_type = employmentType;
-      return fetchEmployees(token, params);
+      return fetchEmployees(token, queryParams);
     },
     enabled: !!token,
   });
@@ -68,9 +104,12 @@ export default function AdminHrEmployeesPage() {
     enabled: !!token,
   });
 
+  useRealtimeRefresh(['employees'], ['employees'], { enabled: !!token });
+
   const employees = data?.data ?? [];
   const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 12 };
   const stats = statsData?.data;
+  const departments = departmentsData?.data ?? [];
 
   const statCards = useMemo(() => {
     if (!stats) return [];
@@ -82,11 +121,25 @@ export default function AdminHrEmployeesPage() {
     ];
   }, [stats]);
 
+  function employeeName(employee: Employee) {
+    if (employee.user) {
+      const full = `${employee.user.first_name || ''} ${employee.user.last_name || ''}`.trim();
+      return full || employee.user.email || `Employee #${employee.id}`;
+    }
+    return employee.name || `Employee #${employee.id}`;
+  }
+
+  function employeeInitials(employee: Employee) {
+    const first = employee.user?.first_name?.[0] || employee.name?.[0] || '#';
+    const last = employee.user?.last_name?.[0] || '';
+    return `${first}${last}`.toUpperCase();
+  }
+
   return (
     <PageShell
       title="Employees"
       icon={UsersIcon}
-      description="Manage employee records and profiles."
+      description="Manage employee records, departments, and profiles."
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh" aria-label="Refresh">
@@ -100,61 +153,90 @@ export default function AdminHrEmployeesPage() {
     >
       <StatCards cards={statCards.map((s) => ({ ...s, value: statsLoading ? '...' : s.value }))} />
 
-      <div className="flex flex-wrap gap-3">
-        <Input
-          placeholder="Search employees..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="sm:max-w-sm"
-        />
-        <select
-          value={status}
-          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-        >
-          {statusOptions.map((s) => (
-            <option key={s} value={s}>{s ? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'All statuses'}</option>
-          ))}
-        </select>
-        <select
-          value={department}
-          onChange={(e) => { setDepartment(e.target.value); setPage(1); }}
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-        >
-          <option value="">All departments</option>
-          {(departmentsData?.data ?? []).map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-        <select
-          value={employmentType}
-          onChange={(e) => { setEmploymentType(e.target.value); setPage(1); }}
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-        >
-          {typeOptions.map((t) => <option key={t} value={t}>{t ? t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'All types'}</option>)}
-        </select>
-        <select
-          value={sortBy}
-          onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-        >
-          {sortOptions.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </select>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-        >
-          {sortOrder === 'asc' ? 'Asc' : 'Desc'}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="pl-9"
+          />
+        </div>
+        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            {statusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={department} onValueChange={(v) => { setDepartment(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All departments</SelectItem>
+            {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={employmentType} onValueChange={(v) => { setEmploymentType(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Employment type" /></SelectTrigger>
+          <SelectContent>
+            {typeOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setPage(1); }}>
+          <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+          <SelectContent>
+            {sortOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
+          {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
         </Button>
       </div>
 
-      <Card className="nm-raised">
-        <CardHeader>
-          <CardTitle>Employees</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error ? <div className="text-destructive">Failed to load employees.</div> : <EmployeeTable employees={employees} loading={isLoading} onRowClick={(e) => router.push(`/admin/hr/employees/${e.id}`)} />}
-        </CardContent>
-      </Card>
+      {error ? (
+        <div className="text-destructive text-sm">Failed to load employees.</div>
+      ) : (
+        <DataTable
+          headers={[
+            { key: 'employee', label: 'Employee' },
+            { key: 'number', label: 'Number' },
+            { key: 'department', label: 'Department' },
+            { key: 'position', label: 'Position' },
+            { key: 'manager', label: 'Manager' },
+            { key: 'type', label: 'Type' },
+            { key: 'status', label: 'Status' },
+            { key: 'hire_date', label: 'Hire date' },
+          ]}
+          data={employees}
+          keyExtractor={(e) => e.id}
+          loading={isLoading}
+          onRowClick={(e) => router.push(`/admin/hr/employees/${e.id}`)}
+          emptyText="No employees found."
+          emptyDescription="Try adjusting your search or filters."
+          renderRow={(employee) => [
+            <div key="employee" className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white">
+                {employeeInitials(employee)}
+              </div>
+              <div>
+                <Link href={`/admin/hr/employees/${employee.id}`} className="font-medium hover:underline">{employeeName(employee)}</Link>
+                <p className="text-xs text-muted-foreground">{employee.user?.email || employee.user?.phone || '-'}</p>
+              </div>
+            </div>,
+            <span key="number" className="font-mono text-sm">{employee.employee_number || `#${employee.id}`}</span>,
+            <Badge key="department" variant="outline" className="capitalize">{employee.departmentInfo?.name || employee.department || '-'}</Badge>,
+            <span key="position">{employee.position || '-'}</span>,
+            <span key="manager">
+              {employee.manager
+                ? `${employee.manager.first_name || ''} ${employee.manager.last_name || ''}`.trim() || employee.manager.email || '-'
+                : '-'}
+            </span>,
+            <span key="type" className="capitalize">{(employee.employment_type || '').replace(/_/g, ' ')}</span>,
+            <StatusBadge key="status" status={employee.employment_status || 'active'} />,
+            <span key="hire_date">{formatDate(employee.hire_date)}</span>,
+          ]}
+        />
+      )}
 
       <Pagination
         currentPage={pagination.page}
