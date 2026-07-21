@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ReminderForm } from '@/components/hr/ReminderForm';
@@ -153,7 +154,16 @@ export default function AdminHrRemindersPage() {
             <Link key="title" href={`/admin/hr/reminders/${r.id}`} className="font-medium hover:underline">{r.title}</Link>,
             <span key="trigger" className="capitalize">{r.trigger_type || 'regular'}</span>,
             <span key="date">{formatDate(r.reminder_date)}</span>,
-            <span key="assignee">{r.assignee ? `${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email : '-'}</span>,
+            <div key="assignee" className="flex items-center gap-3">
+              {r.assignee ? (
+                <>
+                  <PersonAvatar name={`${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email} size="sm" />
+                  <span>{`${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email}</span>
+                </>
+              ) : (
+                <span>-</span>
+              )}
+            </div>,
             <StatusBadge key="status" status={r.status || 'pending'} />,
           ]}
         />

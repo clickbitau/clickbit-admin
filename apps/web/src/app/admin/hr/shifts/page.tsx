@@ -8,6 +8,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ShiftForm } from '@/components/hr/ShiftForm';
 import { Button } from '@/components/ui/button';
@@ -221,7 +222,10 @@ export default function AdminHrShiftsPage() {
             emptyText="No shifts found."
             emptyDescription="Try adjusting date range or search."
             renderRow={(s: Shift) => [
-              <span key="employee">{s.employee?.name || `Employee ${s.employee_id}`}</span>,
+              <div key="employee" className="flex items-center gap-3">
+              <PersonAvatar name={s.employee?.name || `Employee ${s.employee_id}`} />
+              <span>{s.employee?.name || `Employee ${s.employee_id}`}</span>
+            </div>,
               <span key="date">{formatDate(s.shift_date)}</span>,
               <span key="start">{s.start_time || '-'}</span>,
               <span key="end">{s.end_time || '-'}</span>,

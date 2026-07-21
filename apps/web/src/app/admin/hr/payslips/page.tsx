@@ -10,6 +10,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ import {
   resendPayslipEmail,
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import type { Payslip } from '@/types/hr';
 
 export default function AdminHrPayslipsPage() {
   const { token } = useAuth();
@@ -195,12 +197,15 @@ export default function AdminHrPayslipsPage() {
               { key: 'actions', label: '', className: 'w-40 text-right' },
             ]}
             data={payslips}
-            keyExtractor={(p: any) => p.id}
+            keyExtractor={(p: Payslip) => p.id}
             loading={isLoading}
             emptyText="No payslips found."
-            onRowClick={(p: any) => router.push(`/admin/hr/payslips/${p.id}`)}
-            renderRow={(p: any) => [
-              <span key="employee">{p.employee?.name || `Employee ${p.employee_id}`}</span>,
+            onRowClick={(p: Payslip) => router.push(`/admin/hr/payslips/${p.id}`)}
+            renderRow={(p: Payslip) => [
+              <div key="employee" className="flex items-center gap-3">
+                <PersonAvatar name={p.employee?.name || `Employee ${p.employee_id}`} />
+                <span className="font-medium">{p.employee?.name || `Employee ${p.employee_id}`}</span>
+              </div>,
               <span key="period">{formatDate(p.pay_period_start)} — {formatDate(p.pay_period_end)}</span>,
               <span key="payment_date">{formatDate(p.payment_date)}</span>,
               <span key="gross">{formatCurrency(Number(p.gross_pay), p.currency)}</span>,

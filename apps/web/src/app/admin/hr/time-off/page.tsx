@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { TimeOffForm } from '@/components/hr/TimeOffForm';
@@ -185,7 +186,10 @@ export default function AdminHrTimeOffPage() {
           emptyText="No time-off requests found."
           emptyDescription="Try adjusting filters or submit a new request."
           renderRow={(r: TimeOffRequest) => [
-            <Link key="employee" href={`/admin/hr/time-off/${r.id}`} className="font-medium hover:underline">{employeeName(r)}</Link>,
+            <div key="employee" className="flex items-center gap-3">
+              <PersonAvatar name={employeeName(r)} />
+              <Link href={`/admin/hr/time-off/${r.id}`} className="font-medium hover:underline">{employeeName(r)}</Link>
+            </div>,
             <span key="type" className="capitalize">{r.leave_type || '-'}</span>,
             <span key="from">{formatDate(r.start_date)}</span>,
             <span key="to">{formatDate(r.end_date)}</span>,
