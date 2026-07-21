@@ -9,10 +9,28 @@ import {
   LoseLeadDto,
 } from './dto';
 import { asJsonInput, buildLegacyList, safeDate, toNumber } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class LeadsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('leads', ...parts) ?? `leads:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: {
     pipeline_id?: number;
@@ -26,6 +44,7 @@ export class LeadsService {
     sort?: string;
     order?: 'asc' | 'desc';
   }) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const {
       pipeline_id,
       stage_id,
@@ -71,12 +90,15 @@ export class LeadsService {
     const enriched = await Promise.all(leads.map((l) => this.enrichLead(l)));
 
     return buildLegacyList('leads', enriched, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const lead = await this.prisma.crm_leads.findUnique({ where: { id } });
     if (!lead) throw new NotFoundException('Lead not found');
     return { lead: await this.enrichLead(lead) };
+    });
   }
 
   async getRelated(id: number) {
@@ -181,6 +203,7 @@ export class LeadsService {
       },
     });
 
+    await this.invalidateCache();
     return { message: 'Lead created successfully', lead: await this.enrichLead(lead) };
   }
 
@@ -194,6 +217,8 @@ export class LeadsService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Lead updated successfully', lead: await this.findOne(id) };
   }
 
@@ -221,6 +246,8 @@ export class LeadsService {
       data: updateData,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Lead moved successfully', lead: await this.findOne(id) };
   }
 
@@ -302,6 +329,10 @@ export class LeadsService {
       });
     }
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
+    await this.cache?.delPrefix(this.cache?.key('contacts') ?? 'contacts');
+    await this.cache?.delPrefix(this.cache?.key('deals') ?? 'deals');
     return {
       message: 'Lead won and converted to customer',
       lead: await this.findOne(id),
@@ -330,6 +361,8 @@ export class LeadsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Lead marked as lost', lead: await this.findOne(id) };
   }
 
@@ -337,10 +370,13 @@ export class LeadsService {
     const lead = await this.prisma.crm_leads.findUnique({ where: { id } });
     if (!lead) throw new NotFoundException('Lead not found');
     await this.prisma.crm_leads.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Lead deleted successfully' };
   }
 
   async getByPipeline(pipelineId: number, status?: string) {
+    return this.cached(this.cacheKey('pipeline', pipelineId, status ?? 'all'), async () => {
     const pipeline = await this.prisma.crm_pipelines.findUnique({
       where: { id: pipelineId },
       include: { crm_pipeline_stages: { where: { is_active: true }, orderBy: { position: 'asc' } } },
@@ -428,9 +464,11 @@ export class LeadsService {
       stages,
       stats: { totalLeads, totalDeals, totalValue, weightedValue },
     };
+    });
   }
 
   async getHot(page = 1, limit = 50) {
+    return this.cached(this.cacheKey('hot', page, limit), async () => {
     const where = {
       lead_score: { gte: 70 },
       status: 'open',
@@ -443,9 +481,11 @@ export class LeadsService {
 
     const enriched = await Promise.all(leads.map((l) => this.enrichLead(l)));
     return buildLegacyList('leads', enriched, total, page, limit);
+    });
   }
 
   async getUncontacted(page = 1, limit = 50) {
+    return this.cached(this.cacheKey('uncontacted', page, limit), async () => {
     const where = {
       last_activity_at: null,
       status: 'open',
@@ -458,9 +498,11 @@ export class LeadsService {
 
     const enriched = await Promise.all(leads.map((l) => this.enrichLead(l)));
     return buildLegacyList('leads', enriched, total, page, limit);
+    });
   }
 
   async getByStage(stageId: number, page = 1, limit = 50) {
+    return this.cached(this.cacheKey('stage', stageId, page, limit), async () => {
     const [leads, total] = await Promise.all([
       this.prisma.crm_leads.findMany({ where: { stage_id: stageId }, take: limit, skip: (page - 1) * limit }),
       this.prisma.crm_leads.count({ where: { stage_id: stageId } }),
@@ -468,6 +510,7 @@ export class LeadsService {
 
     const enriched = await Promise.all(leads.map((l) => this.enrichLead(l)));
     return buildLegacyList('leads', enriched, total, page, limit);
+    });
   }
 
   async recalculateScores() {
@@ -482,6 +525,7 @@ export class LeadsService {
 
     await this.prisma.$transaction(updates as Prisma.PrismaPromise<unknown>[]);
 
+    await this.invalidateCache();
     return { message: `Recalculated scores for ${updates.length} leads` };
   }
 
@@ -509,6 +553,7 @@ export class LeadsService {
 
     await this.prisma.$transaction(updates as Prisma.PrismaPromise<unknown>[]);
 
+    await this.invalidateCache();
     return { message: `Auto-assigned ${updates.length} leads` };
   }
 

@@ -3,14 +3,33 @@ import type { Prisma, enum_crm_pipelines_pipeline_type } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePipelineDto, UpdatePipelineDto, UpdatePipelineStagesDto } from './dto';
 import { buildLegacyList } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class PipelinesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('pipelines', ...parts) ?? `pipelines:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(
     query: { search?: string; pipeline_type?: string; is_active?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string },
   ) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const { search, pipeline_type, is_active, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
 
     const where: { [key: string]: unknown } = {};
@@ -39,15 +58,18 @@ export class PipelinesService {
     ]);
 
     return buildLegacyList('pipelines', pipelines, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const pipeline = await this.prisma.crm_pipelines.findUnique({
       where: { id },
       include: { crm_pipeline_stages: { orderBy: { position: 'asc' } }, profiles: { select: { id: true, first_name: true, last_name: true } } },
     });
     if (!pipeline) throw new NotFoundException('Pipeline not found');
     return { data: pipeline };
+    });
   }
 
   async create(userId: number, dto: CreatePipelineDto) {
@@ -63,6 +85,7 @@ export class PipelinesService {
       },
     });
 
+    await this.invalidateCache();
     return this.findOne(pipeline.id);
   }
 
@@ -82,6 +105,8 @@ export class PipelinesService {
       data: data,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -146,6 +171,8 @@ export class PipelinesService {
 
     await this.prisma.$transaction([...creates, ...updates, ...deletes] as Prisma.PrismaPromise<unknown>[]);
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 }

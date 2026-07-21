@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma, departments } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 const departmentInclude = {
   companies: { select: { id: true, name: true } },
@@ -18,9 +19,27 @@ const departmentInclude = {
 
 @Injectable()
 export class DepartmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('departments', ...parts) ?? `departments:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const where: Prisma.departmentsWhereInput = { deleted_at: null };
 
     const companyId = this.asNumber(query.company_id);
@@ -40,15 +59,18 @@ export class DepartmentsService {
     });
 
     return { success: true, data: departments.map((d) => this.mapDepartment(d)) };
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const department = await this.prisma.departments.findUnique({
       where: { id, deleted_at: null },
       include: departmentInclude,
     });
     if (!department) throw new NotFoundException('Department not found');
     return { success: true, data: this.mapDepartment(department) };
+    });
   }
 
   async create(dto: Record<string, unknown>) {
@@ -75,6 +97,7 @@ export class DepartmentsService {
       },
     });
 
+    await this.invalidateCache();
     return { success: true, data: this.mapDepartment(department), message: 'Department created successfully' };
   }
 
@@ -109,6 +132,8 @@ export class DepartmentsService {
       },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: this.mapDepartment(department), message: 'Department updated successfully' };
   }
 
@@ -141,6 +166,8 @@ export class DepartmentsService {
       data: { deleted_at: new Date() },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, message: 'Department deleted successfully' };
   }
 

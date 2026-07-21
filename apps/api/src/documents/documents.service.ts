@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { Prisma, documents } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { CacheService } from '../redis/cache.service';
 
 export interface UserLike {
   id: number;
@@ -23,7 +24,22 @@ export class DocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly cache?: CacheService,
   ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('documents', ...parts) ?? `documents:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async create(
     file: Express.Multer.File,
@@ -52,6 +68,7 @@ export class DocumentsService {
       include: { profiles_documents_uploaded_byToprofiles: true },
     });
 
+    await this.invalidateCache();
     return { message: 'Document uploaded successfully', document: this.mapDocument(doc) };
   }
 
@@ -59,6 +76,7 @@ export class DocumentsService {
     user: UserLike,
     query: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
+    return this.cached(this.cacheKey('list', user.id, JSON.stringify(query)), async () => {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
@@ -106,9 +124,11 @@ export class DocumentsService {
         itemsPerPage: limit,
       },
     };
+    });
   }
 
   async findOne(id: number, user: UserLike): Promise<Record<string, unknown>> {
+    return this.cached(this.cacheKey('detail', user.id, id), async () => {
     const doc = await this.prisma.documents.findUnique({
       where: { id },
       include: { profiles_documents_uploaded_byToprofiles: true },
@@ -116,6 +136,7 @@ export class DocumentsService {
     if (!doc) throw new NotFoundException('Document not found');
     if (!this.canAccess(doc, user)) throw new ForbiddenException('Access denied to this document');
     return { document: await this.enrichAndMapDocument(doc) };
+    });
   }
 
   async findByEntity(
@@ -205,6 +226,8 @@ export class DocumentsService {
       include: { profiles_documents_uploaded_byToprofiles: true },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { message: 'Document updated successfully', document: await this.enrichAndMapDocument(updated) };
   }
 
@@ -236,6 +259,8 @@ export class DocumentsService {
       include: { profiles_documents_uploaded_byToprofiles: true },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { message: 'Document shared successfully', document: await this.enrichAndMapDocument(updated) };
   }
 
@@ -250,10 +275,13 @@ export class DocumentsService {
       data: { status: 'deleted' },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, id));
     return { message: 'Document deleted successfully' };
   }
 
   async stats(user: UserLike): Promise<Record<string, unknown>> {
+    return this.cached(this.cacheKey('stats', user.id), async () => {
     if (!this.isAdminOrManager(user)) {
       throw new ForbiddenException('Admin access required');
     }
@@ -283,6 +311,7 @@ export class DocumentsService {
         projectDocuments: projectDocs,
       },
     };
+    });
   }
 
   private buildWhere(query: Record<string, unknown>): Prisma.documentsWhereInput {

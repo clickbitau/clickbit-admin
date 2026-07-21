@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJsonInput, buildLegacyDataEnvelope, buildLegacyListEnvelope, buildLegacyMessageEnvelope } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 const authorSelect = { select: { id: true, first_name: true, last_name: true, avatar: true } } as const;
 
@@ -28,13 +29,31 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('announcements', ...parts) ?? `announcements:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   private isAdminOrManager(user: Profile) {
     return user.role === 'admin' || user.role === 'manager';
   }
 
   async findPublic(query: { page?: number; limit?: number }) {
+    return this.cached(this.cacheKey('public', JSON.stringify(query)), async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -58,6 +77,7 @@ export class AnnouncementsService {
     ]);
 
     return buildLegacyListEnvelope(rows.map(mapAnnouncement), total, page, limit);
+    });
   }
 
   async findAll(query: {
@@ -69,6 +89,7 @@ export class AnnouncementsService {
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
   }, user: Profile) {
+    return this.cached(this.cacheKey('list', user.id, JSON.stringify(query)), async () => {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -100,12 +121,15 @@ export class AnnouncementsService {
     ]);
 
     return buildLegacyListEnvelope(rows.map(mapAnnouncement), total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const announcement = await this.prisma.hr_announcements.findUnique({ where: { id }, include: announcementInclude });
     if (!announcement) throw new NotFoundException({ success: false, message: 'Announcement not found' });
     return buildLegacyDataEnvelope(await this.buildDetailPayload(announcement));
+    });
   }
 
   async create(dto: Record<string, unknown>, user: Profile) {
@@ -114,6 +138,7 @@ export class AnnouncementsService {
     data.status = (data.status as any) || 'draft';
 
     const created = await this.prisma.hr_announcements.create({ data, include: announcementInclude });
+    await this.invalidateCache();
     return buildLegacyDataEnvelope(mapAnnouncement(created));
   }
 
@@ -121,12 +146,16 @@ export class AnnouncementsService {
     await this.findAnnouncement(id);
     const data = this.buildAnnouncementInput(dto);
     const updated = await this.prisma.hr_announcements.update({ where: { id }, data, include: announcementInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyDataEnvelope(mapAnnouncement(updated));
   }
 
   async remove(id: number, _user: Profile) {
     await this.findAnnouncement(id);
     await this.prisma.hr_announcements.delete({ where: { id } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Announcement deleted');
   }
 
@@ -138,6 +167,8 @@ export class AnnouncementsService {
       data: { status: 'published', publish_at: announcement.publish_at || now },
       include: announcementInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyDataEnvelope(mapAnnouncement(updated));
   }
 
@@ -152,6 +183,8 @@ export class AnnouncementsService {
       data: { acknowledged_by: asJsonInput(acknowledged) },
       include: announcementInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Acknowledged', mapAnnouncement(updated));
   }
 
@@ -170,6 +203,8 @@ export class AnnouncementsService {
       data: { reactions: asJsonInput(reactions) },
       include: announcementInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyDataEnvelope(mapAnnouncement(updated));
   }
 
@@ -187,6 +222,8 @@ export class AnnouncementsService {
       data: { comments: asJsonInput(comments) },
       include: announcementInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyDataEnvelope(mapAnnouncement(updated));
   }
 
