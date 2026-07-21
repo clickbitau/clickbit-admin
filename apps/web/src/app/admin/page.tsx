@@ -8,6 +8,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { SiteMonitoringCards } from '@/components/dashboard/SiteMonitoringCards';
 import { ActiveWebsiteCard } from '@/components/dashboard/ActiveWebsiteCard';
+import { TimeClockCard } from '@/components/dashboard/TimeClockCard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
@@ -495,6 +496,8 @@ function HRTab({ data, loading }: { data?: HrDashboardData; loading: boolean }) 
           <StatCard key={c.label} {...c} />
         ))}
       </div>
+
+      <TimeClockCard token={token} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="nm-raised p-4 sm:p-5">
