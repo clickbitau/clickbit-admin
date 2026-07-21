@@ -1,16 +1,23 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, CheckCircle, Copy, Plus, Trash2 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { ShiftForm } from '@/components/hr/ShiftForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { confirmShift, copyShiftsWeek, createShift, deleteShift, fetchShifts, publishShifts } from '@/lib/api';
@@ -23,6 +30,7 @@ export default function AdminHrShiftsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [newShift, setNewShift] = useState<Record<string, string>>({});
+  const [createOpen, setCreateOpen] = useState(false);
 
   const params = useMemo(() => {
     const p: Record<string, string | number> = { page, limit: 20 };
@@ -88,7 +96,7 @@ export default function AdminHrShiftsPage() {
   ];
 
   return (
-    <PageShell title="Shifts" icon={Calendar} description="Manage employee shift rosters and open shift claims." actions={<Button asChild><Link href="/admin/hr/shifts/new"><Plus className="mr-2 h-4 w-4" /> New Shift</Link></Button>}>
+    <PageShell title="Shifts" icon={Calendar} description="Manage employee shift rosters and open shift claims." actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-2 h-4 w-4" /> New Shift</Button>}>
       <StatCards cards={statCards} />
 
       <div className="flex flex-wrap gap-2">
@@ -192,6 +200,22 @@ export default function AdminHrShiftsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Shift</DialogTitle>
+            <DialogDescription>Add an employee shift to the roster.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <ShiftForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); refresh(); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

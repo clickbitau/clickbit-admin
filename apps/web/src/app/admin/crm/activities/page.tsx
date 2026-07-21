@@ -1,8 +1,8 @@
 'use client';
 import { PageShell } from '@/components/design-system/PageShell';
+import { ActivityForm } from '@/components/crm/ActivityForm';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,13 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 
@@ -39,6 +46,7 @@ export default function ActivitiesPage() {
   const [activityType, setActivityType] = useState('');
 
   const [completing, setCompleting] = useState<Activity | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const queryParams = useMemo(() => {
     const params: Record<string, string | number> = { page, limit: 25 };
@@ -77,7 +85,7 @@ export default function ActivitiesPage() {
       title="Activities"
       icon={ActivityIcon}
       description="Tasks, calls, and scheduled follow-ups"
-      actions={<Button asChild><Link href="/admin/crm/activities/new"><Plus className="mr-1 h-4 w-4" /> New Activity</Link></Button>}
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Activity</Button>}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div className="relative">
@@ -147,6 +155,22 @@ export default function ActivitiesPage() {
         loading={completeMutation.isPending}
         confirmLabel="Complete"
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New Activity</DialogTitle>
+            <DialogDescription>Log a task, call, meeting, or follow-up.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <ActivityForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['activities'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

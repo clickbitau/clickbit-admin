@@ -1,16 +1,23 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, Plus, Power, XCircle } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { ContractForm } from '@/components/hr/ContractForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { activateContract, fetchContracts, terminateContract } from '@/lib/api';
@@ -26,6 +33,7 @@ export default function AdminHrContractsPage() {
   const { token } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
 
 
   const { data, isLoading, error } = useQuery({
@@ -73,7 +81,7 @@ export default function AdminHrContractsPage() {
   ];
 
   return (
-    <PageShell title="Contracts" icon={FileText} description="Manage employee contracts, activations, and terminations." actions={<Button asChild><Link href="/admin/hr/contracts/new"><Plus className="mr-1 h-4 w-4" /> New Contract</Link></Button>}>
+    <PageShell title="Contracts" icon={FileText} description="Manage employee contracts, activations, and terminations." actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Contract</Button>}>
       <StatCards cards={statCards} />
 
       <Card className="nm-raised">
@@ -138,6 +146,22 @@ export default function AdminHrContractsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New Contract</DialogTitle>
+            <DialogDescription>Create an employee contract.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <ContractForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); refresh(); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

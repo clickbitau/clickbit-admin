@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -19,8 +20,16 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { ContentListPage } from '@/components/content/ContentListPage';
+import { TeamMemberForm } from '@/components/content/TeamMemberForm';
 import { fetchAdminTeamMembers, fetchAdminTeamStats, updateTeamMember, deleteTeamMember } from '@/lib/api';
 import type { TeamMember } from '@clickbit/shared/src/content';
 import { toast } from 'sonner';
@@ -53,6 +62,8 @@ export default function AdminContentTeamPage() {
     mutationFn: (id: number) => deleteTeamMember(token!, id),
     onSuccess: () => { toast.success('Team member deleted'); queryClient.invalidateQueries({ queryKey: ['admin-team'] }); },
   });
+
+  const [createOpen, setCreateOpen] = useState(false);
 
   const statCards = [
     { label: 'Total Members', value: stats?.total ?? 0, icon: Users },
@@ -156,8 +167,7 @@ export default function AdminContentTeamPage() {
     <ContentListPage
       title="Team"
       icon={Briefcase}
-      newHref="/admin/content/team/new"
-      newLabel="New Member"
+      actions={<Button onClick={() => setCreateOpen(true)} className="gap-1"><Plus className="h-4 w-4" /> New Member</Button>}
       items={items}
       isLoading={isLoading}
       statCards={statCards}
@@ -169,6 +179,23 @@ export default function AdminContentTeamPage() {
       renderTableRow={renderTableRow}
       onRowClick={(m) => router.push(`/admin/content/team/${m.id}`)}
       emptyText="No team members found."
+      footer={
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>New Team Member</DialogTitle>
+              <DialogDescription>Add a team member to the public site.</DialogDescription>
+            </DialogHeader>
+            {token && (
+              <TeamMemberForm
+                token={token}
+                onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-team'] }); }}
+                onCancel={() => setCreateOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      }
     />
   );
 }

@@ -22,8 +22,9 @@ interface ContentListPageProps<T> {
   title: string;
   icon: LucideIcon;
   description?: string;
-  newHref: string;
+  newHref?: string;
   newLabel?: string;
+  actions?: React.ReactNode;
   items: T[];
   isLoading: boolean;
   statCards: StatCard[];
@@ -49,6 +50,7 @@ export function ContentListPage<T extends { id: number | string }>({
   description,
   newHref,
   newLabel = 'New',
+  actions: headerActions,
   items,
   isLoading,
   statCards,
@@ -124,9 +126,13 @@ export function ContentListPage<T extends { id: number | string }>({
       icon={icon}
       description={description}
       actions={
-        <Button asChild className="gap-1">
-          <Link href={newHref}><Plus className="h-4 w-4" /> {newLabel}</Link>
-        </Button>
+        headerActions ?? (
+          newHref ? (
+            <Button asChild className="gap-1">
+              <Link href={newHref}><Plus className="h-4 w-4" /> {newLabel}</Link>
+            </Button>
+          ) : null
+        )
       }
     >
       <StatCards cards={statCards} />

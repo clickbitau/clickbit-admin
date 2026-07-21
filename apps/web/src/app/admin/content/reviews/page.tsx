@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Star,
+  Plus,
   ThumbsUp,
   ThumbsDown,
   Edit,
@@ -18,7 +20,16 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ContentListPage } from '@/components/content/ContentListPage';
+import { ReviewForm } from '@/components/content/ReviewForm';
 import { fetchAdminReviews, updateReviewStatus, updateReview, deleteReview } from '@/lib/api';
 import type { Review } from '@clickbit/shared/src/content';
 import { toast } from 'sonner';
@@ -81,6 +92,8 @@ export default function AdminContentReviewsPage() {
     mutationFn: (id: number) => deleteReview(token!, id),
     onSuccess: () => { toast.success('Review deleted'); queryClient.invalidateQueries({ queryKey: ['admin-reviews'] }); },
   });
+
+  const [createOpen, setCreateOpen] = useState(false);
 
   const statCards = [
     { label: 'Total Reviews', value: stats.total, icon: MessageSquare },
@@ -212,8 +225,7 @@ export default function AdminContentReviewsPage() {
       title="Reviews"
       description="Manage customer reviews and testimonials."
       icon={Star}
-      newHref="/admin/content/reviews/new"
-      newLabel="New Review"
+      actions={<Button onClick={() => setCreateOpen(true)} className="gap-1"><Plus className="h-4 w-4" /> New Review</Button>}
       items={items}
       isLoading={isLoading}
       statCards={statCards}
@@ -226,6 +238,23 @@ export default function AdminContentReviewsPage() {
       renderTableRow={renderTableRow}
       onRowClick={(r) => router.push(`/admin/content/reviews/${r.id}`)}
       emptyText="No reviews found."
+      footer={
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>New Review</DialogTitle>
+              <DialogDescription>Add a testimonial or customer review.</DialogDescription>
+            </DialogHeader>
+            {token && (
+              <ReviewForm
+                token={token}
+                onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-reviews'] }); }}
+                onCancel={() => setCreateOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      }
     />
   );
 }
