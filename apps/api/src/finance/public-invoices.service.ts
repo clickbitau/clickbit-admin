@@ -5,6 +5,7 @@ import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from './pdf.service';
 import { invoiceInclude, mapInvoice, parseNumber } from './finance-utils';
+import { CacheService } from '../redis/cache.service';
 
 const CARD_SURCHARGE_RATE = 0.02;
 
@@ -12,16 +13,30 @@ const CARD_SURCHARGE_RATE = 0.02;
 export class PublicInvoicesService {
   private stripe: Stripe | null = null;
 
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly pdfService: PdfService,
     private readonly config: ConfigService,
-  ) {
+    private readonly cache?: CacheService) {
     const secret = this.config.get<string>('STRIPE_SECRET_KEY');
     if (secret) {
       this.stripe = new Stripe(secret, { apiVersion: '2025-02-24.acacia' as any });
     }
   }
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('public-invoices', ...parts) ?? `public-invoices:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private toNumber(value: unknown): number {
     return parseNumber(value);
@@ -131,6 +146,8 @@ export class PublicInvoicesService {
   }
 
   async generatePdf(invoiceOrId: any): Promise<{ buffer: Buffer; filename: string }> {
+    await this.invalidateCache();
+
     const { packageData, billingSettings, verificationCode, filename } = await this.buildPdfData(invoiceOrId);
     const buffer = await this.pdfService.generateInvoicePDF(packageData, billingSettings, {}, verificationCode);
     return { buffer, filename };
@@ -246,6 +263,8 @@ export class PublicInvoicesService {
   }
 
   async recalcPaymentStatus(invoiceId: number) {
+    await this.invalidateCache();
+
     const invoice = await this.prisma.invoices.findUnique({ where: { id: invoiceId } });
     if (!invoice) return;
 
@@ -284,6 +303,8 @@ export class PublicInvoicesService {
   }
 
   async createCheckoutSession(code: string, body: any, token?: string) {
+    await this.invalidateCache();
+
     if (!this.stripe) throw new BadRequestException('Payment processing is not configured');
 
     const invoice = await this.getInvoiceByCode(code);
@@ -380,6 +401,8 @@ export class PublicInvoicesService {
   }
 
   async confirmPayment(code: string, sessionId: string, token?: string) {
+    await this.invalidateCache();
+
     const invoice = await this.getInvoiceByCode(code);
     this.validateToken(invoice, token);
 
@@ -419,98 +442,108 @@ export class PublicInvoicesService {
   }
 
   async recoverStripePayment(invoiceId: number) {
-    if (!this.stripe) throw new BadRequestException('Stripe is not configured');
-    const invoice = await this.prisma.invoices.findUnique({ where: { id: invoiceId, deleted_at: null }, include: invoiceInclude });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    return this.cached(this.cacheKey('recoverStripePayment', invoiceId), async () => {
 
-    const actions: string[] = [];
-    let session: Stripe.Checkout.Session | null = null;
+      if (!this.stripe) throw new BadRequestException('Stripe is not configured');
+      const invoice = await this.prisma.invoices.findUnique({ where: { id: invoiceId, deleted_at: null }, include: invoiceInclude });
+      if (!invoice) throw new NotFoundException('Invoice not found');
 
-    if (invoice.stripe_session_id) {
-      try {
-        session = await this.stripe.checkout.sessions.retrieve(invoice.stripe_session_id);
-        actions.push(`Found stored session: ${session.id}, payment_status: ${session.payment_status}`);
-      } catch (e: any) {
-        actions.push(`Stored session ${invoice.stripe_session_id} not found: ${e.message}`);
-      }
-    }
+      const actions: string[] = [];
+      let session: Stripe.Checkout.Session | null = null;
 
-    if (!session || session.payment_status !== 'paid') {
-      try {
-        const list = await this.stripe.checkout.sessions.list({ limit: 100 });
-        const match = list.data.find((s: any) =>
-          s.payment_status === 'paid' &&
-          (s.metadata?.invoice_id === invoice.id.toString() ||
-            s.metadata?.invoice_number === invoice.package_code ||
-            s.metadata?.package_id === invoice.id.toString() ||
-            s.customer_email?.toLowerCase() === (invoice.client_email || '').toLowerCase()),
-        );
-        if (match) {
-          session = match;
-          actions.push(`Found matching session via search: ${session.id}`);
-        } else {
-          actions.push('No paid Stripe session found for this invoice');
+      if (invoice.stripe_session_id) {
+        try {
+          session = await this.stripe.checkout.sessions.retrieve(invoice.stripe_session_id);
+          actions.push(`Found stored session: ${session.id}, payment_status: ${session.payment_status}`);
+        } catch (e: any) {
+          actions.push(`Stored session ${invoice.stripe_session_id} not found: ${e.message}`);
         }
-      } catch (e: any) {
-        actions.push(`Stripe session search failed: ${e.message}`);
       }
-    }
 
-    if (!session || session.payment_status !== 'paid') {
-      return { success: false, message: 'No paid Stripe session found', results: actions, package: mapInvoice(invoice, true) };
-    }
+      if (!session || session.payment_status !== 'paid') {
+        try {
+          const list = await this.stripe.checkout.sessions.list({ limit: 100 });
+          const match = list.data.find((s: any) =>
+            s.payment_status === 'paid' &&
+            (s.metadata?.invoice_id === invoice.id.toString() ||
+              s.metadata?.invoice_number === invoice.package_code ||
+              s.metadata?.package_id === invoice.id.toString() ||
+              s.customer_email?.toLowerCase() === (invoice.client_email || '').toLowerCase()),
+          );
+          if (match) {
+            session = match;
+            actions.push(`Found matching session via search: ${session.id}`);
+          } else {
+            actions.push('No paid Stripe session found for this invoice');
+          }
+        } catch (e: any) {
+          actions.push(`Stripe session search failed: ${e.message}`);
+        }
+      }
 
-    if (invoice.status !== 'paid') {
-      const metadata = session.metadata || {};
-      const baseAmount = this.toNumber(metadata.base_amount) || this.toNumber(invoice.total_amount);
-      const surcharge = this.toNumber(metadata.surcharge_amount);
-      await this.prisma.payments.create({
-        data: {
-          invoice_id: invoice.id,
-          amount: baseAmount + surcharge,
-          currency: invoice.currency || 'AUD',
-          payment_provider: 'stripe',
-          payment_method: 'card',
-          transaction_id: session.id,
-          status: 'completed',
-          gateway_response: JSON.stringify(session),
-          payment_date: new Date(session.created * 1000),
-          notes: `Recovered from Stripe. Payment Intent: ${typeof session.payment_intent === 'string' ? session.payment_intent : session.id}`,
-        } as any,
-      });
-      await this.recalcPaymentStatus(invoice.id);
-      await this.prisma.invoices.update({
-        where: { id: invoice.id },
-        data: { stripe_session_id: session.id },
-      });
-      actions.push(`Recorded payment and updated invoice from session ${session.id}`);
-    } else {
-      actions.push('Invoice already marked as paid');
-    }
+      if (!session || session.payment_status !== 'paid') {
+        return { success: false, message: 'No paid Stripe session found', results: actions, package: mapInvoice(invoice, true) };
+      }
 
-    const refreshed = await this.prisma.invoices.findUnique({ where: { id: invoice.id }, include: invoiceInclude });
-    return { success: true, message: 'Stripe payment recovered successfully', results: actions, package: mapInvoice(refreshed!, true) };
-  }
+      if (invoice.status !== 'paid') {
+        const metadata = session.metadata || {};
+        const baseAmount = this.toNumber(metadata.base_amount) || this.toNumber(invoice.total_amount);
+        const surcharge = this.toNumber(metadata.surcharge_amount);
+        await this.prisma.payments.create({
+          data: {
+            invoice_id: invoice.id,
+            amount: baseAmount + surcharge,
+            currency: invoice.currency || 'AUD',
+            payment_provider: 'stripe',
+            payment_method: 'card',
+            transaction_id: session.id,
+            status: 'completed',
+            gateway_response: JSON.stringify(session),
+            payment_date: new Date(session.created * 1000),
+            notes: `Recovered from Stripe. Payment Intent: ${typeof session.payment_intent === 'string' ? session.payment_intent : session.id}`,
+          } as any,
+        });
+        await this.recalcPaymentStatus(invoice.id);
+        await this.prisma.invoices.update({
+          where: { id: invoice.id },
+          data: { stripe_session_id: session.id },
+        });
+        actions.push(`Recorded payment and updated invoice from session ${session.id}`);
+      } else {
+        actions.push('Invoice already marked as paid');
+      }
+
+      const refreshed = await this.prisma.invoices.findUnique({ where: { id: invoice.id }, include: invoiceInclude });
+      return { success: true, message: 'Stripe payment recovered successfully', results: actions, package: mapInvoice(refreshed!, true) };
+
+
+    });
+}
 
   async recoverStripeByClientName(clientName: string) {
-    if (!clientName) throw new BadRequestException('client_name is required');
-    const invoices = await this.prisma.invoices.findMany({
-      where: { deleted_at: null, document_type: 'invoice', client_name: { contains: clientName, mode: 'insensitive' } },
-      orderBy: { created_at: 'desc' },
-      select: { id: true, package_code: true, title: true, client_name: true, status: true, total_amount: true, amount_paid: true, stripe_session_id: true, created_at: true },
+    return this.cached(this.cacheKey('recoverStripeByClientName', clientName), async () => {
+
+      if (!clientName) throw new BadRequestException('client_name is required');
+      const invoices = await this.prisma.invoices.findMany({
+        where: { deleted_at: null, document_type: 'invoice', client_name: { contains: clientName, mode: 'insensitive' } },
+        orderBy: { created_at: 'desc' },
+        select: { id: true, package_code: true, title: true, client_name: true, status: true, total_amount: true, amount_paid: true, stripe_session_id: true, created_at: true },
+      });
+      if (invoices.length === 0) return { success: false, message: `No invoices found for "${clientName}"` };
+      const summary = invoices.map((inv: any) => ({
+        id: inv.id,
+        package_code: inv.package_code,
+        title: inv.title,
+        client_name: inv.client_name,
+        status: inv.status,
+        total_amount: this.toNumber(inv.total_amount),
+        amount_paid: this.toNumber(inv.amount_paid),
+        stripe_session_id: inv.stripe_session_id || null,
+        created_at: inv.created_at,
+      }));
+      return { success: true, invoices: summary, message: `Found ${invoices.length} invoice(s). Use POST /:id/recover-stripe-payment to recover each.` };
+
+
     });
-    if (invoices.length === 0) return { success: false, message: `No invoices found for "${clientName}"` };
-    const summary = invoices.map((inv: any) => ({
-      id: inv.id,
-      package_code: inv.package_code,
-      title: inv.title,
-      client_name: inv.client_name,
-      status: inv.status,
-      total_amount: this.toNumber(inv.total_amount),
-      amount_paid: this.toNumber(inv.amount_paid),
-      stripe_session_id: inv.stripe_session_id || null,
-      created_at: inv.created_at,
-    }));
-    return { success: true, invoices: summary, message: `Found ${invoices.length} invoice(s). Use POST /:id/recover-stripe-payment to recover each.` };
-  }
+}
 }

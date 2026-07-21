@@ -5,14 +5,29 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { Profile } from '@clickbit/shared';
 import { asJson, stringValue } from './settings-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class ProfileService {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly storage: StorageService,
-  ) {}
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('profile', ...parts) ?? `profile:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private getSupabaseAdmin() {
     const url = this.config.get<string>('SUPABASE_URL');
@@ -22,24 +37,31 @@ export class ProfileService {
   }
 
   async getProfile(user: Profile) {
-    const profile = await this.prisma.profiles.findUnique({
-      where: { id: user.id },
-      select: {
-        id: true, email: true, email_verified: true, first_name: true, last_name: true, phone: true,
-        role: true, status: true, avatar: true, job_title: true, company: true, company_logo: true,
-        company_id: true, bio: true, website: true, timezone: true, language: true, address: true,
-        preferences: true, created_at: true, updated_at: true,
-      },
+    return this.cached(this.cacheKey('getProfile', user.id), async () => {
+
+      const profile = await this.prisma.profiles.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true, email: true, email_verified: true, first_name: true, last_name: true, phone: true,
+          role: true, status: true, avatar: true, job_title: true, company: true, company_logo: true,
+          company_id: true, bio: true, website: true, timezone: true, language: true, address: true,
+          preferences: true, created_at: true, updated_at: true,
+        },
+      });
+      if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
+      let contact = null;
+      if (profile.role === 'customer') {
+        contact = await this.prisma.contacts.findFirst({ where: { email: profile.email }, select: { id: true, name: true, company: true, phone: true, website: true, location: true, lifecycle_stage: true } });
+      }
+      return { success: true, data: { user: profile, contact } };
+
+
     });
-    if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
-    let contact = null;
-    if (profile.role === 'customer') {
-      contact = await this.prisma.contacts.findFirst({ where: { email: profile.email }, select: { id: true, name: true, company: true, phone: true, website: true, location: true, lifecycle_stage: true } });
-    }
-    return { success: true, data: { user: profile, contact } };
-  }
+}
 
   async updateProfile(user: Profile, dto: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
 
@@ -86,6 +108,8 @@ export class ProfileService {
   }
 
   async changePassword(user: Profile, dto: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const current = stringValue(dto.current_password);
     const newPass = stringValue(dto.new_password);
     const confirm = stringValue(dto.confirm_password);
@@ -108,6 +132,8 @@ export class ProfileService {
   }
 
   async updateNotifications(user: Profile, dto: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
     const current = asJson(profile.preferences, {});
@@ -118,6 +144,8 @@ export class ProfileService {
   }
 
   async deleteAccount(user: Profile, password: string) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
     if (profile.role !== 'customer') throw new ForbiddenException({ success: false, message: 'Admin and staff accounts cannot be self-deleted. Contact an administrator.' });
@@ -138,6 +166,8 @@ export class ProfileService {
   }
 
   async uploadAvatar(user: Profile, file: Express.Multer.File) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
     const url = await this.uploadImage(file, 'avatars', `user-${user.id}`, profile.avatar);
@@ -146,6 +176,8 @@ export class ProfileService {
   }
 
   async deleteAvatar(user: Profile) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
     if (profile.avatar) await this.storage.deleteByUrl(profile.avatar, ['avatars']).catch(() => {});
@@ -154,6 +186,8 @@ export class ProfileService {
   }
 
   async uploadCompanyLogo(user: Profile, file: Express.Multer.File) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
     const url = await this.uploadImage(file, 'logos', `user-${user.id}`, profile.company_logo);
@@ -165,6 +199,8 @@ export class ProfileService {
   }
 
   async deleteCompanyLogo(user: Profile) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
     if (profile.company_logo) await this.storage.deleteByUrl(profile.company_logo, ['logos']).catch(() => {});

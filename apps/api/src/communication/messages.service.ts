@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJsonInput, buildDataEnvelope, buildMessageEnvelope, buildListEnvelope, numberValue, profileSelect, stringValue } from './communication-utils';
+import { CacheService } from '../redis/cache.service';
 
 const messageInclude = {
   profiles: { select: profileSelect },
@@ -11,70 +12,98 @@ const messageInclude = {
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('messages', ...parts) ?? `messages:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   async listChannelMessages(user: Profile, channelId: number, query: Record<string, unknown>) {
-    const channel = await this.prisma.channels.findUnique({ where: { id: channelId } });
-    if (!channel) throw new NotFoundException({ success: false, message: 'Channel not found' });
-    await this.assertWorkspaceMember(channel.workspace_id, user.id, user.role);
+    return this.cached(this.cacheKey('listChannelMessages', user.id, channelId, JSON.stringify(query)), async () => {
 
-    const limit = Math.min(Math.max(numberValue(query.limit, 50), 1), 100);
-    const before = numberValue(query.before, 0) || undefined;
-    const after = numberValue(query.after, 0) || undefined;
+      const channel = await this.prisma.channels.findUnique({ where: { id: channelId } });
+      if (!channel) throw new NotFoundException({ success: false, message: 'Channel not found' });
+      await this.assertWorkspaceMember(channel.workspace_id, user.id, user.role);
 
-    const where: any = { channel_id: channelId, deleted_at: null };
-    if (before) where.id = { lt: before };
-    else if (after) where.id = { gt: after };
+      const limit = Math.min(Math.max(numberValue(query.limit, 50), 1), 100);
+      const before = numberValue(query.before, 0) || undefined;
+      const after = numberValue(query.after, 0) || undefined;
 
-    const messages = await this.prisma.messages.findMany({
-      where,
-      include: messageInclude as any,
-      orderBy: { id: 'desc' },
-      take: limit + 1,
+      const where: any = { channel_id: channelId, deleted_at: null };
+      if (before) where.id = { lt: before };
+      else if (after) where.id = { gt: after };
+
+      const messages = await this.prisma.messages.findMany({
+        where,
+        include: messageInclude as any,
+        orderBy: { id: 'desc' },
+        take: limit + 1,
+      });
+
+      const hasMore = messages.length > limit;
+      const returned = hasMore ? messages.slice(0, -1) : messages;
+      const reversed = returned.reverse();
+
+      return {
+        success: true,
+        messages: reversed.map((m) => this.mapMessage(m as any)),
+        pagination: { limit, hasMore, hasPrevious: !!before, nextCursor: hasMore ? reversed[reversed.length - 1]?.id : null, previousCursor: reversed[0]?.id || null },
+      };
+
+
     });
-
-    const hasMore = messages.length > limit;
-    const returned = hasMore ? messages.slice(0, -1) : messages;
-    const reversed = returned.reverse();
-
-    return {
-      success: true,
-      messages: reversed.map((m) => this.mapMessage(m as any)),
-      pagination: { limit, hasMore, hasPrevious: !!before, nextCursor: hasMore ? reversed[reversed.length - 1]?.id : null, previousCursor: reversed[0]?.id || null },
-    };
-  }
+}
 
   async listDmMessages(user: Profile, dmId: number, query: Record<string, unknown>) {
-    const participant = await this.prisma.direct_message_participants.findFirst({ where: { direct_message_id: dmId, user_id: user.id } });
-    if (!participant && user.role !== 'admin') throw new ForbiddenException({ success: false, message: 'You are not a participant in this conversation' });
+    return this.cached(this.cacheKey('listDmMessages', user.id, dmId, JSON.stringify(query)), async () => {
 
-    const limit = Math.min(Math.max(numberValue(query.limit, 50), 1), 100);
-    const before = numberValue(query.before, 0) || undefined;
-    const after = numberValue(query.after, 0) || undefined;
+      const participant = await this.prisma.direct_message_participants.findFirst({ where: { direct_message_id: dmId, user_id: user.id } });
+      if (!participant && user.role !== 'admin') throw new ForbiddenException({ success: false, message: 'You are not a participant in this conversation' });
 
-    const where: any = { direct_message_id: dmId, deleted_at: null };
-    if (before) where.id = { lt: before };
-    else if (after) where.id = { gt: after };
+      const limit = Math.min(Math.max(numberValue(query.limit, 50), 1), 100);
+      const before = numberValue(query.before, 0) || undefined;
+      const after = numberValue(query.after, 0) || undefined;
 
-    const messages = await this.prisma.messages.findMany({
-      where,
-      include: messageInclude as any,
-      orderBy: { id: 'desc' },
-      take: limit + 1,
+      const where: any = { direct_message_id: dmId, deleted_at: null };
+      if (before) where.id = { lt: before };
+      else if (after) where.id = { gt: after };
+
+      const messages = await this.prisma.messages.findMany({
+        where,
+        include: messageInclude as any,
+        orderBy: { id: 'desc' },
+        take: limit + 1,
+      });
+
+      const hasMore = messages.length > limit;
+      const returned = hasMore ? messages.slice(0, -1) : messages;
+      const reversed = returned.reverse();
+
+      return {
+        success: true,
+        messages: reversed.map((m) => this.mapMessage(m as any)),
+        pagination: { limit, hasMore, hasPrevious: !!before, nextCursor: hasMore ? reversed[reversed.length - 1]?.id : null, previousCursor: reversed[0]?.id || null },
+      };
+
+
     });
-
-    const hasMore = messages.length > limit;
-    const returned = hasMore ? messages.slice(0, -1) : messages;
-    const reversed = returned.reverse();
-
-    return {
-      success: true,
-      messages: reversed.map((m) => this.mapMessage(m as any)),
-      pagination: { limit, hasMore, hasPrevious: !!before, nextCursor: hasMore ? reversed[reversed.length - 1]?.id : null, previousCursor: reversed[0]?.id || null },
-    };
-  }
+}
 
   async create(user: Profile, dto: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const channelId = dto.channelId ? numberValue(dto.channelId) : undefined;
     const dmId = dto.directMessageId ? numberValue(dto.directMessageId) : undefined;
     const content = stringValue(dto.content).trim();
@@ -119,6 +148,8 @@ export class MessagesService {
   }
 
   async update(user: Profile, messageId: number, dto: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
     if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
     if (message.user_id !== user.id && user.role !== 'admin') throw new ForbiddenException({ success: false, message: 'You can only edit your own messages' });
@@ -144,6 +175,8 @@ export class MessagesService {
   }
 
   async remove(user: Profile, messageId: number) {
+    await this.invalidateCache();
+
     const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
     if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
     if (message.user_id !== user.id && user.role !== 'admin') throw new ForbiddenException({ success: false, message: 'You can only delete your own messages' });
@@ -153,6 +186,8 @@ export class MessagesService {
   }
 
   async addReaction(user: Profile, messageId: number, emoji: string) {
+    await this.invalidateCache();
+
     const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
     if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
 
@@ -166,43 +201,55 @@ export class MessagesService {
   }
 
   async removeReaction(user: Profile, messageId: number, emoji: string) {
+    await this.invalidateCache();
+
     await this.prisma.reactions.deleteMany({ where: { message_id: messageId, user_id: user.id, emoji } });
     return buildMessageEnvelope('Reaction removed');
   }
 
   async getThread(user: Profile, messageId: number) {
-    const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
-    if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
+    return this.cached(this.cacheKey('getThread', user.id, messageId), async () => {
 
-    if (message.channel_id) {
-      const channel = await this.prisma.channels.findUnique({ where: { id: message.channel_id } });
-      if (channel) await this.assertWorkspaceMember(channel.workspace_id, user.id, user.role);
-    } else if (message.direct_message_id) {
-      const participant = await this.prisma.direct_message_participants.findFirst({ where: { direct_message_id: message.direct_message_id, user_id: user.id } });
-      if (!participant && user.role !== 'admin') throw new ForbiddenException({ success: false, message: 'Not authorized' });
-    }
+      const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
+      if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
 
-    const replies = await this.prisma.messages.findMany({
-      where: { reply_to_id: messageId, deleted_at: null },
-      include: messageInclude as any,
-      orderBy: { created_at: 'asc' },
+      if (message.channel_id) {
+        const channel = await this.prisma.channels.findUnique({ where: { id: message.channel_id } });
+        if (channel) await this.assertWorkspaceMember(channel.workspace_id, user.id, user.role);
+      } else if (message.direct_message_id) {
+        const participant = await this.prisma.direct_message_participants.findFirst({ where: { direct_message_id: message.direct_message_id, user_id: user.id } });
+        if (!participant && user.role !== 'admin') throw new ForbiddenException({ success: false, message: 'Not authorized' });
+      }
+
+      const replies = await this.prisma.messages.findMany({
+        where: { reply_to_id: messageId, deleted_at: null },
+        include: messageInclude as any,
+        orderBy: { created_at: 'asc' },
+      });
+
+      return buildDataEnvelope({ message: this.mapMessage(message as any), replies: replies.map((m) => this.mapMessage(m as any)) });
+
+
     });
-
-    return buildDataEnvelope({ message: this.mapMessage(message as any), replies: replies.map((m) => this.mapMessage(m as any)) });
-  }
+}
 
   async search(user: Profile, query: Record<string, unknown>) {
-    const term = stringValue(query.query).toLowerCase();
-    const channelId = numberValue(query.channel_id, 0) || undefined;
-    const dmId = numberValue(query.direct_message_id, 0) || undefined;
+    return this.cached(this.cacheKey('search', user.id, JSON.stringify(query)), async () => {
 
-    const where: any = { content: { contains: term, mode: 'insensitive' }, deleted_at: null };
-    if (channelId) where.channel_id = channelId;
-    if (dmId) where.direct_message_id = dmId;
+      const term = stringValue(query.query).toLowerCase();
+      const channelId = numberValue(query.channel_id, 0) || undefined;
+      const dmId = numberValue(query.direct_message_id, 0) || undefined;
 
-    const messages = await this.prisma.messages.findMany({ where, include: messageInclude as any, orderBy: { created_at: 'desc' }, take: 50 });
-    return buildListEnvelope(messages.map((m) => this.mapMessage(m as any)), messages.length, 50, 0);
-  }
+      const where: any = { content: { contains: term, mode: 'insensitive' }, deleted_at: null };
+      if (channelId) where.channel_id = channelId;
+      if (dmId) where.direct_message_id = dmId;
+
+      const messages = await this.prisma.messages.findMany({ where, include: messageInclude as any, orderBy: { created_at: 'desc' }, take: 50 });
+      return buildListEnvelope(messages.map((m) => this.mapMessage(m as any)), messages.length, 50, 0);
+
+
+    });
+}
 
   private async assertWorkspaceMember(workspaceId: number, userId: number, role?: string) {
     if (role === 'admin') return;

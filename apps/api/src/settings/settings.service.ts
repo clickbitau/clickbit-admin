@@ -1,63 +1,112 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { stringValue, numberValue, parseSettingJson, buildMessageEnvelope } from './settings-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('settings', ...parts) ?? `settings:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   async getPublicBillingSettings() {
-    const stripe = await this.getSettingRaw('stripe_settings') || {};
-    const tax = await this.getSettingRaw('tax_settings') || {};
-    const gmaps = await this.getSettingRaw('google_maps_api_key') || {};
-    return {
-      stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || stripe?.publishable_key || '',
-      enableStripe: stripe?.enabled !== false,
-      currencyCode: tax?.currency || 'AUD',
-      taxRate: numberValue(tax?.tax_rate, 10),
-      taxType: tax?.tax_type || 'gst_included',
-      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || gmaps?.api_key || '',
-    };
-  }
+    return this.cached(this.cacheKey('getPublicBillingSettings'), async () => {
+
+      const stripe = await this.getSettingRaw('stripe_settings') || {};
+      const tax = await this.getSettingRaw('tax_settings') || {};
+      const gmaps = await this.getSettingRaw('google_maps_api_key') || {};
+      return {
+        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || stripe?.publishable_key || '',
+        enableStripe: stripe?.enabled !== false,
+        currencyCode: tax?.currency || 'AUD',
+        taxRate: numberValue(tax?.tax_rate, 10),
+        taxType: tax?.tax_type || 'gst_included',
+        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || gmaps?.api_key || '',
+      };
+
+
+    });
+}
 
   async getPublicSettings() {
-    const rows = await this.prisma.site_settings.findMany({ where: { is_public: true, auto_load: true }, select: { setting_key: true, setting_value: true } });
-    const obj: Record<string, any> = {};
-    for (const row of rows) obj[row.setting_key] = row.setting_value;
-    return obj;
-  }
+    return this.cached(this.cacheKey('getPublicSettings'), async () => {
+
+      const rows = await this.prisma.site_settings.findMany({ where: { is_public: true, auto_load: true }, select: { setting_key: true, setting_value: true } });
+      const obj: Record<string, any> = {};
+      for (const row of rows) obj[row.setting_key] = row.setting_value;
+      return obj;
+
+
+    });
+}
 
   async getPublicSetting(key: string) {
-    const row = await this.prisma.site_settings.findFirst({ where: { setting_key: key, is_public: true }, select: { setting_key: true, setting_value: true, setting_type: true } });
-    if (!row) throw new NotFoundException({ message: 'Setting not found or not public' });
-    return { [row.setting_key]: row.setting_value };
-  }
+    return this.cached(this.cacheKey('getPublicSetting', key), async () => {
+
+      const row = await this.prisma.site_settings.findFirst({ where: { setting_key: key, is_public: true }, select: { setting_key: true, setting_value: true, setting_type: true } });
+      if (!row) throw new NotFoundException({ message: 'Setting not found or not public' });
+      return { [row.setting_key]: row.setting_value };
+
+
+    });
+}
 
   async findAllAdmin(query: Record<string, unknown>) {
-    const where: any = {};
-    const type = stringValue(query.type);
-    const search = stringValue(query.search);
-    if (type && type !== 'all') where.setting_type = type;
-    if (search) where.OR = [{ setting_key: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }];
-    return this.prisma.site_settings.findMany({ where, orderBy: [{ setting_type: 'asc' }, { setting_key: 'asc' }] });
-  }
+    return this.cached(this.cacheKey('findAllAdmin', JSON.stringify(query)), async () => {
+
+      const where: any = {};
+      const type = stringValue(query.type);
+      const search = stringValue(query.search);
+      if (type && type !== 'all') where.setting_type = type;
+      if (search) where.OR = [{ setting_key: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }];
+      return this.prisma.site_settings.findMany({ where, orderBy: [{ setting_type: 'asc' }, { setting_key: 'asc' }] });
+
+
+    });
+}
 
   async findByType(type: string) {
-    const rows = await this.prisma.site_settings.findMany({ where: { setting_type: type }, orderBy: { setting_key: 'asc' } });
-    const obj: Record<string, any> = {};
-    for (const row of rows) {
-      obj[row.setting_key] = { value: row.setting_value, description: row.description, is_public: row.is_public, auto_load: row.auto_load };
-    }
-    return obj;
-  }
+    return this.cached(this.cacheKey('findByType', type), async () => {
+
+      const rows = await this.prisma.site_settings.findMany({ where: { setting_type: type }, orderBy: { setting_key: 'asc' } });
+      const obj: Record<string, any> = {};
+      for (const row of rows) {
+        obj[row.setting_key] = { value: row.setting_value, description: row.description, is_public: row.is_public, auto_load: row.auto_load };
+      }
+      return obj;
+
+
+    });
+}
 
   async findByKey(key: string) {
-    const row = await this.prisma.site_settings.findFirst({ where: { setting_key: key } });
-    if (!row) throw new NotFoundException({ message: 'Setting not found' });
-    return row;
-  }
+    return this.cached(this.cacheKey('findByKey', key), async () => {
+
+      const row = await this.prisma.site_settings.findFirst({ where: { setting_key: key } });
+      if (!row) throw new NotFoundException({ message: 'Setting not found' });
+      return row;
+
+
+    });
+}
 
   async upsert(key: string, body: any) {
+    await this.invalidateCache();
+
     const setting_value = body.setting_value !== undefined ? stringValue(body.setting_value) : undefined;
     const setting_type = body.setting_type !== undefined ? stringValue(body.setting_type) : 'system';
     const description = body.description !== undefined ? stringValue(body.description) : undefined;
@@ -82,6 +131,8 @@ export class SettingsService {
   }
 
   async bulkUpdate(body: any) {
+    await this.invalidateCache();
+
     const settings = body.settings;
     if (!settings || typeof settings !== 'object') return { message: 'Settings object is required' };
     const results: any[] = [];
@@ -94,6 +145,8 @@ export class SettingsService {
   }
 
   async remove(key: string) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.site_settings.findFirst({ where: { setting_key: key } });
     if (!existing) throw new NotFoundException({ message: 'Setting not found' });
     await this.prisma.site_settings.delete({ where: { id: existing.id } });
@@ -101,23 +154,37 @@ export class SettingsService {
   }
 
   async getMarketingIntegrations() {
-    const row = await this.getSettingRaw('marketing_integrations');
-    if (row && typeof row === 'object') return row;
-    return { headerScripts: '', googleSearchConsoleTag: '', googleAnalyticsId: '', facebookPixelId: '', customMetaTags: '' };
-  }
+    return this.cached(this.cacheKey('getMarketingIntegrations'), async () => {
+
+      const row = await this.getSettingRaw('marketing_integrations');
+      if (row && typeof row === 'object') return row;
+      return { headerScripts: '', googleSearchConsoleTag: '', googleAnalyticsId: '', facebookPixelId: '', customMetaTags: '' };
+
+
+    });
+}
 
   async updateMarketingIntegrations(body: any) {
+    await this.invalidateCache();
+
     const value = body.marketingIntegrations !== undefined ? body.marketingIntegrations : body;
     return this.upsert('marketing_integrations', { setting_value: JSON.stringify(value), setting_type: 'marketing', description: 'Marketing and analytics integration settings', is_public: false, auto_load: false });
   }
 
   async getBillingSettings() {
-    const row = await this.getSettingRaw('billing_settings');
-    if (row && typeof row === 'object') return row;
-    return { stripePublishableKey: '', stripeSecretKey: '', currencyCode: 'AUD', taxRate: 10, companyAbn: '', billingAddress: '', paymentTerms: 'Net 30' };
-  }
+    return this.cached(this.cacheKey('getBillingSettings'), async () => {
+
+      const row = await this.getSettingRaw('billing_settings');
+      if (row && typeof row === 'object') return row;
+      return { stripePublishableKey: '', stripeSecretKey: '', currencyCode: 'AUD', taxRate: 10, companyAbn: '', billingAddress: '', paymentTerms: 'Net 30' };
+
+
+    });
+}
 
   async updateBillingSettings(body: any) {
+    await this.invalidateCache();
+
     const value = body.billingSettings !== undefined ? body.billingSettings : body;
     return this.upsert('billing_settings', { setting_value: JSON.stringify(value), setting_type: 'billing', description: 'Payment and billing configuration settings', is_public: false, auto_load: false });
   }

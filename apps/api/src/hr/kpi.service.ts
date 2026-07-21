@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 interface UserLike {
   id: number;
@@ -23,67 +24,95 @@ export interface KpiResult {
 
 @Injectable()
 export class KpiService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('kpi', ...parts) ?? `kpi:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   async dashboard(period: string, user: UserLike) {
-    this.ensureAdminOrManager(user);
-    const periodRegex = /^\d{4}-\d{2}$/;
-    if (!periodRegex.test(period)) throw new NotFoundException('Invalid period format. Use YYYY-MM');
+    return this.cached(this.cacheKey('dashboard', period, user.id), async () => {
 
-    const [year, month] = period.split('-').map((v) => parseInt(v, 10));
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0, 23, 59, 59, 999);
+      this.ensureAdminOrManager(user);
+      const periodRegex = /^\d{4}-\d{2}$/;
+      if (!periodRegex.test(period)) throw new NotFoundException('Invalid period format. Use YYYY-MM');
 
-    const employees = await this.prisma.employees.findMany({
-      where: { employment_status: 'active' },
-      include: { profiles: { select: { first_name: true, last_name: true, avatar: true, email: true } } },
+      const [year, month] = period.split('-').map((v) => parseInt(v, 10));
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0, 23, 59, 59, 999);
+
+      const employees = await this.prisma.employees.findMany({
+        where: { employment_status: 'active' },
+        include: { profiles: { select: { first_name: true, last_name: true, avatar: true, email: true } } },
+      });
+      const employeeMap = new Map(employees.map((e) => [e.id, e]));
+
+      let stored: any[] = [];
+      try {
+        stored = await this.prisma.hr_kpi_scores.findMany({ where: { period }, orderBy: { total_score: 'desc' } });
+      } catch (e: any) {
+        if (e.code !== 'P2021') throw e;
+      }
+
+      if (stored.length > 0) {
+        return { period, scores: stored.map((s) => this.mapScore(s, employeeMap.get(s.employee_id))) };
+      }
+
+      const scores = await Promise.all(
+        employees.map((emp) =>
+          this.calculateKpiScore(emp.id, start, end)
+            .then((res) => this.mapScore(res, emp))
+            .catch((err) => {
+              console.error(`[KPI] failed for employee ${emp.id}:`, err.message);
+              return null;
+            }),
+        ),
+      );
+
+      return { period, scores: scores.filter((s): s is any => s !== null) };
+
+
     });
-    const employeeMap = new Map(employees.map((e) => [e.id, e]));
-
-    let stored: any[] = [];
-    try {
-      stored = await this.prisma.hr_kpi_scores.findMany({ where: { period }, orderBy: { total_score: 'desc' } });
-    } catch (e: any) {
-      if (e.code !== 'P2021') throw e;
-    }
-
-    if (stored.length > 0) {
-      return { period, scores: stored.map((s) => this.mapScore(s, employeeMap.get(s.employee_id))) };
-    }
-
-    const scores = await Promise.all(
-      employees.map((emp) =>
-        this.calculateKpiScore(emp.id, start, end)
-          .then((res) => this.mapScore(res, emp))
-          .catch((err) => {
-            console.error(`[KPI] failed for employee ${emp.id}:`, err.message);
-            return null;
-          }),
-      ),
-    );
-
-    return { period, scores: scores.filter((s): s is any => s !== null) };
-  }
+}
 
   async employeeHistory(employeeId: number, user: UserLike) {
-    await this.ensureAdminOrSelf(user, employeeId);
-    const employee = await this.prisma.employees.findUnique({
-      where: { id: employeeId },
-      include: { profiles: { select: { first_name: true, last_name: true, email: true, avatar: true } } },
-    });
-    let rows: any[] = [];
-    try {
-      rows = await this.prisma.hr_kpi_scores.findMany({
-        where: { employee_id: employeeId },
-        orderBy: { period: 'desc' },
+    return this.cached(this.cacheKey('employeeHistory', employeeId, user.id), async () => {
+
+      await this.ensureAdminOrSelf(user, employeeId);
+      const employee = await this.prisma.employees.findUnique({
+        where: { id: employeeId },
+        include: { profiles: { select: { first_name: true, last_name: true, email: true, avatar: true } } },
       });
-    } catch (e: any) {
-      if (e.code !== 'P2021') throw e;
-    }
-    return rows.map((r) => this.mapScore(r, employee));
-  }
+      let rows: any[] = [];
+      try {
+        rows = await this.prisma.hr_kpi_scores.findMany({
+          where: { employee_id: employeeId },
+          orderBy: { period: 'desc' },
+        });
+      } catch (e: any) {
+        if (e.code !== 'P2021') throw e;
+      }
+      return rows.map((r) => this.mapScore(r, employee));
+
+
+    });
+}
 
   async snapshot(period: string, user: UserLike, employeeIds?: number[]) {
+    await this.invalidateCache();
+
     this.ensureAdminOrManager(user);
     if (!/^\d{4}-\d{2}$/.test(period)) throw new NotFoundException('Invalid period format. Use YYYY-MM');
 
