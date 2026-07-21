@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from '@/components/admin/ThemeToggle';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import {
   LayoutDashboard, Users, Building2, Receipt, FolderKanban, Ticket,
   LogOut, Menu, X, User, Briefcase, Loader2,
@@ -49,7 +50,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
+
 
   const Nav = ({ collapsed = false }: { collapsed?: boolean }) => (
     <div className="flex flex-col h-full">
@@ -137,13 +138,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <ThemeToggle />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:nm-raised-sm transition-all">
-              {user?.avatar ? (
-                <img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground text-xs font-bold">
-                  {initials || <User className="h-4 w-4" />}
-                </div>
-              )}
+              <PersonAvatar name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'Agent'} avatar_url={user?.avatar} size="sm" />
               <span className="text-sm font-medium hidden xl:inline">
                 {user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : 'Agent'}
               </span>

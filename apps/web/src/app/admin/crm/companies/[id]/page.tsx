@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
 import { Progress } from '@/components/ui/progress';
@@ -103,9 +104,7 @@ function CompanyHeader({ company }: { company: Company }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-lg font-bold text-white">
-          {company.name?.charAt(0).toUpperCase()}
-        </div>
+        <PersonAvatar name={company.name} avatar_url={company.logo_url} size="lg" className="h-14 w-14 text-lg" />
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             {company.name}

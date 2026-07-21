@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -195,11 +196,7 @@ export default function AdminUserDetailPage() {
                 <CardHeader>
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div className="flex items-center gap-4">
-                      {userData.avatar ? (
-                        <img src={userData.avatar} alt={displayName} className="h-16 w-16 rounded-full object-cover" />
-                      ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted"><User className="h-8 w-8 text-muted-foreground" /></div>
-                      )}
+                      <PersonAvatar name={displayName} avatar_url={userData.avatar} size="lg" className="h-16 w-16 text-xl" />
                       <div>
                         <CardTitle className="text-2xl">{displayName}</CardTitle>
                         <p className="text-sm text-muted-foreground">{userData.email} · {userData.role}</p>

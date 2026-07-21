@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { ActivityTimeline } from '@/components/design-system/ActivityTimeline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FormDialog } from '@/components/design-system/FormDialog';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import {
@@ -26,9 +28,10 @@ import {
   fetchContactTickets,
   fetchContactDocuments,
   fetchContactInteractions,
+  logContactInteraction,
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { ArrowLeft, Building2, Mail, Phone, User } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, User, Edit3, FileText, Briefcase, FolderKanban, CreditCard, Ticket as TicketIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CrmContact, CrmProject, Deal } from '@/types/crm';
 import type { Invoice, Payment } from '@/types/finance';
@@ -38,7 +41,7 @@ import type { AppDocument } from '@/types/documents';
 type TabValue = 'overview' | 'projects' | 'deals' | 'invoices' | 'payments' | 'tickets' | 'documents' | 'activity';
 
 export default function CustomerDetailPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const queryClient = useQueryClient();
   const params = useParams();
   const id = String(params.id);
@@ -115,6 +118,16 @@ export default function CustomerDetailPage() {
     onError: (err: Error) => toast.error(err.message || 'Failed'),
   });
 
+  const noteMutation = useMutation({
+    mutationFn: (data: { method: string; subject: string; notes: string }) =>
+      logContactInteraction(token!, id, { method: data.method, subject: data.subject, notes: data.notes, date: new Date().toISOString() }),
+    onSuccess: () => {
+      toast.success('Activity logged');
+      queryClient.invalidateQueries({ queryKey: ['customer-activity', id] });
+    },
+    onError: () => toast.error('Failed to log activity'),
+  });
+
   function setPage(tab: TabValue, page: number) {
     setPages((prev) => ({ ...prev, [tab]: page }));
   }
@@ -142,6 +155,13 @@ export default function CustomerDetailPage() {
     { label: 'Last Contacted', value: formatDate(customer.last_contacted_at) },
   ];
 
+  const openEmail = () => {
+    if (customer.email) window.location.href = `mailto:${customer.email}`;
+  };
+  const openPhone = () => {
+    if (customer.phone) window.location.href = `tel:${customer.phone}`;
+  };
+
   return (
     <PageShell
       title={customer.name || 'Customer'}
@@ -152,11 +172,13 @@ export default function CustomerDetailPage() {
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/crm/customers"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link>
           </Button>
-          <Button size="sm" onClick={() => setEditOpen(true)}>Edit</Button>
+          <Button variant="outline" size="sm" onClick={openEmail} disabled={!customer.email}><Mail className="mr-1 h-4 w-4" /> Email</Button>
+          <Button variant="outline" size="sm" onClick={openPhone} disabled={!customer.phone}><Phone className="mr-1 h-4 w-4" /> Call</Button>
+          <Button size="sm" onClick={() => setEditOpen(true)}><Edit3 className="mr-1 h-4 w-4" /> Edit</Button>
         </div>
       }
     >
-      <CustomerHeader customer={customer} />
+      <CustomerHero customer={customer} onEdit={() => setEditOpen(true)} />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
         <TabsList className="flex flex-wrap h-auto">
@@ -382,26 +404,18 @@ export default function CustomerDetailPage() {
         </TabsContent>
 
         <TabsContent value="activity" className="space-y-4">
-          <div className="space-y-3">
-            {activityQuery.isLoading ? (
-              <div className="text-sm text-muted-foreground">Loading activity...</div>
-            ) : (activityQuery.data ?? []).length === 0 ? (
-              <div className="text-sm text-muted-foreground">No activity recorded.</div>
-            ) : (
-              (activityQuery.data ?? []).map((a) => (
-                <Card key={a.id}>
-                  <CardContent className="py-4 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium capitalize">{a.activity_type || 'Activity'}</span>
-                      <span className="text-xs text-muted-foreground">{formatDate(a.created_at)}</span>
-                    </div>
-                    <p className="mt-1">{a.subject}</p>
-                    {a.description && <p className="mt-1 text-muted-foreground">{a.description}</p>}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+          <Card>
+            <CardHeader><CardTitle className="text-sm text-muted-foreground">Activity Timeline</CardTitle></CardHeader>
+            <CardContent>
+              <ActivityTimeline
+                activities={activityQuery.data ?? []}
+                loading={activityQuery.isLoading}
+                onAddNote={(data) => noteMutation.mutate(data)}
+                actorName={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'}
+                actorAvatarUrl={user?.avatar}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -434,22 +448,45 @@ export default function CustomerDetailPage() {
   );
 }
 
-function CustomerHeader({ customer }: { customer: CrmContact }) {
+function CustomerHero({ customer, onEdit }: { customer: CrmContact; onEdit: () => void }) {
+  const contactId = customer.id;
+  const quickActions = [
+    { icon: FolderKanban, label: 'Project', href: `/admin/crm/projects/new?contact_id=${contactId}` },
+    { icon: Briefcase, label: 'Deal', href: `/admin/crm/deals/new?contact_id=${contactId}` },
+    { icon: FileText, label: 'Invoice', href: `/admin/finance/invoices/new?contact_id=${contactId}` },
+    { icon: CreditCard, label: 'Payment', href: `/admin/finance/payments/new?contact_id=${contactId}` },
+    { icon: TicketIcon, label: 'Ticket', href: `/admin/support/tickets/new?contact_id=${contactId}` },
+  ];
+
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-lg font-bold text-white">
-          {customer.name?.charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{customer.name}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            {customer.email && <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {customer.email}</span>}
-            {customer.phone && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {customer.phone}</span>}
-            <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {customer.primary_company?.name || customer.company || '-'}</span>
-            <StatusBadge status={customer.lifecycle_stage} />
+    <div className="nm-raised-sm rounded-2xl p-5 space-y-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-4">
+          <PersonAvatar name={customer.name} avatar_url={customer.avatar_url} size="lg" className="h-16 w-16 text-xl" />
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{customer.name}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              {customer.email && <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {customer.email}</span>}
+              {customer.phone && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {customer.phone}</span>}
+              <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {customer.primary_company?.name || customer.company || '-'}</span>
+              <StatusBadge status={customer.lifecycle_stage} />
+            </div>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onEdit}><Edit3 className="mr-1 h-4 w-4" /> Edit</Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 pt-2 border-t border-border/50">
+        {quickActions.map((a) => {
+          const Icon = a.icon;
+          return (
+            <Button key={a.label} variant="secondary" size="sm" asChild>
+              <Link href={a.href}><Icon className="mr-1 h-4 w-4" /> {a.label}</Link>
+            </Button>
+          );
+        })}
       </div>
     </div>
   );

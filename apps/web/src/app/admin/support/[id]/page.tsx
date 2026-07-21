@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatCards } from '@/components/design-system/StatCards';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { fetchTicket, updateTicket, replyToTicket, deleteTicket, fetchSupportStaff, fetchCannedResponses, uploadTicketAttachments } from '@/lib/api';
 import type { Ticket, TicketMessage, SupportStaff } from '@/types/support';
 import { formatDateTime, formatDuration } from '@/lib/format';
@@ -508,7 +509,6 @@ function Message({ message, ticket }: { message: TicketMessage; ticket: Ticket }
   const internal = message.is_internal || type === 'internal_note';
   const staff = message.is_staff_reply;
   const sender = message.sender?.name || `${message.sender?.first_name || ''} ${message.sender?.last_name || ''}`.trim() || message.sender_name || 'Support';
-  const initials = sender.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
   if (system) {
     return (
@@ -527,9 +527,7 @@ function Message({ message, ticket }: { message: TicketMessage; ticket: Ticket }
   if (internal) {
     return (
       <div className="flex gap-3">
-        <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-[11px] font-bold text-amber-700 dark:text-amber-300 flex-shrink-0 mt-0.5">
-          {initials || <Lock className="h-3 w-3" />}
-        </div>
+        <PersonAvatar name={sender} avatar_url={message.sender?.avatar} size="sm" />
         <div className="max-w-[75%]">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold">{sender}</span>
@@ -555,16 +553,15 @@ function Message({ message, ticket }: { message: TicketMessage; ticket: Ticket }
           <div className="bg-primary text-primary-foreground rounded-xl rounded-tr-sm px-4 py-3 text-sm whitespace-pre-wrap text-left">{message.message}</div>
           <div className="flex justify-end"><Attachments attachments={message.attachments} /></div>
         </div>
-        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-[11px] font-bold text-primary-foreground flex-shrink-0 mt-0.5">{initials}</div>
+        <PersonAvatar name={sender} avatar_url={message.sender?.avatar} size="sm" />
       </div>
     );
   }
 
   const customerName = ticket.user?.name || `${ticket.user?.first_name || ''} ${ticket.user?.last_name || ''}`.trim() || ticket.guest_name || 'Guest';
-  const cinitials = customerName.charAt(0).toUpperCase();
   return (
     <div className="flex gap-3">
-      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{cinitials}</div>
+      <PersonAvatar name={customerName} avatar_url={ticket.user?.avatar} size="sm" />
       <div className="max-w-[75%]">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-semibold">{customerName}</span>

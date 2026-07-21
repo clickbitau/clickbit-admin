@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -123,9 +124,7 @@ export default function AgentClientsPage() {
                     <tr key={client.id} className="hover:bg-muted/50 transition-colors">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shrink-0">
-                            {client.name.charAt(0).toUpperCase()}
-                          </div>
+                          <PersonAvatar name={client.name} size="md" />
                           <div>
                             <div className="font-medium">{client.name}</div>
                             {client.company && (

@@ -7,6 +7,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { DataTable } from '@/components/design-system/DataTable';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { FormDialog } from '@/components/design-system/FormDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,6 @@ import { Badge } from '@/components/ui/badge';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchAgents, updateContact } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import { getInitials } from '@/lib/format';
 import type { CrmContact } from '@/types/crm';
 import {
   Headphones,
@@ -130,17 +130,7 @@ export default function AgentsPage() {
         onRowClick={(a) => window.open(`/admin/crm/agents/${a.id}`, '_self')}
         renderRow={(a) => [
           <div key="agent" className="flex items-center gap-3 min-w-[200px]">
-            {a.primary_company?.logo_url || a.avatar_url ? (
-              <img
-                src={a.primary_company?.logo_url || a.avatar_url || ''}
-                alt=""
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-bold text-white">
-                {getInitials(a.name)}
-              </div>
-            )}
+            <PersonAvatar name={a.name} avatar_url={a.primary_company?.logo_url || a.avatar_url} size="md" />
             <div className="min-w-0">
               <Link
                 href={`/admin/crm/agents/${a.id}`}

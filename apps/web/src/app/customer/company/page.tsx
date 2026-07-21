@@ -3,10 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchCustomerCompany } from '@/lib/api';
-import { formatDate, getInitials } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { Building2, Mail, Phone, Globe, MapPin, Users, Calendar } from 'lucide-react';
 
 export default function CustomerCompanyPage() {
@@ -146,9 +147,7 @@ export default function CustomerCompanyPage() {
               <div className="pt-6 border-t border-border/50">
                 <h3 className="text-sm font-medium text-muted-foreground mb-4">Primary Contact</h3>
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
-                    {getInitials(company.primary_contact.name).charAt(0)}
-                  </div>
+                  <PersonAvatar name={company.primary_contact.name} size="md" />
                   <div>
                     <p className="font-medium">{company.primary_contact.name}</p>
                     {company.primary_contact.email && <p className="text-sm text-muted-foreground">{company.primary_contact.email}</p>}

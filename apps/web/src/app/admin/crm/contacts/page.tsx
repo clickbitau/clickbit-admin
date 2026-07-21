@@ -23,6 +23,7 @@ import {
 import { DataTable } from '@/components/design-system/DataTable';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { ContactForm } from '@/components/crm/ContactForm';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
@@ -89,15 +90,6 @@ function getPriorityColor(priority?: string | null) {
     default:
       return 'text-gray-500 dark:text-gray-400';
   }
-}
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 export default function ContactsPage() {
@@ -289,16 +281,19 @@ export default function ContactsPage() {
           const ownerName = c.owner ? `${c.owner.first_name || ''} ${c.owner.last_name || ''}`.trim() : '';
           return [
             <div key="contact" className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                {getInitials(c.name)}
-              </div>
+              <PersonAvatar name={c.name} avatar_url={c.avatar_url} size="md" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{c.name}</p>
                 <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 dark:text-gray-400">
                   <span className="flex items-center gap-0.5"><Mail className="h-3 w-3" /> {c.email || '-'}</span>
                   {c.phone && <span className="flex items-center gap-0.5"><Phone className="h-3 w-3" /> {c.phone}</span>}
                 </div>
-                {ownerName && <p className="text-xs text-gray-400 flex items-center gap-0.5 mt-0.5"><User className="h-3 w-3" /> {ownerName}</p>}
+                {ownerName && (
+                  <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                    <PersonAvatar name={ownerName} avatar_url={c.owner?.avatar} size="sm" />
+                    {ownerName}
+                  </p>
+                )}
               </div>
             </div>,
             <div key="company" className="min-w-0">

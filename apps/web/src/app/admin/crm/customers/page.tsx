@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
+import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatCards } from '@/components/design-system/StatCards';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
@@ -134,9 +135,7 @@ export default function CustomersPage() {
         loading={isLoading}
         renderRow={(c: CrmContact) => [
           <div key="customer" className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-sm font-bold text-white">
-              {c.name?.charAt(0).toUpperCase()}
-            </div>
+            <PersonAvatar name={c.name} avatar_url={c.avatar_url} size="md" />
             <div>
               <Link href={`/admin/crm/customers/${c.id}`} className="font-medium hover:underline">{c.name}</Link>
               <p className="text-xs text-muted-foreground">{c.email}</p>
