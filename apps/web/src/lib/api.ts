@@ -26,6 +26,7 @@ import type {
   TaskMicrotask,
   TaskStats,
   TaskWorkLog,
+  Pagination,
   User,
   ValueBreakdownResponse,
 } from '@/types/crm';
@@ -44,6 +45,7 @@ import type {
   StaffTicketListResponse,
   SupportStaff,
   Ticket,
+  TicketListResponse,
   TicketMessage,
   TicketReplyResponse,
   TicketStats,
@@ -544,6 +546,54 @@ export async function fetchContactInvoices(
   params?: Record<string, string | number | boolean>,
 ): Promise<InvoiceListResponse> {
   const response = await api.get<InvoiceListResponse>(`/api/crm/contacts/${id}/invoices`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchContactPayments(
+  token: string,
+  id: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<PaymentListResponse> {
+  const response = await api.get<PaymentListResponse>(`/api/crm/contacts/${id}/payments`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchContactProjects(
+  token: string,
+  id: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ projects: CrmProject[]; pagination: Pagination }> {
+  const response = await api.get<{ projects: CrmProject[]; pagination: Pagination }>(`/api/crm/contacts/${id}/projects`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchContactDeals(
+  token: string,
+  id: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<{ deals: Deal[]; pagination: Pagination }> {
+  const response = await api.get<{ deals: Deal[]; pagination: Pagination }>(`/api/crm/contacts/${id}/deals`, {
+    params,
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function fetchContactTickets(
+  token: string,
+  id: string | number,
+  params?: Record<string, string | number | boolean>,
+): Promise<TicketListResponse> {
+  const response = await api.get<TicketListResponse>(`/api/crm/contacts/${id}/tickets`, {
     params,
     headers: authHeaders(token),
   });

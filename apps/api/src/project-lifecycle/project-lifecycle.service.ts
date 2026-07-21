@@ -480,11 +480,11 @@ export class ProjectLifecycleService {
     await this.invalidateCache();
 
     if (!Array.isArray(phases)) throw new BadRequestException('phases array is required');
-    for (const { id, position } of phases) {
-      const phase = await this.prisma.project_phases.findUnique({ where: { id } });
-      if (!phase) continue;
-      await this.prisma.project_phases.update({ where: { id }, data: { position } });
-    }
+    await Promise.all(
+      phases.map(({ id, position }) =>
+        this.prisma.project_phases.update({ where: { id }, data: { position } }).catch(() => null),
+      ),
+    );
     const parent = parentType === 'project'
       ? await this.prisma.crm_projects.findUnique({ where: { id: parentId } })
       : await this.prisma.crm_subprojects.findUnique({ where: { id: parentId } });
@@ -683,11 +683,14 @@ export class ProjectLifecycleService {
     await this.invalidateCache();
 
     if (!Array.isArray(microtasks)) throw new BadRequestException('microtasks array is required');
-    for (const { id, position } of microtasks) {
-      const mt = await this.prisma.task_microtasks.findUnique({ where: { id } });
-      if (!mt || mt.project_task_id !== taskId) continue;
-      await this.prisma.task_microtasks.update({ where: { id }, data: { position } });
-    }
+    const ids = microtasks.map((m) => m.id).filter(Boolean);
+    const existing = await this.prisma.task_microtasks.findMany({ where: { id: { in: ids } } });
+    const validIds = new Set(existing.filter((m) => m.project_task_id === taskId).map((m) => m.id));
+    await Promise.all(
+      microtasks
+        .filter((m) => validIds.has(m.id))
+        .map(({ id, position }) => this.prisma.task_microtasks.update({ where: { id }, data: { position } })),
+    );
     const updated = await this.prisma.task_microtasks.findMany({ where: { project_task_id: taskId }, orderBy: { position: 'asc' } });
     return { success: true, microtasks: updated };
   }
@@ -755,29 +758,23 @@ export class ProjectLifecycleService {
         if (!sp) throw new NotFoundException('Subproject not found');
         deadlineDate = sp.due_date;
         const phases = await this.prisma.project_phases.findMany({ where: { subproject_id: entityId, deleted_at: null } });
-        for (const phase of phases) {
-          const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
-          tasks.push(...pts);
+        if (phases.length > 0) {
+          tasks = await this.prisma.project_tasks.findMany({ where: { phase_id: { in: phases.map((p) => p.id) } } });
         }
       } else {
         const project = await this.prisma.crm_projects.findUnique({ where: { id: entityId } });
         if (!project) throw new NotFoundException('Project not found');
         deadlineDate = project.due_date;
         const subprojects = await this.prisma.crm_subprojects.findMany({ where: { parent_project_id: entityId } });
+        const phaseWhere: any = { deleted_at: null };
         if (subprojects.length > 0) {
-          for (const sp of subprojects) {
-            const phases = await this.prisma.project_phases.findMany({ where: { subproject_id: sp.id, deleted_at: null } });
-            for (const phase of phases) {
-              const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
-              tasks.push(...pts);
-            }
-          }
+          phaseWhere.subproject_id = { in: subprojects.map((sp) => sp.id) };
         } else {
-          const phases = await this.prisma.project_phases.findMany({ where: { crm_project_id: entityId, deleted_at: null } });
-          for (const phase of phases) {
-            const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
-            tasks.push(...pts);
-          }
+          phaseWhere.crm_project_id = entityId;
+        }
+        const phases = await this.prisma.project_phases.findMany({ where: phaseWhere });
+        if (phases.length > 0) {
+          tasks = await this.prisma.project_tasks.findMany({ where: { phase_id: { in: phases.map((p) => p.id) } } });
         }
       }
 
@@ -878,9 +875,7 @@ export class ProjectLifecycleService {
       : await this.prisma.crm_subprojects.findUnique({ where: { id: parentId } });
     if (!parent?.start_date || !parent?.due_date) return;
     const phases = await this.calculatePhaseTimeline(parentId, parentType, parent.start_date, parent.due_date);
-    for (const phase of phases) {
-      await this.calculateTaskExpectedTimes(phase.id);
-    }
+    await Promise.all(phases.map((phase) => this.calculateTaskExpectedTimes(phase.id)));
   }
 
   private async calculatePhaseTimeline(parentId: number, parentType: 'project' | 'subproject', startDate: Date, endDate: Date, persist = true) {

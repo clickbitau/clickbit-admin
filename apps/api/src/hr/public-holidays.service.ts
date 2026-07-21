@@ -114,34 +114,38 @@ export class PublicHolidaysService {
     const locationName = targetCountryCode === 'AU' ? 'Australia' : targetCountryCode === 'BD' ? 'Bangladesh' : 'Australia';
 
     const holidays = await this.fetchHolidays(targetYear, targetCountryCode);
-    let imported = 0;
-    for (const h of holidays) {
-      const existing = await this.prisma.hr_public_holidays.findFirst({
-        where: {
-          holiday_date: new Date(h.date),
-          name: h.name,
-          location: { in: [locationName, 'Both', 'Global'] },
-        },
-      });
-      if (!existing && (h.global || targetCountryCode === 'AU')) {
-        await this.prisma.hr_public_holidays.create({
-          data: {
-            name: h.name,
-            holiday_date: new Date(h.date),
-            location: locationName,
-            is_recurring: false,
-            notes: h.global ? 'Auto-imported from public API' : 'Auto-imported regional holiday',
-            created_by: user.id,
-            created_at: new Date(),
-            updated_at: new Date(),
-          },
-        });
-        imported++;
-      }
+    const holidayDates = holidays.map((h) => new Date(h.date));
+    const existing = await this.prisma.hr_public_holidays.findMany({
+      where: {
+        holiday_date: { in: holidayDates },
+        location: { in: [locationName, 'Both', 'Global'] },
+      },
+      select: { holiday_date: true, name: true },
+    });
+    const existingKey = new Set(existing.map((e) => `${String(e.holiday_date)}:${e.name}`));
+
+    const toCreate = holidays
+      .filter((h) => {
+        if (!h.global && targetCountryCode !== 'AU') return false;
+        return !existingKey.has(`${new Date(h.date).toDateString()}:${h.name}`);
+      })
+      .map((h) => ({
+        name: h.name,
+        holiday_date: new Date(h.date),
+        location: locationName,
+        is_recurring: false,
+        notes: h.global ? 'Auto-imported from public API' : 'Auto-imported regional holiday',
+        created_by: user.id,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }));
+
+    if (toCreate.length > 0) {
+      await this.prisma.hr_public_holidays.createMany({ data: toCreate });
     }
 
     await this.invalidateCache();
-    return buildLegacyMessageEnvelope(`Successfully imported ${imported} holidays for ${locationName}.`);
+    return buildLegacyMessageEnvelope(`Successfully imported ${toCreate.length} holidays for ${locationName}.`);
   }
 
   async findOne(id: number) {

@@ -143,6 +143,39 @@ export class ContactsController {
     );
   }
 
+  @Get(':id/projects')
+  async getProjects(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.contactsService.getProjects(id, Number(page || 1), Number(limit || 20));
+  }
+
+  @Get(':id/deals')
+  async getDeals(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.contactsService.getDeals(id, Number(page || 1), Number(limit || 20));
+  }
+
+  @Get(':id/tickets')
+  async getTickets(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.contactsService.getTickets(id, Number(page || 1), Number(limit || 20));
+  }
+
   @Get(':id/portal-access')
   async getPortalAccess(
     @Param('id', ParseIntPipe) id: number,
