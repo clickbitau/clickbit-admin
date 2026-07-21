@@ -27,10 +27,18 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
 import { ConfirmDialog } from '@/components/design-system/ConfirmDialog';
+import { UserForm } from '@/components/settings/UserForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { fetchUsers, resendUserWelcome, resetUser2fa, deleteUser } from '@/lib/api';
 import { useDebounce } from '@/lib/useDebounce';
 import { formatDate } from '@/lib/format';
@@ -396,9 +404,11 @@ function UserSection({
 export default function AdminSettingsUsersPage() {
   const { token, user } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isManager = user?.role === 'manager';
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 400);
 
   const teamQuery = useQuery({
@@ -431,9 +441,7 @@ export default function AdminSettingsUsersPage() {
       icon={UserIcon}
       description={description}
       actions={
-        <Button asChild>
-          <Link href="/admin/settings/users/new"><Plus className="mr-1 h-4 w-4" /> Add {isManager ? 'Customer' : 'User'}</Link>
-        </Button>
+        <Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> Add {isManager ? 'Customer' : 'User'}</Button>
       }
     >
       <div className="max-w-7xl mx-auto">
@@ -484,6 +492,23 @@ export default function AdminSettingsUsersPage() {
           isManager={isManager}
           defaultOpen
         />
+
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add {isManager ? 'Customer' : 'User'}</DialogTitle>
+              <DialogDescription>Create a user profile and account.</DialogDescription>
+            </DialogHeader>
+            {token && (
+              <UserForm
+                token={token}
+                initial={{ role: isManager ? 'customer' : undefined }}
+                onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['admin-users'] }); }}
+                onCancel={() => setCreateOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </PageShell>
   );

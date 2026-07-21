@@ -2,6 +2,7 @@
 import { DollarSign as DollarSignIcon, Plus, FileText } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { InvoiceForm } from '@/components/finance/InvoiceForm';
 
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -54,6 +55,8 @@ export default function AdminFinanceInvoicesPage() {
   const [recordDialogOpen, setRecordDialogOpen] = useState(false);
   const [recordInvoice, setRecordInvoice] = useState<Invoice | null>(null);
   const [recordAmount, setRecordAmount] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createDocType, setCreateDocType] = useState<'invoice' | 'estimate' | 'quote' | 'package'>('invoice');
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
@@ -234,12 +237,8 @@ export default function AdminFinanceInvoicesPage() {
       description="Invoices, estimates and quotes"
       actions={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/finance/invoices/new?document_type=estimate"><FileText className="mr-2 h-4 w-4" /> New Estimate</Link>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href="/admin/finance/invoices/new"><Plus className="mr-2 h-4 w-4" /> New Invoice</Link>
-          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setCreateDocType('estimate'); setCreateOpen(true); }}><FileText className="mr-2 h-4 w-4" /> New Estimate</Button>
+          <Button size="sm" onClick={() => { setCreateDocType('invoice'); setCreateOpen(true); }}><Plus className="mr-2 h-4 w-4" /> New Invoice</Button>
         </div>
       }
     >
@@ -407,6 +406,23 @@ export default function AdminFinanceInvoicesPage() {
               {recordMutation.isPending ? 'Saving...' : 'Record Payment'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>New {createDocType.charAt(0).toUpperCase() + createDocType.slice(1)}</DialogTitle>
+            <DialogDescription>Create a new {createDocType}.</DialogDescription>
+          </DialogHeader>
+          {token && (
+            <InvoiceForm
+              token={token}
+              initial={{ document_type: createDocType }}
+              onSuccess={() => { setCreateOpen(false); queryClient.invalidateQueries({ queryKey: ['invoices'] }); queryClient.invalidateQueries({ queryKey: ['invoice-stats'] }); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </PageShell>
