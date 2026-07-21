@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
+import { generatePayslipPDF } from '../common/pdf/payslip-pdf';
 
 interface UserLike {
   id: number;
@@ -399,9 +400,28 @@ export class PayslipsService {
     if (!payslip) throw new NotFoundException('Payslip not found');
     this.ensureAdminOrManagerOrOwner(user, payslip.employee_id);
 
-    // PDF generation is stubbed; return a minimal placeholder buffer.
-    const buffer = Buffer.from('Payslip PDF placeholder');
+    const employee: any = payslip.employees;
+    employee.user = employee?.profiles || {};
+    if (!employee.address || typeof employee.address !== 'object') {
+      const parts = [employee.address, employee.city, employee.state, employee.postcode, employee.country].filter(Boolean);
+      employee.address = parts.length > 0 ? { street: parts.join(', ') } : { street: 'N/A' };
+    }
+
+    const companyInfo = await this.prisma.company_info.findFirst({ where: { id: 1 } });
+    const company = {
+      name: companyInfo?.name || 'ClickBIT Pty Ltd',
+      abn: companyInfo?.abn || '59 267 698 766',
+      address: this.buildAddress(companyInfo),
+    };
+
+    const buffer = await generatePayslipPDF(payslip, employee, company, {}, null);
     return { buffer, filename: this.payslipNumber(payslip) };
+  }
+
+  private buildAddress(companyInfo: any): string {
+    if (!companyInfo) return '19 Drysdale Approach, Baldivis, WA 6171';
+    const parts = [companyInfo.address_line1, companyInfo.address_line2, companyInfo.city, companyInfo.state, companyInfo.postcode, companyInfo.country].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : '19 Drysdale Approach, Baldivis, WA 6171';
   }
 
   async remove(id: number, dto: Record<string, unknown>) {
