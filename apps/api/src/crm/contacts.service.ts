@@ -11,10 +11,28 @@ import {
   PortalAccessBatchDto,
 } from './dto';
 import { buildLegacyList, safeDate, toNumber } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class ContactsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('contacts', ...parts) ?? `contacts:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(
     query: {
@@ -29,6 +47,8 @@ export class ContactsService {
       sortOrder?: string;
     },
   ) {
+    const cacheKey = this.cacheKey('list', JSON.stringify(query));
+    return this.cached(cacheKey, async () => {
     const {
       search,
       lifecycle_stage,
@@ -71,12 +91,15 @@ export class ContactsService {
     const withCompanies = await this.enrichContacts(contacts);
 
     return buildLegacyList('contacts', withCompanies, total, page, limit);
+    });
   }
 
   async findOne(id: number) {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const contact = await this.prisma.contacts.findUnique({ where: { id } });
     if (!contact) throw new NotFoundException('Contact not found');
     return { data: await this.enrichContact(contact) };
+    });
   }
 
   async create(dto: CreateContactDto) {
@@ -88,6 +111,7 @@ export class ContactsService {
       await this.upsertContactCompany(contact.id, dto.company_id, true);
     }
 
+    await this.invalidateCache();
     return this.findOne(contact.id);
   }
 
@@ -104,6 +128,7 @@ export class ContactsService {
       await this.upsertContactCompany(id, dto.company_id, true);
     }
 
+    await this.invalidateCache();
     return this.findOne(id);
   }
 
@@ -114,6 +139,7 @@ export class ContactsService {
       where: { id },
       data: { deleted_at: new Date() },
     });
+    await this.invalidateCache();
     return { message: 'Contact deleted successfully' };
   }
 
@@ -208,6 +234,7 @@ export class ContactsService {
           data: { user_id: existingUser.id },
         });
       }
+      await this.invalidateCache();
       return {
         success: true,
         alreadyExists: true,
@@ -232,6 +259,7 @@ export class ContactsService {
       data: { user_id: user.id, lifecycle_stage: 'customer' },
     });
 
+    await this.invalidateCache();
     return {
       success: true,
       alreadyExists: false,
@@ -273,6 +301,8 @@ export class ContactsService {
       limit?: number;
     },
   ) {
+    const cacheKey = this.cacheKey('portal', JSON.stringify(query));
+    return this.cached(cacheKey, async () => {
     const { search, has_portal_access, lifecycle_stage, status, page = 1, limit = 50 } = query;
 
     const where: { [key: string]: unknown } = {};
@@ -299,9 +329,12 @@ export class ContactsService {
     const paginated = filtered.slice((page - 1) * limit, page * limit);
 
     return buildLegacyList('contacts', paginated, total, page, limit);
+    });
   }
 
   async getStats(ownerId?: number) {
+    const cacheKey = this.cacheKey('stats', ownerId ?? 'all');
+    return this.cached(cacheKey, async () => {
     const baseWhere = ownerId ? { owner_id: ownerId } : {};
 
     const [total, customerCount, leadCount, mqlCount, sqlCount, subscriberCount] = await Promise.all([
@@ -331,6 +364,7 @@ export class ContactsService {
       subscriber: subscriberCount,
       avgLeadScore: toNumber(avgLeadScore[0]?.avg) || 0,
     };
+    });
   }
 
   async updateLeadScore(id: number, dto: UpdateLeadScoreDto) {
@@ -349,6 +383,7 @@ export class ContactsService {
       data: { lead_score: leadScore },
     });
 
+    await this.invalidateCache();
     return { lead_score: leadScore };
   }
 
@@ -368,6 +403,8 @@ export class ContactsService {
     }
 
     await this.prisma.contacts.update({ where: { id }, data: updateData });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -375,6 +412,7 @@ export class ContactsService {
     await this.ensureContactExists(contactId);
     await this.ensureCompanyExists(companyId);
     await this.upsertContactCompany(contactId, companyId, dto?.is_primary ?? false, dto);
+    await this.invalidateCache();
     return { message: 'Company linked to contact' };
   }
 
@@ -383,6 +421,7 @@ export class ContactsService {
     await this.prisma.crm_contact_companies.deleteMany({
       where: { contact_id: contactId, company_id: companyId },
     });
+    await this.invalidateCache();
     return { message: 'Company unlinked from contact' };
   }
 
@@ -456,6 +495,7 @@ export class ContactsService {
       });
     }
 
+    await this.invalidateCache();
     return {
       message: 'Lead successfully converted to deal',
       deal: { id: deal.id, title: deal.title, pipeline_id: deal.pipeline_id, stage_id: deal.stage_id },

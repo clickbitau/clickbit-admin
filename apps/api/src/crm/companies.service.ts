@@ -14,6 +14,7 @@ import {
   CompanyDocumentUploadDto,
 } from './dto';
 import { asJsonInput, buildLegacyList, buildPagination, mapCompanySize, safeDate, toNumber } from './crm-utils';
+import { CacheService } from '../redis/cache.service';
 
 function toNum(value: unknown): number {
   if (value === null || value === undefined) return 0;
@@ -31,9 +32,28 @@ function escapeLike(input: string): string {
 
 @Injectable()
 export class CompaniesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly cache?: CacheService,
+  ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('companies', ...parts) ?? `companies:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async findAll(query: GetCompaniesQueryDto): Promise<CompaniesListResponse> {
+    const cacheKey = this.cacheKey('list', JSON.stringify(query));
+    return this.cached(cacheKey, async () => {
     const {
       search,
       industry,
@@ -164,6 +184,7 @@ export class CompaniesService {
     }
 
     return response;
+    });
   }
 
   private mapCompanyRow(row: Record<string, unknown>, mode?: string): Company {
@@ -485,6 +506,7 @@ export class CompaniesService {
   // Single company
 
   async findOne(id: number): Promise<Company & Record<string, unknown>> {
+    return this.cached(this.cacheKey('detail', id), async () => {
     const company = (await this.prisma.companies.findUnique({
       where: { id },
     })) as unknown as Record<string, unknown>;
@@ -554,6 +576,7 @@ export class CompaniesService {
       total_projects: projectCount,
       total_tickets: Number(ticketCount[0]?.count ?? 0),
     } as Company & Record<string, unknown>;
+    });
   }
 
   async create(userId: number, dto: CreateCompanyDto) {
@@ -588,6 +611,7 @@ export class CompaniesService {
 
     // Auto-link matching users and contacts
     await this.autoLinkUsersAndContacts(company.id, dto.name, dto.domain);
+    await this.invalidateCache();
 
     return this.findOne(company.id);
   }
@@ -687,6 +711,8 @@ export class CompaniesService {
     if (dto.is_active !== undefined) data.is_active = dto.is_active;
 
     await this.prisma.companies.update({ where: { id }, data });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return this.findOne(id);
   }
 
@@ -698,6 +724,8 @@ export class CompaniesService {
       where: { id },
       data: { is_active: false, deleted_at: new Date() },
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Company deleted successfully' };
   }
 
@@ -1142,6 +1170,8 @@ export class CompaniesService {
       include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', companyId));
     return { message: 'Document uploaded successfully', document };
   }
 
@@ -1184,6 +1214,8 @@ export class CompaniesService {
       include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', companyId));
     return { message: 'Document updated successfully', document: updated };
   }
 
@@ -1194,6 +1226,8 @@ export class CompaniesService {
     if (!document) throw new NotFoundException('Document not found');
 
     await this.prisma.company_documents.delete({ where: { id: docId } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', companyId));
     return { message: 'Document deleted successfully' };
   }
 
