@@ -1,6 +1,7 @@
 'use client';
 import { Ticket as TicketIcon, Clock, MessageSquare, AlertTriangle, CheckCircle, Users, Tag, AlertCircle, Plus } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
+import { Pagination } from '@/components/design-system/Pagination';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -137,13 +138,12 @@ export default function AdminSupportPage() {
             </CardContent>
           </Card>
 
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)</p>
-            <div className="space-x-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-            </div>
-          </div>
+          <Pagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        onPageChange={setPage}
+      />
         </>
       )}
     </PageShell>

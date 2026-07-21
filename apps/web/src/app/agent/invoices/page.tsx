@@ -6,6 +6,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Pagination } from '@/components/design-system/Pagination';
 import { fetchAgentPortalInvoices } from '@/lib/api';
 import { Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -31,7 +32,7 @@ export default function AgentInvoicesPage() {
   const invoices = (data?.data || []) as Array<{
     id: number; invoice_number?: string; title?: string; client_name?: string; total_amount?: number; amount_paid?: number; status?: string; payment_status?: string; issue_date?: string; due_date?: string;
   }>;
-  const pagination = (data?.pagination || { currentPage: 1, totalPages: 1 }) as { currentPage: number; totalPages: number };
+  const pagination = (data?.pagination || { currentPage: 1, totalPages: 1, totalItems: 0 }) as { currentPage: number; totalPages: number; totalItems?: number };
 
   if (isLoading) {
     return <div className="p-4 space-y-6"><Skeleton className="h-10 w-1/3" /><Skeleton className="h-64" /></div>;
@@ -91,25 +92,12 @@ export default function AgentInvoicesPage() {
         </CardContent>
       </Card>
 
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="flex items-center gap-1 px-3 py-2 rounded-xl disabled:opacity-50 hover:nm-raised-sm transition-all"
-          >
-            <ChevronLeft className="w-4 h-4" /> Previous
-          </button>
-          <span className="text-sm text-muted-foreground">Page {pagination.currentPage} of {pagination.totalPages}</span>
-          <button
-            onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-            disabled={page >= pagination.totalPages}
-            className="flex items-center gap-1 px-3 py-2 rounded-xl disabled:opacity-50 hover:nm-raised-sm transition-all"
-          >
-            Next <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <Pagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems || 0}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { Globe as GlobeIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
+import { Pagination } from '@/components/design-system/Pagination';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -30,6 +31,7 @@ export default function AdminHrPublicHolidaysPage() {
 
   const holidays = data?.data ?? [];
   const total = data?.count ?? 0;
+  const totalPages = Math.ceil(total / 12) || 1;
 
   return (
     <PageShell
@@ -56,17 +58,12 @@ export default function AdminHrPublicHolidaysPage() {
         <CardContent>{error ? <div className="text-destructive">Failed to load public holidays.</div> : <PublicHolidayTable holidays={holidays} loading={isLoading} />}</CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{total} holidays</p>
-        <div className="space-x-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        onPageChange={setPage}
+      />
     </PageShell>
   );
 }

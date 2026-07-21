@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { Bell as BellIcon } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
+import { Pagination } from '@/components/design-system/Pagination';
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -56,19 +57,12 @@ export default function AdminHrRemindersPage() {
         <CardContent>{error ? <div className="text-destructive">Failed to load reminders.</div> : <ReminderTable reminders={reminders} loading={isLoading} />}</CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Page {pagination.page} of {pagination.pages} ({pagination.total} total)
-        </p>
-        <div className="space-x-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <Button variant="outline" size="sm" disabled={page >= pagination.pages} onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={pagination.page}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        onPageChange={setPage}
+      />
     </PageShell>
   );
 }
