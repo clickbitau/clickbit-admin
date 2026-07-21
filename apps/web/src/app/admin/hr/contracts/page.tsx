@@ -3,14 +3,22 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, FileText, Plus, Power, XCircle } from 'lucide-react';
+import Link from 'next/link';
+import { CheckCircle, FileText, Plus, Power, Search, XCircle } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { DataTable } from '@/components/design-system/DataTable';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ContractForm } from '@/components/hr/ContractForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -18,134 +26,171 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { activateContract, fetchContracts, terminateContract } from '@/lib/api';
+import { activateContract, fetchContracts, fetchHrStats, terminateContract } from '@/lib/api';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { useDebounce } from '@/lib/useDebounce';
+import { useRealtimeRefresh } from '@/lib/realtime';
+import type { Contract } from '@/types/hr';
 
-const statusColor: Record<string, string> = {
-  active: 'default',
-  pending: 'secondary',
-  terminated: 'destructive',
-  superseded: 'outline',
-};
+const statusOptions = [
+  { value: '', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'terminated', label: 'Terminated' },
+  { value: 'superseded', label: 'Superseded' },
+];
+
+const sortOptions = [
+  { value: 'start_date', label: 'Start date' },
+  { value: 'position', label: 'Position' },
+];
 
 export default function AdminHrContractsPage() {
   const { token } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const [status, setStatus] = useState('');
+  const [sortBy, setSortBy] = useState('start_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['contracts', token],
     queryFn: async () => {
       if (!token) throw new Error('No token');
-      return fetchContracts(token);
+      return fetchContracts(token, status ? { status } : undefined);
     },
     enabled: !!token,
   });
 
-  const contracts = useMemo(() => data?.data ?? [], [data?.data]);
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['hr-stats', token],
+    queryFn: async () => { if (!token) throw new Error('No token'); return fetchHrStats(token); },
+    enabled: !!token,
+  });
 
-  const stats = useMemo(() => {
-    const total = contracts.length;
-    const active = contracts.filter((c: any) => c.status === 'active').length;
-    const pending = contracts.filter((c: any) => c.status === 'pending').length;
-    const terminated = contracts.filter((c: any) => c.status === 'terminated').length;
-    return { total, active, pending, terminated };
-  }, [contracts]);
+  useRealtimeRefresh(['contracts'], ['contracts'], { enabled: !!token });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['contracts', token] });
+  const stats = statsData?.data;
+
+  const filtered = useMemo(() => {
+    let rows = [...(data?.data ?? [])];
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      rows = rows.filter((c) =>
+        (c.employee?.name || '').toLowerCase().includes(q) ||
+        (c.position || '').toLowerCase().includes(q) ||
+        (c.employment_type || '').toLowerCase().includes(q)
+      );
+    }
+    rows.sort((a, b) => {
+      const dir = sortOrder === 'asc' ? 1 : -1;
+      if (sortBy === 'start_date') {
+        return (new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime()) * dir;
+      }
+      return ((a.position || '').localeCompare(b.position || '')) * dir;
+    });
+    return rows;
+  }, [data, debouncedSearch, sortBy, sortOrder]);
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['contracts', token] });
+    queryClient.invalidateQueries({ queryKey: ['hr-stats', token] });
+  };
 
   const activate = useMutation({
-    mutationFn: (id: number) => {
-      if (!token) throw new Error('No token');
-      return activateContract(token, id);
-    },
+    mutationFn: (id: number) => { if (!token) throw new Error('No token'); return activateContract(token, id); },
     onSuccess: refresh,
   });
 
   const terminate = useMutation({
-    mutationFn: (id: number) => {
-      if (!token) throw new Error('No token');
-      return terminateContract(token, id, 'Terminated from UI');
-    },
+    mutationFn: (id: number) => { if (!token) throw new Error('No token'); return terminateContract(token, id, 'Terminated from UI'); },
     onSuccess: refresh,
   });
 
-  const statCards = [
-    { label: 'Total Contracts', value: stats.total, icon: FileText },
-    { label: 'Active', value: stats.active, icon: CheckCircle, accent: 'success' as const },
-    { label: 'Pending', value: stats.pending, icon: Power, accent: 'warning' as const },
-    { label: 'Terminated', value: stats.terminated, icon: XCircle, accent: 'destructive' as const },
-  ];
+  const statCards = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { label: 'Total', value: stats.contracts.total, icon: FileText },
+      { label: 'Active', value: stats.contracts.active, icon: CheckCircle, accent: 'success' as const, onClick: () => { setStatus('active'); } },
+      { label: 'Pending', value: stats.contracts.active ? stats.contracts.total - stats.contracts.active - stats.contracts.expired : 0, icon: Power, accent: 'warning' as const },
+      { label: 'Expired', value: stats.contracts.expired, icon: XCircle, accent: 'destructive' as const },
+    ];
+  }, [stats]);
 
   return (
-    <PageShell title="Contracts" icon={FileText} description="Manage employee contracts, activations, and terminations." actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Contract</Button>}>
-      <StatCards cards={statCards} />
+    <PageShell
+      title="Contracts"
+      icon={FileText}
+      description="Manage employee contracts, activations, and terminations."
+      actions={<Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> New Contract</Button>}
+    >
+      <StatCards cards={statCards.map((s) => ({ ...s, value: statsLoading ? '...' : s.value }))} />
 
-      <Card className="nm-raised">
-        <CardHeader>
-          <CardTitle>Contracts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && <div className="text-destructive">Failed to load contracts.</div>}
-          {isLoading && <div className="text-muted-foreground">Loading...</div>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search contracts..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={status} onValueChange={(v) => { setStatus(v); }}>
+          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>{statusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+          <SelectContent>{sortOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button variant="outline" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
+          {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+        </Button>
+      </div>
 
-          {!isLoading && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>End</TableHead>
-                  <TableHead>Salary</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {contracts.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">No contracts found.</TableCell>
-                  </TableRow>
-                )}
-                {contracts.map((c: any) => (
-                  <TableRow
-                    key={c.id}
-                    className="cursor-pointer hover:bg-primary/5"
-                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; router.push(`/admin/hr/contracts/${c.id}`); }}
-                  >
-                    <TableCell>{c.employee?.name || `Employee ${c.employee_id}`}</TableCell>
-                    <TableCell>{c.position || '-'}</TableCell>
-                    <TableCell className="capitalize">{c.employment_type?.replace('_', ' ') || '-'}</TableCell>
-                    <TableCell>{c.start_date ? new Date(c.start_date).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>{c.end_date ? new Date(c.end_date).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>{c.salary ? `${c.currency || 'AUD'} ${c.salary}` : '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant={(statusColor[c.status || ''] as any) || 'secondary'}>{c.status || 'active'}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      {c.status !== 'active' && (
-                        <Button size="sm" variant="outline" onClick={() => activate.mutate(c.id)} disabled={activate.isPending}>
-                          <CheckCircle className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {c.status !== 'terminated' && (
-                        <Button size="sm" variant="outline" onClick={() => terminate.mutate(c.id)} disabled={terminate.isPending}>
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {error ? (
+        <div className="text-destructive text-sm">Failed to load contracts.</div>
+      ) : (
+        <DataTable
+          headers={[
+            { key: 'employee', label: 'Employee' },
+            { key: 'position', label: 'Position' },
+            { key: 'type', label: 'Type' },
+            { key: 'start', label: 'Start' },
+            { key: 'end', label: 'End' },
+            { key: 'salary', label: 'Salary' },
+            { key: 'status', label: 'Status' },
+            { key: 'actions', label: '' },
+          ]}
+          data={filtered}
+          keyExtractor={(c) => c.id}
+          loading={isLoading}
+          onRowClick={(c) => router.push(`/admin/hr/contracts/${c.id}`)}
+          emptyText="No contracts found."
+          emptyDescription="Try adjusting your search or status filter."
+          renderRow={(c: Contract) => [
+            <Link key="employee" href={`/admin/hr/contracts/${c.id}`} className="font-medium hover:underline">{c.employee?.name || `Employee ${c.employee_id}`}</Link>,
+            <span key="position">{c.position || '-'}</span>,
+            <span key="type" className="capitalize">{(c.employment_type || '').replace(/_/g, ' ')}</span>,
+            <span key="start">{formatDate(c.start_date)}</span>,
+            <span key="end">{formatDate(c.end_date)}</span>,
+            <span key="salary">{c.salary ? formatCurrency(Number(c.salary) || 0, c.currency || 'AUD') : '-'}</span>,
+            <StatusBadge key="status" status={c.status || 'active'} />,
+            <div key="actions" className="flex justify-end gap-1">
+              {c.status !== 'active' && (
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); activate.mutate(c.id); }} disabled={activate.isPending}>
+                  <CheckCircle className="h-4 w-4" />
+                </Button>
+              )}
+              {c.status !== 'terminated' && (
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); terminate.mutate(c.id); }} disabled={terminate.isPending}>
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              )}
+            </div>,
+          ]}
+        />
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
