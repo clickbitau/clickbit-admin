@@ -1,11 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -14,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { CompanyTable } from '@/components/companies/CompanyTable';
+import { CompanyForm } from '@/components/crm/CompanyForm';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
 import { fetchCompanies } from '@/lib/api';
@@ -48,6 +55,7 @@ export default function AdminCrmCompaniesPage() {
   const [sortBy, setSortBy] = useState('updated_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid');
+  const [createOpen, setCreateOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -137,8 +145,8 @@ export default function AdminCrmCompaniesPage() {
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button asChild>
-            <Link href="/admin/crm/companies/new"><Plus className="mr-1 h-4 w-4" /> New Company</Link>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Company
           </Button>
         </div>
       }
@@ -245,6 +253,22 @@ export default function AdminCrmCompaniesPage() {
         totalItems={pagination.totalItems}
         onPageChange={setPage}
       />
+
+      {token && (
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>New Company</DialogTitle>
+              <DialogDescription>Add a new business account without leaving the list.</DialogDescription>
+            </DialogHeader>
+            <CompanyForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); refetch(); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </PageShell>
   );
 }
