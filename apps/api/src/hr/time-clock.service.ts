@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { StorageService } from '../storage/storage.service';
 import { buildLegacyDataEnvelope, buildLegacyMessageEnvelope, parseNumber } from './hr-utils';
+import { CacheService } from '../redis/cache.service';
 
 const PERTH_TZ = 'Australia/Perth';
 
@@ -72,10 +73,24 @@ export interface TimeClockStatus {
 
 @Injectable()
 export class TimeClockService {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly storage: StorageService,
-  ) {}
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('time-clock', ...parts) ?? `time-clock:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private async findEmployee(userId: number) {
     const employee = await this.prisma.employees.findFirst({
@@ -120,41 +135,48 @@ export class TimeClockService {
   }
 
   async status(user: Profile) {
-    const employee = await this.findEmployee(user.id);
-    const active = await this.getActiveEntry(employee.id);
-    const todayPerth = perthDateStr();
-    const { start, end } = perthRange(todayPerth);
-    const todayShift = await this.prisma.hr_shifts.findFirst({
-      where: { employee_id: employee.id, shift_date: { gte: start, lte: end }, status: { notIn: ['cancelled'] } },
+    return this.cached(this.cacheKey('status', user.id), async () => {
+
+      const employee = await this.findEmployee(user.id);
+      const active = await this.getActiveEntry(employee.id);
+      const todayPerth = perthDateStr();
+      const { start, end } = perthRange(todayPerth);
+      const todayShift = await this.prisma.hr_shifts.findFirst({
+        where: { employee_id: employee.id, shift_date: { gte: start, lte: end }, status: { notIn: ['cancelled'] } },
+      });
+      const status: TimeClockStatus = {
+        employee: {
+          id: employee.id,
+          name: this.employeeName(employee),
+          canClockIn: employee.can_clock_in ?? true,
+          requireGps: employee.require_gps_clock_in ?? false,
+          requirePhoto: employee.require_photo_clock_in ?? false,
+        },
+        activeEntry: active
+          ? {
+              id: active.id,
+              clockInTime: active.clock_in_time,
+              isOnBreak: active.is_on_break ?? false,
+              breakStartTime: active.break_start_time,
+              totalBreakMinutes: active.break_minutes ?? 0,
+              currentDuration: durationMinutes(active),
+              clockInLatitude: active.clock_in_latitude ? Number(active.clock_in_latitude) : null,
+              clockInLongitude: active.clock_in_longitude ? Number(active.clock_in_longitude) : null,
+            }
+          : null,
+        todayHours: await this.todayHours(employee.id),
+        weeklyHours: await this.weeklyHours(employee.id),
+        todayShift,
+      };
+      return buildLegacyDataEnvelope(status);
+
+
     });
-    const status: TimeClockStatus = {
-      employee: {
-        id: employee.id,
-        name: this.employeeName(employee),
-        canClockIn: employee.can_clock_in ?? true,
-        requireGps: employee.require_gps_clock_in ?? false,
-        requirePhoto: employee.require_photo_clock_in ?? false,
-      },
-      activeEntry: active
-        ? {
-            id: active.id,
-            clockInTime: active.clock_in_time,
-            isOnBreak: active.is_on_break ?? false,
-            breakStartTime: active.break_start_time,
-            totalBreakMinutes: active.break_minutes ?? 0,
-            currentDuration: durationMinutes(active),
-            clockInLatitude: active.clock_in_latitude ? Number(active.clock_in_latitude) : null,
-            clockInLongitude: active.clock_in_longitude ? Number(active.clock_in_longitude) : null,
-          }
-        : null,
-      todayHours: await this.todayHours(employee.id),
-      weeklyHours: await this.weeklyHours(employee.id),
-      todayShift,
-    };
-    return buildLegacyDataEnvelope(status);
-  }
+}
 
   async autoClockIn(user: Profile, req: any) {
+    await this.invalidateCache();
+
     const employee = await this.findEmployee(user.id);
     if (!employee.can_clock_in) {
       return buildLegacyDataEnvelope({ auto_clocked: false, reason: 'clock_in_disabled' });
@@ -207,6 +229,8 @@ export class TimeClockService {
   }
 
   async clockIn(user: Profile, dto: any, req: any) {
+    await this.invalidateCache();
+
     const employee = await this.findEmployee(user.id);
     if (!employee.can_clock_in) {
       throw new ForbiddenTimeClock('You are not authorized to clock in');
@@ -246,6 +270,8 @@ export class TimeClockService {
   }
 
   async clockOut(user: Profile, dto: any) {
+    await this.invalidateCache();
+
     const employee = await this.findEmployee(user.id);
     let active: any = await this.getActiveEntry(employee.id);
     if (!active) throw new BadRequestException({ success: false, message: 'No active clock-in found' });
@@ -351,6 +377,8 @@ export class TimeClockService {
   }
 
   async startBreak(user: Profile, breakType?: string) {
+    await this.invalidateCache();
+
     const employee = await this.findEmployee(user.id);
     const active = await this.getActiveEntry(employee.id);
     if (!active) throw new BadRequestException({ success: false, message: 'No active clock-in found' });
@@ -365,6 +393,8 @@ export class TimeClockService {
   }
 
   async endBreak(user: Profile) {
+    await this.invalidateCache();
+
     const employee = await this.findEmployee(user.id);
     const active = await this.getActiveEntry(employee.id);
     if (!active) throw new BadRequestException({ success: false, message: 'No active clock-in found' });
@@ -388,33 +418,40 @@ export class TimeClockService {
   }
 
   async activeEntries(_user: Profile) {
-    const entries = await this.prisma.hr_time_entries.findMany({
-      where: { clock_out_time: null },
-      include: { employees: { include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } } } },
-      orderBy: { clock_in_time: 'desc' },
+    return this.cached(this.cacheKey('activeEntries', _user.id), async () => {
+
+      const entries = await this.prisma.hr_time_entries.findMany({
+        where: { clock_out_time: null },
+        include: { employees: { include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } } } },
+        orderBy: { clock_in_time: 'desc' },
+      });
+      const formatted = entries.map((entry) => {
+        const emp = entry.employees;
+        const p = emp?.profiles;
+        return {
+          id: entry.id,
+          employee_id: emp?.id,
+          employee_name: `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || p?.email,
+          employee_email: p?.email,
+          employee_avatar: p?.avatar,
+          department: emp?.department || 'Unassigned',
+          clock_in_time: entry.clock_in_time,
+          is_on_break: entry.is_on_break,
+          break_start_time: entry.break_start_time,
+          total_break_minutes: entry.break_minutes || 0,
+          duration_minutes: durationMinutes(entry),
+          formatted_duration: formatDuration(durationMinutes(entry)),
+        };
+      });
+      return buildLegacyDataEnvelope(formatted);
+
+
     });
-    const formatted = entries.map((entry) => {
-      const emp = entry.employees;
-      const p = emp?.profiles;
-      return {
-        id: entry.id,
-        employee_id: emp?.id,
-        employee_name: `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || p?.email,
-        employee_email: p?.email,
-        employee_avatar: p?.avatar,
-        department: emp?.department || 'Unassigned',
-        clock_in_time: entry.clock_in_time,
-        is_on_break: entry.is_on_break,
-        break_start_time: entry.break_start_time,
-        total_break_minutes: entry.break_minutes || 0,
-        duration_minutes: durationMinutes(entry),
-        formatted_duration: formatDuration(durationMinutes(entry)),
-      };
-    });
-    return buildLegacyDataEnvelope(formatted);
-  }
+}
 
   async addBreadcrumb(user: Profile, dto: any) {
+    await this.invalidateCache();
+
     const employee = await this.findEmployee(user.id);
     const active = await this.getActiveEntry(employee.id);
     if (!active) throw new BadRequestException({ success: false, message: 'No active clock-in found' });
@@ -425,6 +462,8 @@ export class TimeClockService {
   }
 
   async uploadPhoto(user: Profile, file: Express.Multer.File) {
+    await this.invalidateCache();
+
     if (!file) throw new BadRequestException({ success: false, message: 'No photo provided' });
     const folder = `timesheets/employee-${user.id}`;
     const filename = `clockin-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;

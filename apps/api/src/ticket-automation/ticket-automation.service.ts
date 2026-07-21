@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 const repoInclude = {
   profiles_customer_repositories_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
@@ -12,30 +13,58 @@ function normalizeRepo(r: any) {
 
 @Injectable()
 export class TicketAutomationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('ticket-automation', ...parts) ?? `ticket-automation:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   getRepos() {
     return { success: true, data: ['clickbitau/clickbit', 'clickbitau/clickbit-admin', 'clickbitau/click-deploy'] };
   }
 
   async getCustomers() {
-    const customers = await this.prisma.profiles.findMany({
-      where: { role: 'customer' },
-      select: { id: true, first_name: true, last_name: true, email: true, company_id: true },
-      orderBy: { first_name: 'asc' },
+    return this.cached(this.cacheKey('getCustomers'), async () => {
+
+      const customers = await this.prisma.profiles.findMany({
+        where: { role: 'customer' },
+        select: { id: true, first_name: true, last_name: true, email: true, company_id: true },
+        orderBy: { first_name: 'asc' },
+      });
+      return { success: true, data: customers };
+
+
     });
-    return { success: true, data: customers };
-  }
+}
 
   async findRepositories() {
-    const rows = await this.prisma.customer_repositories.findMany({
-      include: repoInclude,
-      orderBy: { created_at: 'desc' },
+    return this.cached(this.cacheKey('findRepositories'), async () => {
+
+      const rows = await this.prisma.customer_repositories.findMany({
+        include: repoInclude,
+        orderBy: { created_at: 'desc' },
+      });
+      return { success: true, data: rows.map(normalizeRepo) };
+
+
     });
-    return { success: true, data: rows.map(normalizeRepo) };
-  }
+}
 
   async createRepository(userId: number, dto: any) {
+    await this.invalidateCache();
+
     if (!dto.repo_full_name) throw new BadRequestException('repo_full_name is required');
     if (!dto.profile_id && !dto.company_id) throw new BadRequestException('Either profile_id or company_id is required');
     const repo = await this.prisma.customer_repositories.create({
@@ -53,6 +82,8 @@ export class TicketAutomationService {
   }
 
   async updateRepository(id: number, dto: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.customer_repositories.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Link not found');
     const repo = await this.prisma.customer_repositories.update({
@@ -70,6 +101,8 @@ export class TicketAutomationService {
   }
 
   async removeRepository(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.customer_repositories.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Link not found');
     await this.prisma.customer_repositories.delete({ where: { id } });
@@ -77,31 +110,43 @@ export class TicketAutomationService {
   }
 
   async findQuotas() {
-    const rows = await this.prisma.ticket_quotas.findMany({
-      include: {
-        profiles_ticket_quotas_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
-      },
-      orderBy: { updated_at: 'desc' },
+    return this.cached(this.cacheKey('findQuotas'), async () => {
+
+      const rows = await this.prisma.ticket_quotas.findMany({
+        include: {
+          profiles_ticket_quotas_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
+        },
+        orderBy: { updated_at: 'desc' },
+      });
+      return {
+        success: true,
+        data: rows.map((q) => ({ ...q, customer: q.profiles_ticket_quotas_profile_idToprofiles })),
+        defaults: { free_limit: 5, period: 'monthly', price_cents: 5000, currency: 'AUD' },
+      };
+
+
     });
-    return {
-      success: true,
-      data: rows.map((q) => ({ ...q, customer: q.profiles_ticket_quotas_profile_idToprofiles })),
-      defaults: { free_limit: 5, period: 'monthly', price_cents: 5000, currency: 'AUD' },
-    };
-  }
+}
 
   async getQuota(profileId: number) {
-    const quota = await this.prisma.ticket_quotas.findUnique({
-      where: { profile_id: profileId },
-      include: {
-        profiles_ticket_quotas_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
-      },
+    return this.cached(this.cacheKey('getQuota', profileId), async () => {
+
+      const quota = await this.prisma.ticket_quotas.findUnique({
+        where: { profile_id: profileId },
+        include: {
+          profiles_ticket_quotas_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
+        },
+      });
+      if (!quota) return { success: true, data: { profile_id: profileId, free_limit: 5, period: 'monthly', price_cents: 5000, currency: 'AUD', used: 0, purchased: 0 } };
+      return { success: true, data: { ...quota, customer: quota.profiles_ticket_quotas_profile_idToprofiles } };
+
+
     });
-    if (!quota) return { success: true, data: { profile_id: profileId, free_limit: 5, period: 'monthly', price_cents: 5000, currency: 'AUD', used: 0, purchased: 0 } };
-    return { success: true, data: { ...quota, customer: quota.profiles_ticket_quotas_profile_idToprofiles } };
-  }
+}
 
   async updateQuota(userId: number, profileId: number, dto: any) {
+    await this.invalidateCache();
+
     const profile = await this.prisma.profiles.findUnique({ where: { id: profileId } });
     if (!profile) throw new NotFoundException('Customer not found');
     if (dto.period && !['weekly', 'monthly'].includes(dto.period)) throw new BadRequestException('period must be weekly or monthly');
@@ -131,23 +176,33 @@ export class TicketAutomationService {
   }
 
   async findManualReview() {
-    const tickets = await this.prisma.tickets.findMany({
-      where: { auto_fix_status: 'manual_review' },
-      select: { id: true, ticket_number: true, subject: true, category: true, priority: true, status: true, created_at: true },
-      orderBy: { created_at: 'desc' },
-      take: 100,
+    return this.cached(this.cacheKey('findManualReview'), async () => {
+
+      const tickets = await this.prisma.tickets.findMany({
+        where: { auto_fix_status: 'manual_review' },
+        select: { id: true, ticket_number: true, subject: true, category: true, priority: true, status: true, created_at: true },
+        orderBy: { created_at: 'desc' },
+        take: 100,
+      });
+      return { success: true, data: tickets };
+
+
     });
-    return { success: true, data: tickets };
-  }
+}
 
   async findPurchases() {
-    const rows = await this.prisma.ticket_purchases.findMany({
-      include: {
-        profiles_ticket_purchases_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
-      },
-      orderBy: { created_at: 'desc' },
-      take: 200,
+    return this.cached(this.cacheKey('findPurchases'), async () => {
+
+      const rows = await this.prisma.ticket_purchases.findMany({
+        include: {
+          profiles_ticket_purchases_profile_idToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 200,
+      });
+      return { success: true, data: rows.map((p) => ({ ...p, customer: p.profiles_ticket_purchases_profile_idToprofiles })) };
+
+
     });
-    return { success: true, data: rows.map((p) => ({ ...p, customer: p.profiles_ticket_purchases_profile_idToprofiles })) };
-  }
+}
 }

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 interface UserLike {
   id: number;
@@ -32,110 +33,143 @@ function formatDate(date: Date) {
 
 @Injectable()
 export class ProjectLifecycleService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('project-lifecycle', ...parts) ?? `project-lifecycle:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   // -------------------------------------------------------------------------
   // Templates
   // -------------------------------------------------------------------------
   async getTemplates(projectType?: string) {
-    const where: any = { is_active: true };
-    if (projectType) where.project_type = projectType;
-    return this.prisma.project_templates.findMany({
-      where,
-      include: {
-        phase_templates: {
-          select: { id: true, name: true, position: true, weight: true, phase_type: true, estimated_hours: true },
-          orderBy: { position: 'asc' },
+    return this.cached(this.cacheKey('getTemplates', projectType), async () => {
+
+      const where: any = { is_active: true };
+      if (projectType) where.project_type = projectType;
+      return this.prisma.project_templates.findMany({
+        where,
+        include: {
+          phase_templates: {
+            select: { id: true, name: true, position: true, weight: true, phase_type: true, estimated_hours: true },
+            orderBy: { position: 'asc' },
+          },
         },
-      },
-      orderBy: { name: 'asc' },
+        orderBy: { name: 'asc' },
+      });
+
+
     });
-  }
+}
 
   async getTemplate(id: number) {
-    const template = await this.prisma.project_templates.findUnique({
-      where: { id },
-      include: {
-        phase_templates: {
-          orderBy: { position: 'asc' },
-          include: {
-            task_templates: {
-              orderBy: { position: 'asc' },
-              include: { microtask_templates: { orderBy: { position: 'asc' } } },
+    return this.cached(this.cacheKey('getTemplate', id), async () => {
+
+      const template = await this.prisma.project_templates.findUnique({
+        where: { id },
+        include: {
+          phase_templates: {
+            orderBy: { position: 'asc' },
+            include: {
+              task_templates: {
+                orderBy: { position: 'asc' },
+                include: { microtask_templates: { orderBy: { position: 'asc' } } },
+              },
             },
           },
         },
-      },
+      });
+      if (!template) throw new NotFoundException('Template not found');
+      return template;
+
+
     });
-    if (!template) throw new NotFoundException('Template not found');
-    return template;
-  }
+}
 
   async previewTemplate(id: number, startDate: string, endDate: string) {
-    const template = await this.getTemplate(id);
-    const projectStart = new Date(startDate);
-    const projectEnd = new Date(endDate);
-    const totalDays = Math.max(1, daysBetween(projectStart, projectEnd));
-    const sortedPhases = [...(template.phase_templates || [])].sort((a: any, b: any) => a.position - b.position);
+    return this.cached(this.cacheKey('previewTemplate', id, startDate, endDate), async () => {
 
-    const preview: any[] = [];
-    let currentStart = new Date(projectStart);
-    for (const pt of sortedPhases) {
-      const weight = toNumber(pt.weight);
-      const durationDays = Math.max(1, Math.round(totalDays * (weight / 100)));
-      const phaseStart = new Date(currentStart);
-      const phaseEnd = addDays(phaseStart, durationDays - 1);
+      const template = await this.getTemplate(id);
+      const projectStart = new Date(startDate);
+      const projectEnd = new Date(endDate);
+      const totalDays = Math.max(1, daysBetween(projectStart, projectEnd));
+      const sortedPhases = [...(template.phase_templates || [])].sort((a: any, b: any) => a.position - b.position);
 
-      const tasks = ((pt as any).task_templates || [])
-        .sort((a: any, b: any) => a.position - b.position)
-        .map((tt: any) => ({
-          title: tt.title,
-          weight: toNumber(tt.weight),
-          estimatedHours: toNumber(tt.estimated_hours) || null,
-          priority: tt.priority,
-          microtaskCount: (tt.microtask_templates || []).length,
-          microtasks: tt.microtask_templates ? tt.microtask_templates.map((mt: any) => mt.title) : [],
-        }));
+      const preview: any[] = [];
+      let currentStart = new Date(projectStart);
+      for (const pt of sortedPhases) {
+        const weight = toNumber(pt.weight);
+        const durationDays = Math.max(1, Math.round(totalDays * (weight / 100)));
+        const phaseStart = new Date(currentStart);
+        const phaseEnd = addDays(phaseStart, durationDays - 1);
 
-      preview.push({
-        name: pt.name,
-        position: pt.position,
-        weight,
-        phaseType: pt.phase_type,
-        isMandatory: pt.is_mandatory,
-        dependencyType: pt.dependency_type,
-        durationDays,
-        startDate: formatDate(phaseStart),
-        endDate: formatDate(phaseEnd),
-        estimatedHours: toNumber(pt.estimated_hours) || null,
-        taskCount: tasks.length,
-        microtaskCount: tasks.reduce((sum: number, t: any) => sum + t.microtaskCount, 0),
-        tasks,
-      });
+        const tasks = ((pt as any).task_templates || [])
+          .sort((a: any, b: any) => a.position - b.position)
+          .map((tt: any) => ({
+            title: tt.title,
+            weight: toNumber(tt.weight),
+            estimatedHours: toNumber(tt.estimated_hours) || null,
+            priority: tt.priority,
+            microtaskCount: (tt.microtask_templates || []).length,
+            microtasks: tt.microtask_templates ? tt.microtask_templates.map((mt: any) => mt.title) : [],
+          }));
 
-      if (pt.dependency_type !== 'parallel') {
-        currentStart = addDays(phaseEnd, 1);
+        preview.push({
+          name: pt.name,
+          position: pt.position,
+          weight,
+          phaseType: pt.phase_type,
+          isMandatory: pt.is_mandatory,
+          dependencyType: pt.dependency_type,
+          durationDays,
+          startDate: formatDate(phaseStart),
+          endDate: formatDate(phaseEnd),
+          estimatedHours: toNumber(pt.estimated_hours) || null,
+          taskCount: tasks.length,
+          microtaskCount: tasks.reduce((sum: number, t: any) => sum + t.microtaskCount, 0),
+          tasks,
+        });
+
+        if (pt.dependency_type !== 'parallel') {
+          currentStart = addDays(phaseEnd, 1);
+        }
       }
-    }
 
-    return {
-      template: {
-        id: template.id,
-        name: template.name,
-        projectType: template.project_type,
-        totalEstimatedHours: toNumber(template.total_estimated_hours) || null,
-      },
-      timeline: { startDate, endDate, totalDays },
-      phases: preview,
-      totals: {
-        phaseCount: preview.length,
-        taskCount: preview.reduce((sum, p) => sum + p.taskCount, 0),
-        microtaskCount: preview.reduce((sum, p) => sum + p.microtaskCount, 0),
-      },
-    };
-  }
+      return {
+        template: {
+          id: template.id,
+          name: template.name,
+          projectType: template.project_type,
+          totalEstimatedHours: toNumber(template.total_estimated_hours) || null,
+        },
+        timeline: { startDate, endDate, totalDays },
+        phases: preview,
+        totals: {
+          phaseCount: preview.length,
+          taskCount: preview.reduce((sum, p) => sum + p.taskCount, 0),
+          microtaskCount: preview.reduce((sum, p) => sum + p.microtaskCount, 0),
+        },
+      };
+
+
+    });
+}
 
   async applyTemplate(targetId: number, targetType: 'project' | 'subproject', templateId: number, user?: UserLike) {
+    await this.invalidateCache();
+
     const template = await this.getTemplate(templateId);
     let parent: any;
     let parentProjectId: number | null = null;
@@ -278,29 +312,36 @@ export class ProjectLifecycleService {
   // Phases
   // -------------------------------------------------------------------------
   async getPhases(parentId: number, parentType: 'project' | 'subproject') {
-    const where: any = { deleted_at: null };
-    if (parentType === 'project') where.crm_project_id = parentId;
-    else where.subproject_id = parentId;
+    return this.cached(this.cacheKey('getPhases', parentId, parentType), async () => {
 
-    const phases = await this.prisma.project_phases.findMany({
-      where,
-      include: {
-        project_tasks: {
-          where: { deleted_at: null },
-          include: {
-            task_microtasks: { orderBy: { position: 'asc' } },
-            profiles_project_tasks_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
+      const where: any = { deleted_at: null };
+      if (parentType === 'project') where.crm_project_id = parentId;
+      else where.subproject_id = parentId;
+
+      const phases = await this.prisma.project_phases.findMany({
+        where,
+        include: {
+          project_tasks: {
+            where: { deleted_at: null },
+            include: {
+              task_microtasks: { orderBy: { position: 'asc' } },
+              profiles_project_tasks_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
+            },
+            orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
           },
-          orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
+          profiles_project_phases_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true, avatar: true } },
         },
-        profiles_project_phases_manager_idToprofiles: { select: { id: true, first_name: true, last_name: true, avatar: true } },
-      },
-      orderBy: { position: 'asc' },
+        orderBy: { position: 'asc' },
+      });
+      return phases;
+
+
     });
-    return phases;
-  }
+}
 
   async resetPhases(parentId: number, parentType: 'project' | 'subproject') {
+    await this.invalidateCache();
+
     const where: any = {};
     if (parentType === 'project') where.crm_project_id = parentId;
     else where.subproject_id = parentId;
@@ -342,6 +383,8 @@ export class ProjectLifecycleService {
   }
 
   async createPhase(parentId: number, parentType: 'project' | 'subproject', body: any, user?: UserLike) {
+    await this.invalidateCache();
+
     const data: any = {
       name: body.name,
       description: body.description,
@@ -374,6 +417,8 @@ export class ProjectLifecycleService {
   }
 
   async updatePhase(phaseId: number, body: any, user?: UserLike) {
+    await this.invalidateCache();
+
     const phase = await this.prisma.project_phases.findUnique({ where: { id: phaseId } });
     if (!phase) throw new NotFoundException('Phase not found');
 
@@ -432,6 +477,8 @@ export class ProjectLifecycleService {
   }
 
   async reorderPhases(parentId: number, parentType: 'project' | 'subproject', phases: any[], _user?: UserLike) {
+    await this.invalidateCache();
+
     if (!Array.isArray(phases)) throw new BadRequestException('phases array is required');
     for (const { id, position } of phases) {
       const phase = await this.prisma.project_phases.findUnique({ where: { id } });
@@ -448,6 +495,8 @@ export class ProjectLifecycleService {
   }
 
   async deletePhase(phaseId: number) {
+    await this.invalidateCache();
+
     const phase = await this.prisma.project_phases.findUnique({ where: { id: phaseId } });
     if (!phase) throw new NotFoundException('Phase not found');
 
@@ -470,18 +519,25 @@ export class ProjectLifecycleService {
   }
 
   async getPhaseLogs(phaseId: number, limit = 50) {
-    return this.prisma.phase_logs.findMany({
-      where: { project_phase_id: phaseId },
-      include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
-      orderBy: { created_at: 'desc' },
-      take: limit,
+    return this.cached(this.cacheKey('getPhaseLogs', phaseId, limit), async () => {
+
+      return this.prisma.phase_logs.findMany({
+        where: { project_phase_id: phaseId },
+        include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+      });
+
+
     });
-  }
+}
 
   // -------------------------------------------------------------------------
   // Tasks within phases
   // -------------------------------------------------------------------------
   async createTaskInPhase(phaseId: number, body: any, user?: UserLike) {
+    await this.invalidateCache();
+
     const phase = await this.prisma.project_phases.findUnique({ where: { id: phaseId } });
     if (!phase) throw new NotFoundException('Phase not found');
 
@@ -517,6 +573,8 @@ export class ProjectLifecycleService {
   }
 
   async deleteTaskFromPhase(phaseId: number, taskId: number) {
+    await this.invalidateCache();
+
     const phase = await this.prisma.project_phases.findUnique({ where: { id: phaseId } });
     if (!phase) throw new NotFoundException('Phase not found');
     const task = await this.prisma.project_tasks.findFirst({ where: { id: taskId, phase_id: phaseId } });
@@ -544,16 +602,23 @@ export class ProjectLifecycleService {
   // Microtasks
   // -------------------------------------------------------------------------
   async getMicrotasks(taskId: number) {
-    const microtasks = await this.prisma.task_microtasks.findMany({
-      where: { project_task_id: taskId },
-      include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
-      orderBy: { position: 'asc' },
+    return this.cached(this.cacheKey('getMicrotasks', taskId), async () => {
+
+      const microtasks = await this.prisma.task_microtasks.findMany({
+        where: { project_task_id: taskId },
+        include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
+        orderBy: { position: 'asc' },
+      });
+      const stats = await this.getMicrotaskStats(taskId);
+      return { microtasks, stats };
+
+
     });
-    const stats = await this.getMicrotaskStats(taskId);
-    return { microtasks, stats };
-  }
+}
 
   async createMicrotask(taskId: number, body: any, _user?: UserLike) {
+    await this.invalidateCache();
+
     let position = body.position;
     if (position === undefined) {
       const maxPos = await this.prisma.task_microtasks.aggregate({ _max: { position: true }, where: { project_task_id: taskId } });
@@ -572,6 +637,8 @@ export class ProjectLifecycleService {
   }
 
   async updateMicrotask(taskId: number, id: number, body: any) {
+    await this.invalidateCache();
+
     const microtask = await this.prisma.task_microtasks.findUnique({ where: { id } });
     if (!microtask || microtask.project_task_id !== taskId) throw new NotFoundException('Microtask not found');
     const updates: any = {};
@@ -583,6 +650,8 @@ export class ProjectLifecycleService {
   }
 
   async toggleMicrotask(taskId: number, id: number, user?: UserLike) {
+    await this.invalidateCache();
+
     const microtask = await this.prisma.task_microtasks.findUnique({ where: { id } });
     if (!microtask || microtask.project_task_id !== taskId) throw new NotFoundException('Microtask not found');
 
@@ -602,6 +671,8 @@ export class ProjectLifecycleService {
   }
 
   async deleteMicrotask(taskId: number, id: number) {
+    await this.invalidateCache();
+
     const microtask = await this.prisma.task_microtasks.findUnique({ where: { id } });
     if (!microtask || microtask.project_task_id !== taskId) throw new NotFoundException('Microtask not found');
     await this.prisma.task_microtasks.delete({ where: { id } });
@@ -609,6 +680,8 @@ export class ProjectLifecycleService {
   }
 
   async reorderMicrotasks(taskId: number, microtasks: any[]) {
+    await this.invalidateCache();
+
     if (!Array.isArray(microtasks)) throw new BadRequestException('microtasks array is required');
     for (const { id, position } of microtasks) {
       const mt = await this.prisma.task_microtasks.findUnique({ where: { id } });
@@ -620,6 +693,8 @@ export class ProjectLifecycleService {
   }
 
   async toggleAllMicrotasks(taskId: number, completed: boolean, user?: UserLike) {
+    await this.invalidateCache();
+
     const isCompleted = completed !== false;
     const now = new Date();
     await this.prisma.task_microtasks.updateMany({
@@ -654,6 +729,8 @@ export class ProjectLifecycleService {
   // Timeline
   // -------------------------------------------------------------------------
   async recalculateTimeline(parentId: number, parentType: 'project' | 'subproject') {
+    await this.invalidateCache();
+
     const parent = parentType === 'project'
       ? await this.prisma.crm_projects.findUnique({ where: { id: parentId } })
       : await this.prisma.crm_subprojects.findUnique({ where: { id: parentId } });
@@ -663,129 +740,134 @@ export class ProjectLifecycleService {
   }
 
   async getExpectedCompletion(entityId: number, entityType: 'project' | 'subproject' | 'phase') {
-    let tasks: any[] = [];
-    let deadlineDate: Date | null = null;
+    return this.cached(this.cacheKey('getExpectedCompletion', entityId, entityType), async () => {
 
-    if (entityType === 'phase') {
-      const phase = await this.prisma.project_phases.findUnique({ where: { id: entityId } });
-      if (!phase) throw new NotFoundException('Phase not found');
-      deadlineDate = phase.due_date;
-      tasks = await this.prisma.project_tasks.findMany({ where: { phase_id: entityId } });
-    } else if (entityType === 'subproject') {
-      const sp = await this.prisma.crm_subprojects.findUnique({ where: { id: entityId } });
-      if (!sp) throw new NotFoundException('Subproject not found');
-      deadlineDate = sp.due_date;
-      const phases = await this.prisma.project_phases.findMany({ where: { subproject_id: entityId, deleted_at: null } });
-      for (const phase of phases) {
-        const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
-        tasks.push(...pts);
-      }
-    } else {
-      const project = await this.prisma.crm_projects.findUnique({ where: { id: entityId } });
-      if (!project) throw new NotFoundException('Project not found');
-      deadlineDate = project.due_date;
-      const subprojects = await this.prisma.crm_subprojects.findMany({ where: { parent_project_id: entityId } });
-      if (subprojects.length > 0) {
-        for (const sp of subprojects) {
-          const phases = await this.prisma.project_phases.findMany({ where: { subproject_id: sp.id, deleted_at: null } });
+      let tasks: any[] = [];
+      let deadlineDate: Date | null = null;
+
+      if (entityType === 'phase') {
+        const phase = await this.prisma.project_phases.findUnique({ where: { id: entityId } });
+        if (!phase) throw new NotFoundException('Phase not found');
+        deadlineDate = phase.due_date;
+        tasks = await this.prisma.project_tasks.findMany({ where: { phase_id: entityId } });
+      } else if (entityType === 'subproject') {
+        const sp = await this.prisma.crm_subprojects.findUnique({ where: { id: entityId } });
+        if (!sp) throw new NotFoundException('Subproject not found');
+        deadlineDate = sp.due_date;
+        const phases = await this.prisma.project_phases.findMany({ where: { subproject_id: entityId, deleted_at: null } });
+        for (const phase of phases) {
+          const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
+          tasks.push(...pts);
+        }
+      } else {
+        const project = await this.prisma.crm_projects.findUnique({ where: { id: entityId } });
+        if (!project) throw new NotFoundException('Project not found');
+        deadlineDate = project.due_date;
+        const subprojects = await this.prisma.crm_subprojects.findMany({ where: { parent_project_id: entityId } });
+        if (subprojects.length > 0) {
+          for (const sp of subprojects) {
+            const phases = await this.prisma.project_phases.findMany({ where: { subproject_id: sp.id, deleted_at: null } });
+            for (const phase of phases) {
+              const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
+              tasks.push(...pts);
+            }
+          }
+        } else {
+          const phases = await this.prisma.project_phases.findMany({ where: { crm_project_id: entityId, deleted_at: null } });
           for (const phase of phases) {
             const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
             tasks.push(...pts);
           }
         }
-      } else {
-        const phases = await this.prisma.project_phases.findMany({ where: { crm_project_id: entityId, deleted_at: null } });
-        for (const phase of phases) {
-          const pts = await this.prisma.project_tasks.findMany({ where: { phase_id: phase.id } });
-          tasks.push(...pts);
-        }
       }
-    }
 
-    if (tasks.length === 0) {
-      return { expectedDate: deadlineDate, deadlineDate, status: 'no_tasks', daysVariance: 0 };
-    }
+      if (tasks.length === 0) {
+        return { expectedDate: deadlineDate, deadlineDate, status: 'no_tasks', daysVariance: 0 };
+      }
 
-    const incompleteTasks = tasks.filter((t) => t.status !== 'completed');
-    let avgDailyHours = 8;
-    const assigneeIds = [...new Set(incompleteTasks.map((t) => t.assigned_to).filter(Boolean))] as number[];
-    if (assigneeIds.length > 0) {
-      const employees = await this.prisma.employees.findMany({
-        where: { user_id: { in: assigneeIds } },
-        select: { id: true },
-      });
-      const employeeIds = employees.map((e) => e.id);
-      if (employeeIds.length > 0) {
-        const shifts = await this.prisma.hr_shifts.findMany({
-          where: { employee_id: { in: employeeIds } },
-          orderBy: { created_at: 'desc' },
+      const incompleteTasks = tasks.filter((t) => t.status !== 'completed');
+      let avgDailyHours = 8;
+      const assigneeIds = [...new Set(incompleteTasks.map((t) => t.assigned_to).filter(Boolean))] as number[];
+      if (assigneeIds.length > 0) {
+        const employees = await this.prisma.employees.findMany({
+          where: { user_id: { in: assigneeIds } },
+          select: { id: true },
         });
-        const latestByEmployee = new Map<number, any>();
-        for (const shift of shifts) {
-          if (!latestByEmployee.has(shift.employee_id)) {
-            latestByEmployee.set(shift.employee_id, shift);
+        const employeeIds = employees.map((e) => e.id);
+        if (employeeIds.length > 0) {
+          const shifts = await this.prisma.hr_shifts.findMany({
+            where: { employee_id: { in: employeeIds } },
+            orderBy: { created_at: 'desc' },
+          });
+          const latestByEmployee = new Map<number, any>();
+          for (const shift of shifts) {
+            if (!latestByEmployee.has(shift.employee_id)) {
+              latestByEmployee.set(shift.employee_id, shift);
+            }
           }
+          let totalHours = 0;
+          let count = 0;
+          for (const shift of latestByEmployee.values()) {
+            const hours = toNumber(shift.hours_per_day) || toNumber(shift.total_hours) || 8;
+            totalHours += hours;
+            count++;
+          }
+          if (count > 0) avgDailyHours = totalHours / count;
         }
-        let totalHours = 0;
-        let count = 0;
-        for (const shift of latestByEmployee.values()) {
-          const hours = toNumber(shift.hours_per_day) || toNumber(shift.total_hours) || 8;
-          totalHours += hours;
-          count++;
+      }
+
+      let totalEstimatedHours = 0;
+      let completedHours = 0;
+      let remainingHours = 0;
+      for (const t of tasks) {
+        const expected = toNumber(t.estimated_hours) || (toNumber(t.expected_duration_days) * avgDailyHours) || 0;
+        const actual = toNumber(t.actual_hours) || 0;
+        totalEstimatedHours += expected;
+        if (t.status === 'completed') {
+          completedHours += Math.max(actual, expected);
+        } else {
+          completedHours += actual;
+          remainingHours += Math.max(0, expected - actual);
         }
-        if (count > 0) avgDailyHours = totalHours / count;
       }
-    }
 
-    let totalEstimatedHours = 0;
-    let completedHours = 0;
-    let remainingHours = 0;
-    for (const t of tasks) {
-      const expected = toNumber(t.estimated_hours) || (toNumber(t.expected_duration_days) * avgDailyHours) || 0;
-      const actual = toNumber(t.actual_hours) || 0;
-      totalEstimatedHours += expected;
-      if (t.status === 'completed') {
-        completedHours += Math.max(actual, expected);
-      } else {
-        completedHours += actual;
-        remainingHours += Math.max(0, expected - actual);
+      const assigneeCount = Math.max(1, [...new Set(incompleteTasks.map((t) => t.assigned_to).filter(Boolean))].length);
+      const dailyCapacity = avgDailyHours * assigneeCount;
+      const remainingDays = dailyCapacity > 0 ? Math.ceil(remainingHours / dailyCapacity) : 0;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const expectedDate = addDays(today, remainingDays);
+      const deadline = deadlineDate ? new Date(deadlineDate) : null;
+
+      let status = 'on_track';
+      let daysVariance = 0;
+      if (deadline) {
+        daysVariance = daysBetween(expectedDate, deadline);
+        if (daysVariance < 0) status = 'behind';
+        else if (daysVariance > 5) status = 'ahead';
       }
-    }
 
-    const assigneeCount = Math.max(1, [...new Set(incompleteTasks.map((t) => t.assigned_to).filter(Boolean))].length);
-    const dailyCapacity = avgDailyHours * assigneeCount;
-    const remainingDays = dailyCapacity > 0 ? Math.ceil(remainingHours / dailyCapacity) : 0;
+      return {
+        expectedDate: formatDate(expectedDate),
+        deadlineDate: deadlineDate || null,
+        status,
+        daysVariance,
+        details: {
+          totalTasks: tasks.length,
+          completedTasks: tasks.length - incompleteTasks.length,
+          totalEstimatedHours,
+          completedHours,
+          remainingHours,
+          avgDailyHours,
+          assigneeCount,
+          remainingDays,
+        },
+      };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expectedDate = addDays(today, remainingDays);
-    const deadline = deadlineDate ? new Date(deadlineDate) : null;
 
-    let status = 'on_track';
-    let daysVariance = 0;
-    if (deadline) {
-      daysVariance = daysBetween(expectedDate, deadline);
-      if (daysVariance < 0) status = 'behind';
-      else if (daysVariance > 5) status = 'ahead';
-    }
-
-    return {
-      expectedDate: formatDate(expectedDate),
-      deadlineDate: deadlineDate || null,
-      status,
-      daysVariance,
-      details: {
-        totalTasks: tasks.length,
-        completedTasks: tasks.length - incompleteTasks.length,
-        totalEstimatedHours,
-        completedHours,
-        remainingHours,
-        avgDailyHours,
-        assigneeCount,
-        remainingDays,
-      },
-    };
-  }
+    });
+}
 
   // -------------------------------------------------------------------------
   // Helpers

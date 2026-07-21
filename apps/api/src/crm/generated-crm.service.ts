@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 const SOFT_DELETE_MODELS = new Set([
   'companies',
@@ -21,7 +22,23 @@ function buildSearch(search: string | undefined, fields: string[]) {
 
 @Injectable()
 export class GeneratedCrmService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('generated-crm', ...parts) ?? `generated-crm:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private getDelegate(model: string) {
     const delegate = (this.prisma as any)[model];
@@ -43,70 +60,86 @@ export class GeneratedCrmService {
       include?: Record<string, unknown>;
     },
   ) {
-    const page = Math.max(1, Number(options.page ?? 1));
-    const itemsPerPage = Math.min(100, Math.max(1, Number(options.limit ?? 20)));
-    const searchWhere = buildSearch(options.search, options.searchFields ?? []);
-    const where: any = { ...options.additionalWhere };
-    if (SOFT_DELETE_MODELS.has(model)) {
-      where.deleted_at = null;
-    }
-    if (searchWhere) {
-      where.AND = [where, searchWhere];
-    }
-    const delegate = this.getDelegate(model);
-    const [totalItems, rows] = await Promise.all([
-      delegate.count({ where }),
-      delegate.findMany({
-        where,
-        skip: (page - 1) * itemsPerPage,
-        take: itemsPerPage,
-        orderBy: options.orderBy ?? { created_at: 'desc' },
-        include: options.include,
-      }),
-    ]);
-    const keyMap: Record<string, string> = {
-      contacts: 'contacts',
-      deals: 'deals',
-      crm_pipelines: 'pipelines',
-      crm_leads: 'leads',
-      crm_projects: 'projects',
-      crm_activities: 'activities',
-      crm_notes: 'notes',
-      crm_automations: 'automations',
-    };
-    return {
-      [keyMap[model] ?? model]: rows,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(totalItems / itemsPerPage) || 1,
-        totalItems,
-        itemsPerPage,
-      },
-    };
-  }
+    return this.cached(this.cacheKey('findAll', model, JSON.stringify(options)), async () => {
+
+      const page = Math.max(1, Number(options.page ?? 1));
+      const itemsPerPage = Math.min(100, Math.max(1, Number(options.limit ?? 20)));
+      const searchWhere = buildSearch(options.search, options.searchFields ?? []);
+      const where: any = { ...options.additionalWhere };
+      if (SOFT_DELETE_MODELS.has(model)) {
+        where.deleted_at = null;
+      }
+      if (searchWhere) {
+        where.AND = [where, searchWhere];
+      }
+      const delegate = this.getDelegate(model);
+      const [totalItems, rows] = await Promise.all([
+        delegate.count({ where }),
+        delegate.findMany({
+          where,
+          skip: (page - 1) * itemsPerPage,
+          take: itemsPerPage,
+          orderBy: options.orderBy ?? { created_at: 'desc' },
+          include: options.include,
+        }),
+      ]);
+      const keyMap: Record<string, string> = {
+        contacts: 'contacts',
+        deals: 'deals',
+        crm_pipelines: 'pipelines',
+        crm_leads: 'leads',
+        crm_projects: 'projects',
+        crm_activities: 'activities',
+        crm_notes: 'notes',
+        crm_automations: 'automations',
+      };
+      return {
+        [keyMap[model] ?? model]: rows,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalItems / itemsPerPage) || 1,
+          totalItems,
+          itemsPerPage,
+        },
+      };
+
+
+    });
+}
 
   async findOne(model: string, id: string | number, include?: Record<string, unknown>) {
-    const delegate = this.getDelegate(model);
-    const where: any = { id: Number(id) };
-    if (SOFT_DELETE_MODELS.has(model)) {
-      where.deleted_at = null;
-    }
-    const record = await delegate.findUnique({ where, include });
-    if (!record) throw new NotFoundException(`${model} not found`);
-    return record;
-  }
+    return this.cached(this.cacheKey('findOne', model, id, JSON.stringify(include)), async () => {
 
-  create(model: string, data: Record<string, unknown>) {
+      const delegate = this.getDelegate(model);
+      const where: any = { id: Number(id) };
+      if (SOFT_DELETE_MODELS.has(model)) {
+        where.deleted_at = null;
+      }
+      const record = await delegate.findUnique({ where, include });
+      if (!record) throw new NotFoundException(`${model} not found`);
+      return record;
+
+
+    });
+}
+
+  async create(model: string, data: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const delegate = this.getDelegate(model);
     return delegate.create({ data });
   }
 
-  update(model: string, id: string | number, data: Record<string, unknown>) {
+  async update(model: string, id: string | number, data: Record<string, unknown>) {
+    await this.invalidateCache();
+
     const delegate = this.getDelegate(model);
     return delegate.update({ where: { id: Number(id) }, data });
   }
 
-  remove(model: string, id: string | number) {
+  async remove(model: string, id: string | number) {
+    await this.invalidateCache();
+
     const delegate = this.getDelegate(model);
     if (SOFT_DELETE_MODELS.has(model)) {
       return delegate.update({ where: { id: Number(id) }, data: { deleted_at: new Date() } });

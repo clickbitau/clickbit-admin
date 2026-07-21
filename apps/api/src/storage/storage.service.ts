@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { CacheService } from '../redis/cache.service';
 
 export interface StorageUploadResult {
   success: true;
@@ -33,11 +34,27 @@ export class StorageService {
     'task-attachments',
   ]);
 
-  constructor(private readonly config: ConfigService) {
+  constructor(private readonly config: ConfigService,
+    private readonly cache?: CacheService) {
     const url = this.config.get<string>('SUPABASE_URL') || '';
     const key = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY') || '';
     this.supabase = createClient(url, key);
   }
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('storage', ...parts) ?? `storage:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   isConfigured(): boolean {
     return !!(
@@ -54,6 +71,8 @@ export class StorageService {
     folder = '',
     customFilename?: string,
   ): Promise<StorageUploadResult | StorageUploadError> {
+    await this.invalidateCache();
+
     try {
       const filename = customFilename
         ? customFilename
@@ -81,6 +100,8 @@ export class StorageService {
   }
 
   async delete(bucket: string, key: string): Promise<{ success: boolean; error?: string }> {
+    await this.invalidateCache();
+
     try {
       const { error } = await this.supabase.storage.from(bucket).remove([key]);
       if (error) return { success: false, error: error.message };
@@ -95,6 +116,8 @@ export class StorageService {
     fileUrl: string,
     allowedBuckets?: string | string[],
   ): Promise<{ success: boolean; deleted: boolean; error?: string }> {
+    await this.invalidateCache();
+
     const parsed = this.parseStorageUrl(fileUrl);
     if (!parsed) return { success: false, deleted: false, error: 'Invalid storage URL' };
 
@@ -118,17 +141,22 @@ export class StorageService {
     key: string,
     expiresIn = 3600,
   ): Promise<StorageUrlResult> {
-    try {
-      const { data, error } = await this.supabase.storage
-        .from(bucket)
-        .createSignedUrl(key, expiresIn);
-      if (error) return { success: false, error: error.message };
-      return { success: true, url: data.signedUrl };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { success: false, error: message };
-    }
-  }
+    return this.cached(this.cacheKey('getSignedUrl', bucket, key, expiresIn), async () => {
+
+      try {
+        const { data, error } = await this.supabase.storage
+          .from(bucket)
+          .createSignedUrl(key, expiresIn);
+        if (error) return { success: false, error: error.message };
+        return { success: true, url: data.signedUrl };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { success: false, error: message };
+      }
+
+
+    });
+}
 
   getPublicUrl(bucket: string, key: string): string {
     const { data } = this.supabase.storage.from(bucket).getPublicUrl(key);

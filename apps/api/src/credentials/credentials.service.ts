@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 function maskValue(val?: string | null) {
   if (!val) return '';
@@ -33,7 +34,23 @@ const DEFINITIONS: { key: string; category: string; label: string; description?:
 
 @Injectable()
 export class CredentialsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('credentials', ...parts) ?? `credentials:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private serialize(row: any, _mask = true) {
     return {
@@ -50,6 +67,8 @@ export class CredentialsService {
   }
 
   async ensureDefinitions() {
+    await this.invalidateCache();
+
     for (const def of DEFINITIONS) {
       const existing = await this.prisma.app_credentials.findUnique({ where: { key: def.key } });
       if (!existing) {
@@ -68,33 +87,45 @@ export class CredentialsService {
   }
 
   async getAll() {
-    await this.ensureDefinitions();
-    const rows = await this.prisma.app_credentials.findMany({ orderBy: [{ category: 'asc' }, { sort_order: 'asc' }] });
-    const grouped: any = {};
-    for (const row of rows) {
-      if (!grouped[row.category]) {
-        grouped[row.category] = { ...(CATEGORY_META[row.category] || { label: row.category, description: '' }), credentials: [] };
+    return this.cached(this.cacheKey('getAll'), async () => {
+
+      await this.ensureDefinitions();
+      const rows = await this.prisma.app_credentials.findMany({ orderBy: [{ category: 'asc' }, { sort_order: 'asc' }] });
+      const grouped: any = {};
+      for (const row of rows) {
+        if (!grouped[row.category]) {
+          grouped[row.category] = { ...(CATEGORY_META[row.category] || { label: row.category, description: '' }), credentials: [] };
+        }
+        grouped[row.category].credentials.push(this.serialize(row));
       }
-      grouped[row.category].credentials.push(this.serialize(row));
-    }
-    for (const [cat, meta] of Object.entries(CATEGORY_META)) {
-      if (!grouped[cat]) grouped[cat] = { ...meta, credentials: [] };
-    }
-    return { categories: grouped };
-  }
+      for (const [cat, meta] of Object.entries(CATEGORY_META)) {
+        if (!grouped[cat]) grouped[cat] = { ...meta, credentials: [] };
+      }
+      return { categories: grouped };
+
+
+    });
+}
 
   async getByCategory(category: string) {
-    await this.ensureDefinitions();
-    const rows = await this.prisma.app_credentials.findMany({ where: { category }, orderBy: { sort_order: 'asc' } });
-    const meta = CATEGORY_META[category] || {};
-    return { ...meta, credentials: rows.map((r) => this.serialize(r)) };
-  }
+    return this.cached(this.cacheKey('getByCategory', category), async () => {
+
+      await this.ensureDefinitions();
+      const rows = await this.prisma.app_credentials.findMany({ where: { category }, orderBy: { sort_order: 'asc' } });
+      const meta = CATEGORY_META[category] || {};
+      return { ...meta, credentials: rows.map((r) => this.serialize(r)) };
+
+
+    });
+}
 
   getDefinitions() {
     return { definitions: DEFINITIONS, categories: CATEGORY_META };
   }
 
   async set(key: string, value: string) {
+    await this.invalidateCache();
+
     if (value && value.includes('••••••••')) {
       throw new BadRequestException('Cannot save a masked value');
     }
@@ -105,6 +136,8 @@ export class CredentialsService {
   }
 
   async bulkSet(updates: { key: string; value: string }[]) {
+    await this.invalidateCache();
+
     const realUpdates = updates.filter((u) => u.value && !u.value.includes('••••••••'));
     const keys: string[] = [];
     for (const u of realUpdates) {
@@ -118,6 +151,8 @@ export class CredentialsService {
   }
 
   async seedFromEnv() {
+    await this.invalidateCache();
+
     let count = 0;
     for (const def of DEFINITIONS) {
       const envValue = process.env[def.key];
@@ -133,6 +168,8 @@ export class CredentialsService {
   }
 
   async testSmtp() {
+    await this.invalidateCache();
+
     const get = async (key: string) => {
       const row = await this.prisma.app_credentials.findUnique({ where: { key } });
       return row?.value || '';

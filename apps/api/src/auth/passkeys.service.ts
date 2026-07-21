@@ -15,6 +15,7 @@ import type {
   VerifiedAuthenticationResponse,
 } from '@simplewebauthn/server';
 import type { Profile } from '@clickbit/shared';
+import { CacheService } from '../redis/cache.service';
 
 function rpConfig(config: ConfigService) {
   const rpName = config.get<string>('WEBAUTHN_RP_NAME') || 'ClickBit';
@@ -41,10 +42,24 @@ function challengeOrThrow(body: any): string {
 export class PasskeysService {
   private tablesEnsured = false;
 
-  constructor(
-    private readonly config: ConfigService,
+  constructor(private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-  ) {}
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('passkeys', ...parts) ?? `passkeys:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private async ensureTables() {
     if (this.tablesEnsured) return;
@@ -121,6 +136,8 @@ export class PasskeysService {
   }
 
   async generateRegistrationOptions(user: Profile) {
+    await this.invalidateCache();
+
     await this.ensureTables();
     const { rpName, rpID } = rpConfig(this.config);
     const existing = await this.prisma.passkeys.findMany({
@@ -148,6 +165,8 @@ export class PasskeysService {
   }
 
   async verifyRegistration(user: Profile, body: any) {
+    await this.invalidateCache();
+
     await this.ensureTables();
     const { rpID, origin } = rpConfig(this.config);
     const record = await this.consumeChallenge(challengeOrThrow(body), 'registration');
@@ -190,6 +209,8 @@ export class PasskeysService {
   }
 
   async generateLoginOptions() {
+    await this.invalidateCache();
+
     await this.ensureTables();
     const { rpID } = rpConfig(this.config);
     const opts: GenerateAuthenticationOptionsOpts = {
@@ -203,6 +224,8 @@ export class PasskeysService {
   }
 
   async verifyLogin(body: any) {
+    await this.invalidateCache();
+
     await this.ensureTables();
     const { rpID, origin } = rpConfig(this.config);
     const record = await this.consumeChallenge(challengeOrThrow(body), 'login');
@@ -256,25 +279,32 @@ export class PasskeysService {
   }
 
   async listPasskeys(user: Profile) {
-    await this.ensureTables();
-    const rows = await this.prisma.passkeys.findMany({
-      where: { user_id: user.id, deleted_at: null },
-      orderBy: { created_at: 'desc' },
+    return this.cached(this.cacheKey('listPasskeys', user.id), async () => {
+
+      await this.ensureTables();
+      const rows = await this.prisma.passkeys.findMany({
+        where: { user_id: user.id, deleted_at: null },
+        orderBy: { created_at: 'desc' },
+      });
+      return {
+        success: true,
+        data: rows.map((p) => ({
+          id: p.id,
+          credential_id: p.credential_id,
+          friendly_name: p.friendly_name,
+          user_agent: p.user_agent,
+          last_used_at: p.last_used_at,
+          created_at: p.created_at,
+        })),
+      };
+
+
     });
-    return {
-      success: true,
-      data: rows.map((p) => ({
-        id: p.id,
-        credential_id: p.credential_id,
-        friendly_name: p.friendly_name,
-        user_agent: p.user_agent,
-        last_used_at: p.last_used_at,
-        created_at: p.created_at,
-      })),
-    };
-  }
+}
 
   async deletePasskey(user: Profile, id: number) {
+    await this.invalidateCache();
+
     await this.ensureTables();
     const passkey = await this.prisma.passkeys.findFirst({ where: { id, user_id: user.id, deleted_at: null } });
     if (!passkey) throw new NotFoundException('Passkey not found');
