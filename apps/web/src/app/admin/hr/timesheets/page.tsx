@@ -10,6 +10,7 @@ import {
   DollarSign, Search, X
 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
+import { Pagination } from '@/components/design-system/Pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -928,13 +929,12 @@ export default function AdminHrTimesheetsPage() {
                       ))}
                     </TableBody>
                   </Table>
-                  <div className="flex items-center justify-between mt-4">
-                    <p className="text-sm text-muted-foreground">Page {listPage} of {listPages} ({filteredListEntries.length} total)</p>
-                    <div className="space-x-2">
-                      <Button variant="outline" size="sm" disabled={listPage <= 1} onClick={() => setListPage((p) => p - 1)}>Previous</Button>
-                      <Button variant="outline" size="sm" disabled={listPage >= listPages} onClick={() => setListPage((p) => p + 1)}>Next</Button>
-                    </div>
-                  </div>
+                  <Pagination
+                    currentPage={listPage}
+                    totalPages={listPages}
+                    totalItems={filteredListEntries.length}
+                    onPageChange={setListPage}
+                  />
                 </>
               )}
             </CardContent>

@@ -5,6 +5,7 @@ import {
   Landmark, CreditCard, Banknote, ReceiptText, Smartphone, Building2, Clock, CheckCircle2, XCircle, RefreshCw
 } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
+import { Pagination } from '@/components/design-system/Pagination';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -260,15 +261,12 @@ export default function AdminFinancePaymentsPage() {
         />
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalItems} total)
-        </p>
-        <div className="space-x-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        onPageChange={setPage}
+      />
     </PageShell>
   );
 }

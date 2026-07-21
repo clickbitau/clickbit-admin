@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { Pagination } from '@/components/design-system/Pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -356,13 +357,12 @@ export default function AdminCommunicationMailPage() {
               </div>
             )}
           </div>
-          {totalPages > 1 && (
-            <div className="p-2 border-t border-border/50 flex items-center justify-between">
-              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-xs text-muted-foreground">Page {page + 1} of {totalPages}</span>
-              <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          )}
+          <Pagination
+            currentPage={page + 1}
+            totalPages={totalPages}
+            totalItems={0}
+            onPageChange={(p) => setPage(p - 1)}
+          />
         </div>
 
         {/* Reading pane */}

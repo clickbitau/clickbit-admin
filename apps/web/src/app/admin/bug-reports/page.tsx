@@ -8,6 +8,7 @@ import { Bug, Plus, RefreshCw, AlertCircle, Search, X } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
+import { Pagination } from '@/components/design-system/Pagination';
 import { DataTable } from '@/components/design-system/DataTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -126,6 +127,7 @@ export default function AdminBugReportsPage() {
   const stats = statsQuery.data?.data;
   const reports = listQuery.data?.data ?? [];
   const total = listQuery.data?.total ?? 0;
+  const totalPages = Math.ceil(total / limit) || 1;
   const repos = reposQuery.data?.data ?? [];
 
   const statCards = stats
@@ -252,19 +254,12 @@ export default function AdminBugReportsPage() {
         />
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Showing {Math.min((page - 1) * limit + reports.length, total)} of {total}
-        </p>
-        <div className="space-x-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <Button variant="outline" size="sm" disabled={page * limit >= total} onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        onPageChange={setPage}
+      />
     </PageShell>
   );
 }

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/design-system/Pagination';
 import { fetchAgentPortalTickets } from '@/lib/api';
 import { Ticket, Plus, ChevronLeft, ChevronRight, Clock, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 
@@ -47,7 +48,7 @@ export default function AgentTicketsPage() {
   const tickets = (data?.data || []) as Array<{
     id: number; ticket_number?: string; subject?: string; status?: string; priority?: string; category?: string; contact_email?: string; created_at?: string; last_activity_at?: string;
   }>;
-  const pagination = (data?.pagination || { currentPage: 1, totalPages: 1 }) as { currentPage: number; totalPages: number };
+  const pagination = (data?.pagination || { currentPage: 1, totalPages: 1, totalItems: 0 }) as { currentPage: number; totalPages: number; totalItems?: number };
 
   if (isLoading) {
     return <div className="p-4 space-y-6"><Skeleton className="h-10 w-1/3" /><Skeleton className="h-64" /></div>;
@@ -118,13 +119,12 @@ export default function AgentTicketsPage() {
         </CardContent>
       </Card>
 
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="flex items-center gap-1 px-3 py-2 rounded-xl disabled:opacity-50 hover:nm-raised-sm"><ChevronLeft className="w-4 h-4" /> Previous</button>
-          <span className="text-sm text-muted-foreground">Page {pagination.currentPage} of {pagination.totalPages}</span>
-          <button onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))} disabled={page >= pagination.totalPages} className="flex items-center gap-1 px-3 py-2 rounded-xl disabled:opacity-50 hover:nm-raised-sm">Next <ChevronRight className="w-4 h-4" /></button>
-        </div>
-      )}
+      <Pagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems || 0}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
