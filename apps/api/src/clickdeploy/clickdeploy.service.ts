@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
+import { CacheService } from '../redis/cache.service';
 
 function maskCode(code: string) {
   if (!code) return '';
@@ -40,13 +41,31 @@ function generateCode() {
 
 @Injectable()
 export class ClickdeployService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('clickdeploy', ...parts) ?? `clickdeploy:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private async findCodeByCode(code: string) {
     return this.prisma.clickdeploy_codes.findUnique({ where: { code } });
   }
 
   async activate({ code, instanceId, hostname }: { code?: string; instanceId?: string; hostname?: string }) {
+    await this.invalidateCache();
+
     if (!code) return { valid: false, error: 'Code is required' };
     const row = await this.findCodeByCode(code.toUpperCase());
     if (!row) return { valid: false, error: 'Invalid code' };
@@ -59,6 +78,8 @@ export class ClickdeployService {
   }
 
   async heartbeat({ code, instanceId, hostname }: { code?: string; instanceId?: string; hostname?: string }) {
+    await this.invalidateCache();
+
     if (!code) return { valid: false, error: 'Code is required' };
     const row = await this.findCodeByCode(code.toUpperCase());
     if (!row) return { valid: false, error: 'Invalid code' };
@@ -72,29 +93,38 @@ export class ClickdeployService {
   }
 
   async listCustomers() {
-    const rows = await this.prisma.clickdeploy_customers.findMany({
-      include: { clickdeploy_codes: true },
-      orderBy: { created_at: 'desc' },
+    return this.cached(this.cacheKey('listCustomers'), async () => {
+
+      const rows = await this.prisma.clickdeploy_customers.findMany({
+        include: { clickdeploy_codes: true },
+        orderBy: { created_at: 'desc' },
+      });
+      return {
+        customers: rows.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          notes: c.notes,
+          createdAt: c.created_at,
+          codes: (c.clickdeploy_codes || []).map((code: any) => serializeCode(code)),
+        })),
+      };
+
+
     });
-    return {
-      customers: rows.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        email: c.email,
-        notes: c.notes,
-        createdAt: c.created_at,
-        codes: (c.clickdeploy_codes || []).map((code: any) => serializeCode(code)),
-      })),
-    };
-  }
+}
 
   async createCustomer(data: { name: string; email?: string; notes?: string }) {
+    await this.invalidateCache();
+
     if (!data.name) throw new BadRequestException('name is required');
     const row = await this.prisma.clickdeploy_customers.create({ data: { name: data.name, email: data.email, notes: data.notes } as any });
     return { customer: row };
   }
 
   async updateCustomer(id: number, data: { name?: string; email?: string; notes?: string }) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.clickdeploy_customers.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Customer not found');
     if (data.name !== undefined && !String(data.name).trim()) throw new BadRequestException('name cannot be empty');
@@ -103,6 +133,8 @@ export class ClickdeployService {
   }
 
   async issueCode(data: { customerId: number; tier?: string; expiresIn?: number; maxNodes?: number; maxServices?: number }) {
+    await this.invalidateCache();
+
     if (!data.customerId) throw new BadRequestException('customerId is required');
     const customer = await this.prisma.clickdeploy_customers.findUnique({ where: { id: data.customerId } });
     if (!customer) throw new NotFoundException('Customer not found');
@@ -127,12 +159,16 @@ export class ClickdeployService {
   }
 
   async revealCode(id: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.clickdeploy_codes.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Code not found');
     return { code: row.code };
   }
 
   async updateSubscription(id: number, data: { tier?: string; expiresIn?: number; maxNodes?: number; maxServices?: number }) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.clickdeploy_codes.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Code not found');
     const update: any = {};
@@ -145,6 +181,8 @@ export class ClickdeployService {
   }
 
   async revokeCode(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.clickdeploy_codes.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Code not found');
     const row = await this.prisma.clickdeploy_codes.update({ where: { id }, data: { status: 'revoked' } });

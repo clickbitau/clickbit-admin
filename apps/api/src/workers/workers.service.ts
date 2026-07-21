@@ -12,13 +12,13 @@ import { PayrollAutomationService } from './payroll-automation.service';
 import { MailSyncWorkerService } from './mail-sync-worker.service';
 import { SessionSyncService } from './session-sync.service';
 import { TaskReminderService } from './task-reminder.service';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class WorkersService {
   private readonly logger = new Logger(WorkersService.name);
 
-  constructor(
-    private readonly config: ConfigService,
+  constructor(private readonly config: ConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly blog: BlogSchedulerService,
     private readonly analytics: AnalyticsAlertsService,
@@ -31,14 +31,36 @@ export class WorkersService {
     private readonly mail: MailSyncWorkerService,
     private readonly sessions: SessionSyncService,
     private readonly taskReminders: TaskReminderService,
-  ) {}
+    private readonly cache?: CacheService) {}
 
-  getStatus() {
-    const enabled = this.config.get<string>('RUN_SCHEDULERS') === 'true';
-    return { enabled, cronJobs: Object.keys(this.schedulerRegistry.getCronJobs()) };
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('workers', ...parts) ?? `workers:` + parts.filter((p) => p !== undefined && p !== null).join(':');
   }
 
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
+
+  async getStatus() {
+    return this.cached(this.cacheKey('getStatus'), async () => {
+
+      const enabled = this.config.get<string>('RUN_SCHEDULERS') === 'true';
+      return { enabled, cronJobs: Object.keys(this.schedulerRegistry.getCronJobs()) };
+
+
+    });
+}
+
   async runAll(): Promise<Record<string, unknown>> {
+    await this.invalidateCache();
+
     return {
       blog: await this.blog.publishScheduledPosts(),
       reminders: await this.reminders.checkReminders(),
