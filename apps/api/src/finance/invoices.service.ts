@@ -15,6 +15,7 @@ import {
   parseNumber,
 } from './finance-utils';
 import { PublicInvoicesService } from './public-invoices.service';
+import { CacheService } from '../redis/cache.service';
 
 function statusTransitionValid(from: string | null | undefined, to: string): { valid: boolean; message?: string } {
   if (!from || from === to) return { valid: true };
@@ -47,7 +48,18 @@ export class InvoicesService {
     private readonly prisma: PrismaService,
     private readonly publicInvoicesService: PublicInvoicesService,
     private readonly emailService: EmailService,
+    private readonly cache?: CacheService,
   ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('invoices', ...parts) ?? `invoices:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
 
   private get invoices() {
     return this.prisma.invoices;
@@ -360,6 +372,11 @@ export class InvoicesService {
   }
 
   async findAll(query: Record<string, unknown>) {
+    const cacheKey = this.cacheKey('list', JSON.stringify(query));
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindAll(query), this.CACHE_TTL_SECONDS) ?? this.fetchFindAll(query);
+  }
+
+  private async fetchFindAll(query: Record<string, unknown>) {
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(250, Math.max(1, Number(query.limit ?? 10)));
     const sortBy = (query.sort_by as string) || 'created_at';
@@ -433,6 +450,11 @@ export class InvoicesService {
   }
 
   async findOne(id: number) {
+    const cacheKey = this.cacheKey('detail', id);
+    return this.cache?.getOrSet(cacheKey, () => this.fetchFindOne(id), this.CACHE_TTL_SECONDS) ?? this.fetchFindOne(id);
+  }
+
+  private async fetchFindOne(id: number) {
     const invoice = await this.invoices.findUnique({ where: { id, deleted_at: null }, include: invoiceInclude });
     if (!invoice) throw new NotFoundException({ success: false, message: 'Invoice not found' });
     return { success: true, data: mapInvoice(invoice, true) };
@@ -460,6 +482,7 @@ export class InvoicesService {
 
     const data = this.buildCreateData(dto, userId, contactId, companyId);
     const invoice = await this.invoices.create({ data, include: invoiceInclude });
+    await this.invalidateCache();
     return mapInvoice(invoice);
   }
 
@@ -469,6 +492,8 @@ export class InvoicesService {
 
     const updates = this.buildUpdateData(invoice, dto);
     const updated = await this.invoices.update({ where: { id }, data: updates, include: invoiceInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return mapInvoice(updated);
   }
 
@@ -478,6 +503,8 @@ export class InvoicesService {
     if (invoice.status === 'paid') throw new BadRequestException({ message: 'Cannot delete a paid invoice' });
 
     await this.invoices.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Invoice deleted successfully' };
   }
 
@@ -494,6 +521,8 @@ export class InvoicesService {
       include: invoiceInclude,
     });
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Invoice voided successfully', { id: updated.id, package_code: updated.package_code, status: updated.status });
   }
 
@@ -523,6 +552,8 @@ export class InvoicesService {
     const tokenParam = updated.token ? `?token=${updated.token}` : '';
     const paymentUrl = `${frontendUrl}/pay/${updated.package_code}${tokenParam}`;
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return {
       message: 'Invoice sent successfully',
       sent: emailResult.sent,
@@ -555,6 +586,8 @@ export class InvoicesService {
 
     await this.recalcInvoicePaymentStatus(invoice.id);
     const updated = await this.invoices.findUnique({ where: { id }, include: invoiceInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Package marked as paid', package: mapInvoice(updated!), payment };
   }
 
@@ -598,6 +631,8 @@ export class InvoicesService {
     const total = parseNumber(invoice.total_amount);
     const paidSoFar = parseNumber(updated?.amount_paid) || 0;
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return {
       success: true,
       message: 'Payment recorded successfully',
@@ -613,6 +648,8 @@ export class InvoicesService {
 
     await this.recalcInvoicePaymentStatus(id);
     const updated = await this.invoices.findUnique({ where: { id }, include: invoiceInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Payment status recalculated', mapInvoice(updated!));
   }
 
@@ -631,6 +668,7 @@ export class InvoicesService {
       }
     }
 
+    await this.invalidateCache();
     return {
       success: true,
       message: `Recalculated payment status for ${updated} invoices`,
