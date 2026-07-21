@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import Stripe from 'stripe';
 import { Decimal } from '@prisma/client/runtime/library';
+import { CacheService } from '../redis/cache.service';
 
 const GST_RATE = 0.10;
 const SURCHARGE_RATE = 0.02;
@@ -16,15 +17,29 @@ function toNum(value: any): number {
 export class PublicPaymentsService {
   private stripe: Stripe | null = null;
 
-  constructor(
-    private readonly config: ConfigService,
+  constructor(private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-  ) {
+    private readonly cache?: CacheService) {
     const secret = this.config.get<string>('STRIPE_SECRET_KEY');
     if (secret) {
       this.stripe = new Stripe(secret, { apiVersion: '2025-02-24.acacia' as any });
     }
   }
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('public-payments', ...parts) ?? `public-payments:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   getStatus() {
     return { stripe: { configured: !!this.stripe, status: this.stripe ? 'ready' : 'not configured' } };
@@ -60,6 +75,8 @@ export class PublicPaymentsService {
   }
 
   async createPaymentIntent(body: any) {
+    await this.invalidateCache();
+
     if (!this.stripe) throw new BadRequestException('Stripe is not configured');
     const { amount, currency = 'aud', items, customerInfo } = body || {};
     if (!amount && !items) throw new BadRequestException('Missing required payment information');
@@ -83,6 +100,8 @@ export class PublicPaymentsService {
   }
 
   async createCheckoutSession(body: any, ip?: string) {
+    await this.invalidateCache();
+
     if (!this.stripe) throw new BadRequestException('Stripe is not configured');
     const { currency = 'aud', items, customerInfo, payment_type = 'full', success_url, cancel_url } = body || {};
     if (!items || !customerInfo) throw new BadRequestException('Missing required payment information');
@@ -148,6 +167,8 @@ export class PublicPaymentsService {
   }
 
   async confirmPayment(body: any) {
+    await this.invalidateCache();
+
     if (!this.stripe) throw new BadRequestException('Stripe is not configured');
     const { paymentIntentId, sessionId } = body || {};
     if (!paymentIntentId && !sessionId) throw new BadRequestException('paymentIntentId or sessionId required');
@@ -198,18 +219,30 @@ export class PublicPaymentsService {
   }
 
   async getOrderBySession(sessionId: string) {
-    const order = await this.prisma.orders.findFirst({ where: { payment_transaction_id: sessionId }, include: { order_items: true } });
-    if (!order) throw new NotFoundException('Order not found');
-    return { order };
-  }
+    return this.cached(this.cacheKey('getOrderBySession', sessionId), async () => {
+
+      const order = await this.prisma.orders.findFirst({ where: { payment_transaction_id: sessionId }, include: { order_items: true } });
+      if (!order) throw new NotFoundException('Order not found');
+      return { order };
+
+
+    });
+}
 
   async getOrderById(id: number) {
-    const order = await this.prisma.orders.findUnique({ where: { id }, include: { order_items: true } });
-    if (!order) throw new NotFoundException('Order not found');
-    return { order };
-  }
+    return this.cached(this.cacheKey('getOrderById', id), async () => {
+
+      const order = await this.prisma.orders.findUnique({ where: { id }, include: { order_items: true } });
+      if (!order) throw new NotFoundException('Order not found');
+      return { order };
+
+
+    });
+}
 
   async handleStripeWebhook(payload: Buffer, signature: string) {
+    await this.invalidateCache();
+
     if (!this.stripe) throw new BadRequestException('Stripe is not configured');
     const secret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
     let event: Stripe.Event;

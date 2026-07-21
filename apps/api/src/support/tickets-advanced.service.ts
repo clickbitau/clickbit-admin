@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import * as http from 'http';
 import * as https from 'https';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 function toNum(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -22,7 +23,23 @@ function cleanIds(values: (number | null | undefined)[]): number[] {
 
 @Injectable()
 export class TicketsAdvancedService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly cache?: CacheService) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('tickets-advanced', ...parts) ?? `tickets-advanced:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private async ensureTicket(id: number) {
     const ticket = await this.prisma.tickets.findUnique({ where: { id, deleted_at: null } });
@@ -40,15 +57,22 @@ export class TicketsAdvancedService {
   // Watchers
   // -------------------------------------------------------------------------
   async getWatchers(ticketId: number) {
-    await this.ensureTicket(ticketId);
-    const rows = await this.prisma.ticket_watchers.findMany({
-      where: { ticket_id: ticketId },
-      include: { profiles: true },
+    return this.cached(this.cacheKey('getWatchers', ticketId), async () => {
+
+      await this.ensureTicket(ticketId);
+      const rows = await this.prisma.ticket_watchers.findMany({
+        where: { ticket_id: ticketId },
+        include: { profiles: true },
+      });
+      return { success: true, data: rows };
+
+
     });
-    return { success: true, data: rows };
-  }
+}
 
   async addWatcher(ticketId: number, body: any, userId: number) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const watcherUserId = body.user_id ? Number(body.user_id) : userId;
     const existing = await this.prisma.ticket_watchers.findUnique({
@@ -68,12 +92,16 @@ export class TicketsAdvancedService {
   }
 
   async removeWatcher(ticketId: number, watcherUserId: number) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     await this.prisma.ticket_watchers.deleteMany({ where: { ticket_id: ticketId, user_id: watcherUserId } });
     return { success: true, message: 'Watcher removed' };
   }
 
   async watch(ticketId: number, userId: number, body: any) {
+    await this.invalidateCache();
+
     return this.addWatcher(ticketId, { user_id: userId, ...body }, userId);
   }
 
@@ -81,15 +109,22 @@ export class TicketsAdvancedService {
   // Links
   // -------------------------------------------------------------------------
   async getLinks(ticketId: number) {
-    await this.ensureTicket(ticketId);
-    const rows = await this.prisma.ticket_links.findMany({
-      where: { OR: [{ source_ticket_id: ticketId }, { target_ticket_id: ticketId }] },
-      include: { tickets_ticket_links_source_ticket_idTotickets: true, tickets_ticket_links_target_ticket_idTotickets: true },
+    return this.cached(this.cacheKey('getLinks', ticketId), async () => {
+
+      await this.ensureTicket(ticketId);
+      const rows = await this.prisma.ticket_links.findMany({
+        where: { OR: [{ source_ticket_id: ticketId }, { target_ticket_id: ticketId }] },
+        include: { tickets_ticket_links_source_ticket_idTotickets: true, tickets_ticket_links_target_ticket_idTotickets: true },
+      });
+      return { success: true, data: rows };
+
+
     });
-    return { success: true, data: rows };
-  }
+}
 
   async addLink(ticketId: number, body: any, userId: number) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const targetId = Number(body.target_ticket_id);
     await this.ensureTicket(targetId);
@@ -106,6 +141,8 @@ export class TicketsAdvancedService {
   }
 
   async removeLink(ticketId: number, linkId: number) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const link = await this.prisma.ticket_links.findFirst({ where: { id: linkId, OR: [{ source_ticket_id: ticketId }, { target_ticket_id: ticketId }] } });
     if (!link) throw new NotFoundException('Link not found');
@@ -121,6 +158,8 @@ export class TicketsAdvancedService {
   // Audit log
   // -------------------------------------------------------------------------
   async auditLog(ticketId: number, query: any) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const { page, limit, skip } = this.paginate(query);
     const [rows, total] = await Promise.all([
@@ -143,11 +182,18 @@ export class TicketsAdvancedService {
   // SLA policies
   // -------------------------------------------------------------------------
   async listSlaPolicies() {
-    const rows = await this.prisma.ticket_sla_policies.findMany({ where: { is_active: true }, orderBy: { priority: 'desc' } });
-    return { success: true, data: rows };
-  }
+    return this.cached(this.cacheKey('listSlaPolicies'), async () => {
+
+      const rows = await this.prisma.ticket_sla_policies.findMany({ where: { is_active: true }, orderBy: { priority: 'desc' } });
+      return { success: true, data: rows };
+
+
+    });
+}
 
   async createSlaPolicy(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_sla_policies.create({
       data: {
         name: body.name,
@@ -174,6 +220,8 @@ export class TicketsAdvancedService {
   }
 
   async updateSlaPolicy(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_sla_policies.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('SLA policy not found');
     const data: any = {};
@@ -186,6 +234,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteSlaPolicy(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_sla_policies.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('SLA policy not found');
     await this.prisma.ticket_sla_policies.update({ where: { id }, data: { is_active: false } });
@@ -217,21 +267,26 @@ export class TicketsAdvancedService {
   }
 
   async slaStatus(ticketId: number) {
-    const ticket = await this.ensureTicket(ticketId);
-    const policy = ticket.sla_policy_id ? await this.prisma.ticket_sla_policies.findUnique({ where: { id: ticket.sla_policy_id } }) : null;
-    return {
-      success: true,
-      data: {
-        ticket_id: ticketId,
-        sla_policy_id: ticket.sla_policy_id,
-        first_response_due: ticket.sla_first_response_due,
-        first_response_breached: ticket.sla_first_response_breached,
-        resolution_due: ticket.sla_resolution_due,
-        resolution_breached: ticket.sla_resolution_breached,
-        policy,
-      },
-    };
-  }
+    return this.cached(this.cacheKey('slaStatus', ticketId), async () => {
+
+      const ticket = await this.ensureTicket(ticketId);
+      const policy = ticket.sla_policy_id ? await this.prisma.ticket_sla_policies.findUnique({ where: { id: ticket.sla_policy_id } }) : null;
+      return {
+        success: true,
+        data: {
+          ticket_id: ticketId,
+          sla_policy_id: ticket.sla_policy_id,
+          first_response_due: ticket.sla_first_response_due,
+          first_response_breached: ticket.sla_first_response_breached,
+          resolution_due: ticket.sla_resolution_due,
+          resolution_breached: ticket.sla_resolution_breached,
+          policy,
+        },
+      };
+
+
+    });
+}
 
   // -------------------------------------------------------------------------
   // Assignment rules
@@ -381,6 +436,8 @@ export class TicketsAdvancedService {
   }
 
   async processTicket(ticketId: number, triggerType = 'create') {
+    await this.invalidateCache();
+
     const ticket = await this.ensureTicket(ticketId);
     const rules = await this.prisma.ticket_assignment_rules.findMany({
       where: { is_active: true, trigger_on: { in: [triggerType, 'both'] } as any },
@@ -404,11 +461,18 @@ export class TicketsAdvancedService {
   }
 
   async listAssignmentRules() {
-    const rows = await this.prisma.ticket_assignment_rules.findMany({ orderBy: { priority: 'desc' } });
-    return { success: true, data: rows };
-  }
+    return this.cached(this.cacheKey('listAssignmentRules'), async () => {
+
+      const rows = await this.prisma.ticket_assignment_rules.findMany({ orderBy: { priority: 'desc' } });
+      return { success: true, data: rows };
+
+
+    });
+}
 
   async createAssignmentRule(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_assignment_rules.create({
       data: {
         name: body.name,
@@ -431,6 +495,8 @@ export class TicketsAdvancedService {
   }
 
   async updateAssignmentRule(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_assignment_rules.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Assignment rule not found');
     const data: any = {};
@@ -455,6 +521,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteAssignmentRule(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_assignment_rules.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Assignment rule not found');
     await this.prisma.ticket_assignment_rules.delete({ where: { id } });
@@ -462,6 +530,8 @@ export class TicketsAdvancedService {
   }
 
   async testAssignmentRule(body: any) {
+    await this.invalidateCache();
+
     const ticketId = Number(body.ticket_id);
     if (!ticketId) throw new BadRequestException('ticket_id is required');
     await this.ensureTicket(ticketId);
@@ -481,12 +551,19 @@ export class TicketsAdvancedService {
   // Webhooks
   // -------------------------------------------------------------------------
   async listWebhooks() {
-    const rows = await this.prisma.ticket_webhooks.findMany({ orderBy: { created_at: 'desc' } });
-    const masked = rows.map((wh) => ({ ...wh, secret: wh.secret ? '••••••••' : null }));
-    return { success: true, data: masked };
-  }
+    return this.cached(this.cacheKey('listWebhooks'), async () => {
+
+      const rows = await this.prisma.ticket_webhooks.findMany({ orderBy: { created_at: 'desc' } });
+      const masked = rows.map((wh) => ({ ...wh, secret: wh.secret ? '••••••••' : null }));
+      return { success: true, data: masked };
+
+
+    });
+}
 
   async createWebhook(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_webhooks.create({
       data: {
         name: body.name,
@@ -507,6 +584,8 @@ export class TicketsAdvancedService {
   }
 
   async updateWebhook(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_webhooks.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Webhook not found');
     const data: any = {};
@@ -517,6 +596,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteWebhook(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_webhooks.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Webhook not found');
     await this.prisma.ticket_webhooks.delete({ where: { id } });
@@ -524,6 +605,8 @@ export class TicketsAdvancedService {
   }
 
   async testWebhook(id: number) {
+    await this.invalidateCache();
+
     const webhook = await this.prisma.ticket_webhooks.findUnique({ where: { id } });
     if (!webhook) throw new NotFoundException('Webhook not found');
     if (!webhook.url) throw new BadRequestException('Webhook URL is missing');
@@ -651,18 +734,25 @@ export class TicketsAdvancedService {
   // Custom fields
   // -------------------------------------------------------------------------
   async listCustomFieldDefinitions(query: any) {
-    const { page, limit, skip } = this.paginate(query);
-    const where: any = { is_active: true };
-    if (query.show_in_list) where.show_in_list = true;
-    if (query.show_in_card) where.show_in_card = true;
-    const [rows, total] = await Promise.all([
-      this.prisma.ticket_custom_field_definitions.findMany({ where, orderBy: { display_order: 'asc' }, take: limit, skip }),
-      this.prisma.ticket_custom_field_definitions.count({ where }),
-    ]);
-    return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
-  }
+    return this.cached(this.cacheKey('listCustomFieldDefinitions', JSON.stringify(query)), async () => {
+
+      const { page, limit, skip } = this.paginate(query);
+      const where: any = { is_active: true };
+      if (query.show_in_list) where.show_in_list = true;
+      if (query.show_in_card) where.show_in_card = true;
+      const [rows, total] = await Promise.all([
+        this.prisma.ticket_custom_field_definitions.findMany({ where, orderBy: { display_order: 'asc' }, take: limit, skip }),
+        this.prisma.ticket_custom_field_definitions.count({ where }),
+      ]);
+      return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
+
+
+    });
+}
 
   async createCustomFieldDefinition(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_custom_field_definitions.create({
       data: {
         name: body.name,
@@ -688,6 +778,8 @@ export class TicketsAdvancedService {
   }
 
   async updateCustomFieldDefinition(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_custom_field_definitions.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Custom field not found');
     const data: any = {};
@@ -698,6 +790,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteCustomFieldDefinition(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_custom_field_definitions.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Custom field not found');
     await this.prisma.ticket_custom_field_definitions.update({ where: { id }, data: { is_active: false } });
@@ -705,12 +799,19 @@ export class TicketsAdvancedService {
   }
 
   async getTicketCustomFields(ticketId: number) {
-    await this.ensureTicket(ticketId);
-    const rows = await this.prisma.ticket_custom_field_values.findMany({ where: { ticket_id: ticketId }, include: { ticket_custom_field_definitions: true } });
-    return { success: true, data: rows };
-  }
+    return this.cached(this.cacheKey('getTicketCustomFields', ticketId), async () => {
+
+      await this.ensureTicket(ticketId);
+      const rows = await this.prisma.ticket_custom_field_values.findMany({ where: { ticket_id: ticketId }, include: { ticket_custom_field_definitions: true } });
+      return { success: true, data: rows };
+
+
+    });
+}
 
   async updateTicketCustomFields(ticketId: number, body: any) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const values = body.values || body.custom_fields || [];
     for (const item of values) {
@@ -744,17 +845,29 @@ export class TicketsAdvancedService {
   // Boards
   // -------------------------------------------------------------------------
   async listBoards() {
-    const rows = await this.prisma.ticket_boards.findMany({ where: { is_active: true }, orderBy: { created_at: 'desc' } });
-    return { success: true, data: rows };
-  }
+    return this.cached(this.cacheKey('listBoards'), async () => {
+
+      const rows = await this.prisma.ticket_boards.findMany({ where: { is_active: true }, orderBy: { created_at: 'desc' } });
+      return { success: true, data: rows };
+
+
+    });
+}
 
   async getBoard(id: number) {
-    const row = await this.prisma.ticket_boards.findUnique({ where: { id } });
-    if (!row) throw new NotFoundException('Board not found');
-    return { success: true, data: row };
-  }
+    return this.cached(this.cacheKey('getBoard', id), async () => {
+
+      const row = await this.prisma.ticket_boards.findUnique({ where: { id } });
+      if (!row) throw new NotFoundException('Board not found');
+      return { success: true, data: row };
+
+
+    });
+}
 
   async createBoard(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_boards.create({
       data: {
         name: body.name,
@@ -775,6 +888,8 @@ export class TicketsAdvancedService {
   }
 
   async updateBoard(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_boards.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Board not found');
     const data: any = {};
@@ -785,6 +900,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteBoard(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_boards.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Board not found');
     await this.prisma.ticket_boards.update({ where: { id }, data: { is_active: false } });
@@ -792,6 +909,8 @@ export class TicketsAdvancedService {
   }
 
   async updateBoardSettings(id: number, body: any) {
+    await this.invalidateCache();
+
     return this.updateBoard(id, { settings: body.settings });
   }
 
@@ -814,6 +933,8 @@ export class TicketsAdvancedService {
   }
 
   async moveTicket(body: any) {
+    await this.invalidateCache();
+
     const ticketId = Number(body.ticket_id);
     const status = body.status;
     const position = Number(body.position ?? 0);
@@ -829,16 +950,23 @@ export class TicketsAdvancedService {
   // Components
   // -------------------------------------------------------------------------
   async listComponents(query: any) {
-    const { page, limit, skip } = this.paginate(query);
-    const where: any = { is_active: true };
-    const [rows, total] = await Promise.all([
-      this.prisma.ticket_components.findMany({ where, orderBy: { display_order: 'asc' }, take: limit, skip }),
-      this.prisma.ticket_components.count({ where }),
-    ]);
-    return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
-  }
+    return this.cached(this.cacheKey('listComponents', JSON.stringify(query)), async () => {
+
+      const { page, limit, skip } = this.paginate(query);
+      const where: any = { is_active: true };
+      const [rows, total] = await Promise.all([
+        this.prisma.ticket_components.findMany({ where, orderBy: { display_order: 'asc' }, take: limit, skip }),
+        this.prisma.ticket_components.count({ where }),
+      ]);
+      return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
+
+
+    });
+}
 
   async createComponent(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_components.create({
       data: {
         name: body.name,
@@ -856,6 +984,8 @@ export class TicketsAdvancedService {
   }
 
   async updateComponent(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_components.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Component not found');
     const data: any = {};
@@ -866,6 +996,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteComponent(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_components.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Component not found');
     await this.prisma.ticket_components.update({ where: { id }, data: { is_active: false } });
@@ -873,15 +1005,22 @@ export class TicketsAdvancedService {
   }
 
   async getTicketComponents(ticketId: number) {
-    await this.ensureTicket(ticketId);
-    const rows = await this.prisma.ticket_component_assignments.findMany({
-      where: { ticket_id: ticketId },
-      include: { ticket_components: true },
+    return this.cached(this.cacheKey('getTicketComponents', ticketId), async () => {
+
+      await this.ensureTicket(ticketId);
+      const rows = await this.prisma.ticket_component_assignments.findMany({
+        where: { ticket_id: ticketId },
+        include: { ticket_components: true },
+      });
+      return { success: true, data: rows.map((r) => r.ticket_components) };
+
+
     });
-    return { success: true, data: rows.map((r) => r.ticket_components) };
-  }
+}
 
   async updateTicketComponents(ticketId: number, body: any) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const componentIds = cleanIds((body.component_ids || body.components || []).map((x: any) => (typeof x === 'number' ? x : x.id)));
     await this.prisma.ticket_component_assignments.deleteMany({ where: { ticket_id: ticketId } });
@@ -897,27 +1036,39 @@ export class TicketsAdvancedService {
   // Time logs
   // -------------------------------------------------------------------------
   async getTimeLogs(ticketId: number, query: any) {
-    await this.ensureTicket(ticketId);
-    const { page, limit, skip } = this.paginate(query);
-    const where: any = { ticket_id: ticketId };
-    if (query.user_id) where.user_id = Number(query.user_id);
-    const [rows, total] = await Promise.all([
-      this.prisma.ticket_time_logs.findMany({ where, orderBy: { work_date: 'desc' }, take: limit, skip }),
-      this.prisma.ticket_time_logs.count({ where }),
-    ]);
-    return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
-  }
+    return this.cached(this.cacheKey('getTimeLogs', ticketId, JSON.stringify(query)), async () => {
+
+      await this.ensureTicket(ticketId);
+      const { page, limit, skip } = this.paginate(query);
+      const where: any = { ticket_id: ticketId };
+      if (query.user_id) where.user_id = Number(query.user_id);
+      const [rows, total] = await Promise.all([
+        this.prisma.ticket_time_logs.findMany({ where, orderBy: { work_date: 'desc' }, take: limit, skip }),
+        this.prisma.ticket_time_logs.count({ where }),
+      ]);
+      return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
+
+
+    });
+}
 
   async timeSummary(ticketId: number) {
-    await this.ensureTicket(ticketId);
-    const agg = await this.prisma.ticket_time_logs.aggregate({
-      where: { ticket_id: ticketId },
-      _sum: { time_spent_minutes: true, billing_rate: true },
+    return this.cached(this.cacheKey('timeSummary', ticketId), async () => {
+
+      await this.ensureTicket(ticketId);
+      const agg = await this.prisma.ticket_time_logs.aggregate({
+        where: { ticket_id: ticketId },
+        _sum: { time_spent_minutes: true, billing_rate: true },
+      });
+      return { success: true, data: { total_minutes: toNum0(agg._sum?.time_spent_minutes), billing_rate_sum: toNum0(agg._sum?.billing_rate) } };
+
+
     });
-    return { success: true, data: { total_minutes: toNum0(agg._sum?.time_spent_minutes), billing_rate_sum: toNum0(agg._sum?.billing_rate) } };
-  }
+}
 
   async createTimeLog(ticketId: number, body: any, userId: number) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const row = await this.prisma.ticket_time_logs.create({
       data: {
@@ -937,6 +1088,8 @@ export class TicketsAdvancedService {
   }
 
   async updateTimeLog(ticketId: number, logId: number, body: any) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const existing = await this.prisma.ticket_time_logs.findFirst({ where: { id: logId, ticket_id: ticketId } });
     if (!existing) throw new NotFoundException('Time log not found');
@@ -948,6 +1101,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteTimeLog(ticketId: number, logId: number) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     const existing = await this.prisma.ticket_time_logs.findFirst({ where: { id: logId, ticket_id: ticketId } });
     if (!existing) throw new NotFoundException('Time log not found');
@@ -956,6 +1111,8 @@ export class TicketsAdvancedService {
   }
 
   async updateTimeEstimate(ticketId: number, body: any) {
+    await this.invalidateCache();
+
     await this.ensureTicket(ticketId);
     await this.prisma.tickets.update({
       where: { id: ticketId },
@@ -965,14 +1122,19 @@ export class TicketsAdvancedService {
   }
 
   async myTimeLogs(userId: number, query: any) {
-    const { page, limit, skip } = this.paginate(query);
-    const where: any = { user_id: userId };
-    const [rows, total] = await Promise.all([
-      this.prisma.ticket_time_logs.findMany({ where, orderBy: { work_date: 'desc' }, take: limit, skip, include: { tickets: true } }),
-      this.prisma.ticket_time_logs.count({ where }),
-    ]);
-    return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
-  }
+    return this.cached(this.cacheKey('myTimeLogs', userId, JSON.stringify(query)), async () => {
+
+      const { page, limit, skip } = this.paginate(query);
+      const where: any = { user_id: userId };
+      const [rows, total] = await Promise.all([
+        this.prisma.ticket_time_logs.findMany({ where, orderBy: { work_date: 'desc' }, take: limit, skip, include: { tickets: true } }),
+        this.prisma.ticket_time_logs.count({ where }),
+      ]);
+      return { success: true, data: rows, pagination: { currentPage: page, totalPages: Math.ceil(total / limit) || 1, totalItems: total, itemsPerPage: limit } };
+
+
+    });
+}
 
   async timeReport(query: any) {
     const where: any = {};
@@ -986,17 +1148,29 @@ export class TicketsAdvancedService {
   // Versions
   // -------------------------------------------------------------------------
   async listVersions() {
-    const rows = await this.prisma.ticket_versions.findMany({ orderBy: { display_order: 'asc', created_at: 'desc' } });
-    return { success: true, data: rows };
-  }
+    return this.cached(this.cacheKey('listVersions'), async () => {
+
+      const rows = await this.prisma.ticket_versions.findMany({ orderBy: { display_order: 'asc', created_at: 'desc' } });
+      return { success: true, data: rows };
+
+
+    });
+}
 
   async getVersion(id: number) {
-    const row = await this.prisma.ticket_versions.findUnique({ where: { id } });
-    if (!row) throw new NotFoundException('Version not found');
-    return { success: true, data: row };
-  }
+    return this.cached(this.cacheKey('getVersion', id), async () => {
+
+      const row = await this.prisma.ticket_versions.findUnique({ where: { id } });
+      if (!row) throw new NotFoundException('Version not found');
+      return { success: true, data: row };
+
+
+    });
+}
 
   async createVersion(body: any, userId: number) {
+    await this.invalidateCache();
+
     const row = await this.prisma.ticket_versions.create({
       data: {
         name: body.name,
@@ -1015,6 +1189,8 @@ export class TicketsAdvancedService {
   }
 
   async updateVersion(id: number, body: any) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_versions.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Version not found');
     const data: any = {};
@@ -1025,6 +1201,8 @@ export class TicketsAdvancedService {
   }
 
   async deleteVersion(id: number) {
+    await this.invalidateCache();
+
     const existing = await this.prisma.ticket_versions.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Version not found');
     await this.prisma.ticket_versions.delete({ where: { id } });
@@ -1055,12 +1233,19 @@ export class TicketsAdvancedService {
   // Subtasks
   // -------------------------------------------------------------------------
   async getSubtasks(ticketId: number) {
-    await this.ensureTicket(ticketId);
-    const rows = await this.prisma.tickets.findMany({ where: { parent_ticket_id: ticketId, deleted_at: null } });
-    return { success: true, data: rows };
-  }
+    return this.cached(this.cacheKey('getSubtasks', ticketId), async () => {
+
+      await this.ensureTicket(ticketId);
+      const rows = await this.prisma.tickets.findMany({ where: { parent_ticket_id: ticketId, deleted_at: null } });
+      return { success: true, data: rows };
+
+
+    });
+}
 
   async createSubtask(ticketId: number, body: any) {
+    await this.invalidateCache();
+
     const parent = await this.ensureTicket(ticketId);
     const row = await this.prisma.tickets.create({
       data: {

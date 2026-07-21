@@ -4,16 +4,16 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class AuthService {
   private adminClient: SupabaseClient | null = null;
   private publicClient: SupabaseClient | null = null;
 
-  constructor(
-    private readonly config: ConfigService,
+  constructor(private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-  ) {
+    private readonly cache?: CacheService) {
     const url = this.config.get<string>('SUPABASE_URL');
     const serviceKey = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
     const anonKey = this.config.get<string>('SUPABASE_ANON_KEY');
@@ -24,6 +24,21 @@ export class AuthService {
       this.publicClient = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
     }
   }
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('auth', ...parts) ?? `auth:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
 
   private ensureAdmin() {
     if (!this.adminClient) throw new InternalServerErrorException('Supabase Auth is not configured');
@@ -42,6 +57,8 @@ export class AuthService {
   }
 
   async register(dto: { email: string; password: string; first_name: string; last_name: string; phone?: string }) {
+    await this.invalidateCache();
+
     const { email, password, first_name, last_name, phone } = dto;
     if (!email || !password || !first_name || !last_name) {
       throw new BadRequestException('email, password, first_name, and last_name are required');
@@ -83,6 +100,8 @@ export class AuthService {
   }
 
   async login(dto: { email: string; password: string }) {
+    await this.invalidateCache();
+
     const { email, password } = dto;
     if (!email || !password) throw new BadRequestException('email and password are required');
     const publicClient = this.ensurePublic();
@@ -104,18 +123,27 @@ export class AuthService {
   }
 
   async logout(_user: any) {
+    await this.invalidateCache();
+
     const publicClient = this.ensurePublic();
     await publicClient.auth.signOut();
     return { success: true, message: 'Logged out successfully' };
   }
 
   async me(user: any) {
-    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
-    if (!profile) throw new BadRequestException('Profile not found');
-    return { success: true, data: { user: this.sanitizeProfile(profile) } };
-  }
+    return this.cached(this.cacheKey('me', user.id), async () => {
+
+      const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+      if (!profile) throw new BadRequestException('Profile not found');
+      return { success: true, data: { user: this.sanitizeProfile(profile) } };
+
+
+    });
+}
 
   async refresh(dto: { refreshToken: string }) {
+    await this.invalidateCache();
+
     if (!dto.refreshToken) throw new BadRequestException('refreshToken is required');
     const publicClient = this.ensurePublic();
     const { data, error } = await publicClient.auth.refreshSession({ refresh_token: dto.refreshToken });
@@ -155,6 +183,8 @@ export class AuthService {
   }
 
   async magicLink(dto: { email: string }) {
+    await this.invalidateCache();
+
     if (!dto.email) throw new BadRequestException('email is required');
     const publicClient = this.ensurePublic();
     const { error } = await publicClient.auth.signInWithOtp({ email: dto.email.trim().toLowerCase() });
@@ -163,6 +193,8 @@ export class AuthService {
   }
 
   async deleteAccount(user: any) {
+    await this.invalidateCache();
+
     const admin = this.ensureAdmin();
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (profile?.auth_uid) {
@@ -214,6 +246,8 @@ export class AuthService {
   }
 
   async checkTrust(user: any, dto: { token: string }) {
+    await this.invalidateCache();
+
     if (!dto.token) throw new BadRequestException('Trust token is required');
     await this.cleanExpiredTrustedDevices(user.id);
     const trusted = await this.prisma.trusted_devices.findFirst({
@@ -226,6 +260,8 @@ export class AuthService {
   }
 
   async trustedDevices(user: any) {
+    await this.invalidateCache();
+
     await this.cleanExpiredTrustedDevices(user.id);
     const devices = await this.prisma.trusted_devices.findMany({
       where: { user_id: user.id },
@@ -235,6 +271,8 @@ export class AuthService {
   }
 
   async removeTrustedDevice(user: any, id: string) {
+    await this.invalidateCache();
+
     const parsedId = Number(id);
     if (!parsedId) throw new BadRequestException('Invalid device id');
     const result = await this.prisma.trusted_devices.deleteMany({ where: { id: parsedId, user_id: user.id } });
@@ -321,21 +359,28 @@ export class AuthService {
   }
 
   async linkedAccounts(user: any) {
-    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
-    if (!profile) throw new NotFoundException('Profile not found');
-    const linked = (Array.isArray(profile.linked_providers) ? profile.linked_providers : []) as any[];
-    return {
-      success: true,
-      data: {
-        email: profile.email,
-        primary_provider: linked[0]?.provider || 'email',
-        linked_accounts: linked,
-        supabase_uid: profile.auth_uid ? `***${profile.auth_uid.slice(-8)}` : null,
-      },
-    };
-  }
+    return this.cached(this.cacheKey('linkedAccounts', user.id), async () => {
+
+      const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+      if (!profile) throw new NotFoundException('Profile not found');
+      const linked = (Array.isArray(profile.linked_providers) ? profile.linked_providers : []) as any[];
+      return {
+        success: true,
+        data: {
+          email: profile.email,
+          primary_provider: linked[0]?.provider || 'email',
+          linked_accounts: linked,
+          supabase_uid: profile.auth_uid ? `***${profile.auth_uid.slice(-8)}` : null,
+        },
+      };
+
+
+    });
+}
 
   async linkProvider(user: any, dto: { provider: string; provider_id: string; provider_email?: string }) {
+    await this.invalidateCache();
+
     const { provider, provider_id } = dto;
     if (!provider || !provider_id) throw new BadRequestException('provider and provider_id are required');
     const valid = ['google', 'facebook', 'apple', 'github'];
@@ -382,6 +427,8 @@ export class AuthService {
   }
 
   async socialLogin(dto: { access_token?: string; refresh_token?: string; provider?: string; provider_id?: string }) {
+    await this.invalidateCache();
+
     if (!dto.access_token) throw new BadRequestException('access_token is required');
     const publicClient = this.ensurePublic();
     const { data, error } = await publicClient.auth.getUser(dto.access_token);
@@ -400,6 +447,8 @@ export class AuthService {
   }
 
   async verifyEmail(dto: { token?: string; type?: string }) {
+    await this.invalidateCache();
+
     if (!dto.token) throw new BadRequestException('token is required');
     const publicClient = this.ensurePublic();
     const type = (dto.type as any) || 'email';
@@ -417,16 +466,21 @@ export class AuthService {
   }
 
   async listMfaFactors(user: any) {
-    if (!user?.auth_uid) return { success: true, data: { factors: [] } };
-    try {
-      const rows = await this.prisma.$queryRaw(Prisma.sql`
-        SELECT id, friendly_name, factor_type, status
-        FROM auth.mfa_factors
-        WHERE user_id = ${user.auth_uid}::uuid
-      `);
-      return { success: true, data: { factors: Array.isArray(rows) ? rows : [] } };
-    } catch (err: any) {
-      throw new InternalServerErrorException(err?.message || 'Failed to load MFA factors');
-    }
-  }
+    return this.cached(this.cacheKey('listMfaFactors', user.id), async () => {
+
+      if (!user?.auth_uid) return { success: true, data: { factors: [] } };
+      try {
+        const rows = await this.prisma.$queryRaw(Prisma.sql`
+          SELECT id, friendly_name, factor_type, status
+          FROM auth.mfa_factors
+          WHERE user_id = ${user.auth_uid}::uuid
+        `);
+        return { success: true, data: { factors: Array.isArray(rows) ? rows : [] } };
+      } catch (err: any) {
+        throw new InternalServerErrorException(err?.message || 'Failed to load MFA factors');
+      }
+
+
+    });
+}
 }

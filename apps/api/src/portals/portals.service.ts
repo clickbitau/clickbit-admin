@@ -35,6 +35,21 @@ export class PortalsService {
     private readonly cache?: CacheService,
   ) {}
 
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('portals', ...parts) ?? `portals:` + parts.filter((p) => p !== undefined && p !== null).join(':');
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
+
   private async resolveCustomer(user: UserLike) {
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     const email = user.email?.toLowerCase();
@@ -104,77 +119,82 @@ export class PortalsService {
   // Agent portal
   // -------------------------------------------------------------------------
   async agentDashboard(user: UserLike) {
-    const { agentContact, clients, contactIds, companyIds } = await this.resolveAgent(user);
-    const invoiceWhere = this.invoiceScope(contactIds, companyIds);
-    const projectWhere = this.projectScope(contactIds, companyIds);
+    return this.cached(this.cacheKey('agentDashboard', user.id), async () => {
 
-    const [invoiceStats, overdueInvoices, projectCount, ticketCount, companyCount] = await Promise.all([
-      this.prisma.invoices.aggregate({ where: invoiceWhere, _sum: { total_amount: true, amount_paid: true }, _count: true }),
-      this.prisma.invoices.findMany({
-        where: { ...invoiceWhere, due_date: { lt: new Date() } },
-        select: { total_amount: true, amount_paid: true },
-      }),
-      this.prisma.crm_projects.count({ where: projectWhere }),
-      this.prisma.tickets.count({ where: this.ticketScopeByEmails(clients.map((c) => c.email).filter(Boolean), contactIds) }),
-      this.prisma.companies.count({ where: { id: { in: companyIds }, deleted_at: null } }),
-    ]);
+      const { agentContact, clients, contactIds, companyIds } = await this.resolveAgent(user);
+      const invoiceWhere = this.invoiceScope(contactIds, companyIds);
+      const projectWhere = this.projectScope(contactIds, companyIds);
 
-    const total = toNum0(invoiceStats._sum?.total_amount);
-    const paid = toNum0(invoiceStats._sum?.amount_paid);
-    const outstanding = total - paid;
-    const overdueAmount = overdueInvoices.reduce(
-      (sum, inv) => (toNum0(inv.total_amount) > toNum0(inv.amount_paid) ? sum + toNum0(inv.total_amount) - toNum0(inv.amount_paid) : sum),
-      0,
-    );
-    const clientCount = clients.length;
-    const clientRevenue = total;
-    const commissionRate = toNum0(agentContact.commission_rate);
-    const commissionDue = agentContact.commission_type === 'percentage' ? (clientRevenue * commissionRate) / 100 : clientCount * commissionRate;
+      const [invoiceStats, overdueInvoices, projectCount, ticketCount, companyCount] = await Promise.all([
+        this.prisma.invoices.aggregate({ where: invoiceWhere, _sum: { total_amount: true, amount_paid: true }, _count: true }),
+        this.prisma.invoices.findMany({
+          where: { ...invoiceWhere, due_date: { lt: new Date() } },
+          select: { total_amount: true, amount_paid: true },
+        }),
+        this.prisma.crm_projects.count({ where: projectWhere }),
+        this.prisma.tickets.count({ where: this.ticketScopeByEmails(clients.map((c) => c.email).filter(Boolean), contactIds) }),
+        this.prisma.companies.count({ where: { id: { in: companyIds }, deleted_at: null } }),
+      ]);
 
-    const agentCompany = agentContact.company_id
-      ? await this.prisma.companies.findUnique({ where: { id: agentContact.company_id }, select: { name: true } })
-      : null;
+      const total = toNum0(invoiceStats._sum?.total_amount);
+      const paid = toNum0(invoiceStats._sum?.amount_paid);
+      const outstanding = total - paid;
+      const overdueAmount = overdueInvoices.reduce(
+        (sum, inv) => (toNum0(inv.total_amount) > toNum0(inv.amount_paid) ? sum + toNum0(inv.total_amount) - toNum0(inv.amount_paid) : sum),
+        0,
+      );
+      const clientCount = clients.length;
+      const clientRevenue = total;
+      const commissionRate = toNum0(agentContact.commission_rate);
+      const commissionDue = agentContact.commission_type === 'percentage' ? (clientRevenue * commissionRate) / 100 : clientCount * commissionRate;
 
-    const topClients = clients.slice(0, 8).map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      email: c.email,
-      phone: c.phone,
-      company: c.companies_contacts_company_idTocompanies?.name || null,
-      total_revenue: toNum0(c.total_revenue),
-      lifecycle_stage: c.lifecycle_stage,
-      created_at: c.created_at,
-      last_contacted_at: c.last_contacted_at,
-    }));
+      const agentCompany = agentContact.company_id
+        ? await this.prisma.companies.findUnique({ where: { id: agentContact.company_id }, select: { name: true } })
+        : null;
 
-    return {
-      success: true,
-      data: {
-        agent: {
-          id: agentContact.id,
-          name: agentContact.name,
-          email: agentContact.email,
-          company: agentCompany?.name || null,
-          commission_type: agentContact.commission_type,
-          commission_rate: commissionRate,
+      const topClients = clients.slice(0, 8).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        company: c.companies_contacts_company_idTocompanies?.name || null,
+        total_revenue: toNum0(c.total_revenue),
+        lifecycle_stage: c.lifecycle_stage,
+        created_at: c.created_at,
+        last_contacted_at: c.last_contacted_at,
+      }));
+
+      return {
+        success: true,
+        data: {
+          agent: {
+            id: agentContact.id,
+            name: agentContact.name,
+            email: agentContact.email,
+            company: agentCompany?.name || null,
+            commission_type: agentContact.commission_type,
+            commission_rate: commissionRate,
+          },
+          stats: {
+            total_clients: clientCount,
+            client_revenue: clientRevenue,
+            own_revenue: commissionDue,
+            total_invoices: toNum0(invoiceStats._count),
+            paid_amount: paid,
+            outstanding_amount: outstanding,
+            overdue_amount: overdueAmount,
+            active_projects: projectCount,
+            commission_due: commissionDue,
+            companies: companyCount,
+            open_tickets: ticketCount,
+          },
+          clients: topClients,
         },
-        stats: {
-          total_clients: clientCount,
-          client_revenue: clientRevenue,
-          own_revenue: commissionDue,
-          total_invoices: toNum0(invoiceStats._count),
-          paid_amount: paid,
-          outstanding_amount: outstanding,
-          overdue_amount: overdueAmount,
-          active_projects: projectCount,
-          commission_due: commissionDue,
-          companies: companyCount,
-          open_tickets: ticketCount,
-        },
-        clients: topClients,
-      },
-    };
-  }
+      };
+
+
+    });
+}
 
   async agentClients(user: UserLike) {
     const { agentContact, clients } = await this.resolveAgent(user);
@@ -217,13 +237,18 @@ export class PortalsService {
   }
 
   async agentProjectDetail(user: UserLike, id: number) {
-    const { contactIds, companyIds } = await this.resolveAgent(user);
-    const project = await this.prisma.crm_projects.findFirst({
-      where: { id, ...this.projectScope(contactIds, companyIds) },
+    return this.cached(this.cacheKey('agentProjectDetail', user.id, id), async () => {
+
+      const { contactIds, companyIds } = await this.resolveAgent(user);
+      const project = await this.prisma.crm_projects.findFirst({
+        where: { id, ...this.projectScope(contactIds, companyIds) },
+      });
+      if (!project) throw new NotFoundException('Project not found');
+      return { success: true, data: project };
+
+
     });
-    if (!project) throw new NotFoundException('Project not found');
-    return { success: true, data: project };
-  }
+}
 
   async agentCompanies(user: UserLike) {
     const { companyIds } = await this.resolveAgent(user);
@@ -235,6 +260,8 @@ export class PortalsService {
   }
 
   async agentAssignContactToCompany(user: UserLike, companyId: number, contactId: number) {
+    await this.invalidateCache();
+
     const { contactIds } = await this.resolveAgent(user);
     const contact = await this.prisma.contacts.findFirst({ where: { id: contactId, agent_id: { in: contactIds }, deleted_at: null } });
     if (!contact) throw new NotFoundException('Contact not found');
@@ -243,6 +270,8 @@ export class PortalsService {
   }
 
   async agentCreateCompanyUser(user: UserLike, companyId: number, body: any) {
+    await this.invalidateCache();
+
     const { agentContact, companyIds } = await this.resolveAgent(user);
     if (!companyIds.includes(companyId)) throw new ForbiddenException('Company not assigned to this agent');
 
@@ -304,6 +333,8 @@ export class PortalsService {
   }
 
   async agentCreateTicket(user: UserLike, body: any) {
+    await this.invalidateCache();
+
     const { agentContact: _agentContact, contactIds } = await this.resolveAgent(user);
     const contactId = Number(body.contact_id);
     if (!contactIds.includes(contactId)) throw new ForbiddenException('Invalid contact');
@@ -324,18 +355,25 @@ export class PortalsService {
   }
 
   async agentTicketDetail(user: UserLike, id: number) {
-    const { clients, contactIds } = await this.resolveAgent(user);
-    const emails = clients.map((c) => c.email).filter(Boolean);
-    const where = this.ticketScopeByEmails(emails, contactIds);
-    const ticket = await this.prisma.tickets.findFirst({
-      where: { id, ...where },
-      include: { ticket_messages: true },
+    return this.cached(this.cacheKey('agentTicketDetail', user.id, id), async () => {
+
+      const { clients, contactIds } = await this.resolveAgent(user);
+      const emails = clients.map((c) => c.email).filter(Boolean);
+      const where = this.ticketScopeByEmails(emails, contactIds);
+      const ticket = await this.prisma.tickets.findFirst({
+        where: { id, ...where },
+        include: { ticket_messages: true },
+      });
+      if (!ticket) throw new NotFoundException('Ticket not found');
+      return { success: true, data: ticket };
+
+
     });
-    if (!ticket) throw new NotFoundException('Ticket not found');
-    return { success: true, data: ticket };
-  }
+}
 
   async agentTicketReply(user: UserLike, id: number, body: any) {
+    await this.invalidateCache();
+
     const { clients, contactIds } = await this.resolveAgent(user);
     const emails = clients.map((c) => c.email).filter(Boolean);
     const where = this.ticketScopeByEmails(emails, contactIds);
@@ -354,50 +392,60 @@ export class PortalsService {
   }
 
   async agentTicketQuota(user: UserLike) {
-    const { clients, contactIds } = await this.resolveAgent(user);
-    const emails = clients.map((c) => c.email).filter(Boolean);
-    const where = this.ticketScopeByEmails(emails, contactIds);
-    const count = await this.prisma.tickets.count({ where });
-    return { success: true, data: { used: count, limit: 100, remaining: Math.max(0, 100 - count) } };
-  }
+    return this.cached(this.cacheKey('agentTicketQuota', user.id), async () => {
+
+      const { clients, contactIds } = await this.resolveAgent(user);
+      const emails = clients.map((c) => c.email).filter(Boolean);
+      const where = this.ticketScopeByEmails(emails, contactIds);
+      const count = await this.prisma.tickets.count({ where });
+      return { success: true, data: { used: count, limit: 100, remaining: Math.max(0, 100 - count) } };
+
+
+    });
+}
 
   // -------------------------------------------------------------------------
   // Customer portal
   // -------------------------------------------------------------------------
   async customerDashboard(user: UserLike) {
-    const { contactIds, companyIds, profile, emails } = await this.resolveCustomer(user);
-    const invoiceWhere = this.invoiceScope(contactIds, companyIds);
-    const projectWhere = this.projectScope(contactIds, companyIds);
-    const ticketWhere = this.ticketScopeByEmails(emails, [user.id]);
-    const [invoiceStats, invoiceCount, projectCount, taskCount, documentCount, paymentCount, orderCount, ticketCount] = await Promise.all([
-      this.prisma.invoices.aggregate({ where: invoiceWhere, _sum: { total_amount: true, amount_paid: true } }),
-      this.prisma.invoices.count({ where: invoiceWhere }),
-      this.prisma.crm_projects.count({ where: projectWhere }),
-      this.prisma.project_tasks.count({ where: { customer_id: { in: contactIds }, deleted_at: null } as any }),
-      this.prisma.documents.count({ where: { OR: [{ related_entity_id: { in: companyIds }, related_entity_type: 'company' }, { related_entity_id: { in: contactIds }, related_entity_type: 'contact' }], status: 'active' } as any }),
-      this.prisma.payments.count({ where: { user_id: user.id, deleted_at: null } }),
-      this.prisma.orders.count({ where: { OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }], deleted_at: null } as any }),
-      this.prisma.tickets.count({ where: ticketWhere }),
-    ]);
-    const total = toNum0(invoiceStats._sum?.total_amount);
-    const paid = toNum0(invoiceStats._sum?.amount_paid);
-    return {
-      success: true,
-      data: {
-        name: profile ? `${profile.first_name} ${profile.last_name}` : null,
-        outstanding_balance: total - paid,
-        total_invoiced: total,
-        total_paid: paid,
-        invoice_count: invoiceCount,
-        project_count: projectCount,
-        task_count: taskCount,
-        document_count: documentCount,
-        payment_count: paymentCount,
-        order_count: orderCount,
-        ticket_count: ticketCount,
-      },
-    };
-  }
+    return this.cached(this.cacheKey('customerDashboard', user.id), async () => {
+
+      const { contactIds, companyIds, profile, emails } = await this.resolveCustomer(user);
+      const invoiceWhere = this.invoiceScope(contactIds, companyIds);
+      const projectWhere = this.projectScope(contactIds, companyIds);
+      const ticketWhere = this.ticketScopeByEmails(emails, [user.id]);
+      const [invoiceStats, invoiceCount, projectCount, taskCount, documentCount, paymentCount, orderCount, ticketCount] = await Promise.all([
+        this.prisma.invoices.aggregate({ where: invoiceWhere, _sum: { total_amount: true, amount_paid: true } }),
+        this.prisma.invoices.count({ where: invoiceWhere }),
+        this.prisma.crm_projects.count({ where: projectWhere }),
+        this.prisma.project_tasks.count({ where: { customer_id: { in: contactIds }, deleted_at: null } as any }),
+        this.prisma.documents.count({ where: { OR: [{ related_entity_id: { in: companyIds }, related_entity_type: 'company' }, { related_entity_id: { in: contactIds }, related_entity_type: 'contact' }], status: 'active' } as any }),
+        this.prisma.payments.count({ where: { user_id: user.id, deleted_at: null } }),
+        this.prisma.orders.count({ where: { OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }], deleted_at: null } as any }),
+        this.prisma.tickets.count({ where: ticketWhere }),
+      ]);
+      const total = toNum0(invoiceStats._sum?.total_amount);
+      const paid = toNum0(invoiceStats._sum?.amount_paid);
+      return {
+        success: true,
+        data: {
+          name: profile ? `${profile.first_name} ${profile.last_name}` : null,
+          outstanding_balance: total - paid,
+          total_invoiced: total,
+          total_paid: paid,
+          invoice_count: invoiceCount,
+          project_count: projectCount,
+          task_count: taskCount,
+          document_count: documentCount,
+          payment_count: paymentCount,
+          order_count: orderCount,
+          ticket_count: ticketCount,
+        },
+      };
+
+
+    });
+}
 
   async customerCompany(user: UserLike) {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
@@ -452,14 +500,19 @@ export class PortalsService {
   }
 
   async customerOrderDetail(user: UserLike, id: number) {
-    const { contactIds, companyIds } = await this.resolveCustomer(user);
-    const order = await this.prisma.orders.findFirst({
-      where: { id, deleted_at: null, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] } as any,
-      include: { order_items: true },
+    return this.cached(this.cacheKey('customerOrderDetail', user.id, id), async () => {
+
+      const { contactIds, companyIds } = await this.resolveCustomer(user);
+      const order = await this.prisma.orders.findFirst({
+        where: { id, deleted_at: null, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] } as any,
+        include: { order_items: true },
+      });
+      if (!order) throw new NotFoundException('Order not found');
+      return { success: true, data: order };
+
+
     });
-    if (!order) throw new NotFoundException('Order not found');
-    return { success: true, data: order };
-  }
+}
 
   async customerInvoices(user: UserLike, query: any) {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
@@ -486,11 +539,16 @@ export class PortalsService {
   }
 
   async customerInvoiceDetail(user: UserLike, id: number) {
-    const { contactIds, companyIds } = await this.resolveCustomer(user);
-    const invoice = await this.prisma.invoices.findFirst({ where: { id, ...this.invoiceScope(contactIds, companyIds) } });
-    if (!invoice) throw new NotFoundException('Invoice not found');
-    return { success: true, data: invoice };
-  }
+    return this.cached(this.cacheKey('customerInvoiceDetail', user.id, id), async () => {
+
+      const { contactIds, companyIds } = await this.resolveCustomer(user);
+      const invoice = await this.prisma.invoices.findFirst({ where: { id, ...this.invoiceScope(contactIds, companyIds) } });
+      if (!invoice) throw new NotFoundException('Invoice not found');
+      return { success: true, data: invoice };
+
+
+    });
+}
 
   async customerProjects(user: UserLike, query: any) {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
@@ -532,6 +590,8 @@ export class PortalsService {
   }
 
   async customerInvoicePdf(user: UserLike, id: number) {
+    await this.invalidateCache();
+
     const invoice = await this.customerInvoiceDetail(user, id);
     return this.publicInvoices.generatePdf(invoice.data.id);
   }
@@ -544,12 +604,16 @@ export class PortalsService {
   }
 
   async customerPayInvoice(user: UserLike, id: number, body: any) {
+    await this.invalidateCache();
+
     const invoice = await this.customerInvoiceDetail(user, id);
     const token = await this.ensureInvoiceToken(invoice.data);
     return this.publicInvoices.createCheckoutSession(invoice.data.package_code, body, token);
   }
 
   async customerVerifyPayment(user: UserLike, id: number, body: any) {
+    await this.invalidateCache();
+
     const invoice = await this.customerInvoiceDetail(user, id);
     const sessionId = body?.session_id || body?.sessionId;
     if (!sessionId) throw new BadRequestException('session_id is required');
@@ -573,16 +637,23 @@ export class PortalsService {
   }
 
   async customerDocumentDetail(user: UserLike, id: number) {
-    const { contactIds, companyIds } = await this.resolveCustomer(user);
-    const ors: any[] = [];
-    if (companyIds.length) ors.push({ related_entity_id: { in: companyIds }, related_entity_type: 'company' });
-    if (contactIds.length) ors.push({ related_entity_id: { in: contactIds }, related_entity_type: 'contact' });
-    const doc = await this.prisma.documents.findFirst({ where: { id, OR: ors, status: 'active' } as any });
-    if (!doc) throw new NotFoundException('Document not found');
-    return { success: true, data: doc };
-  }
+    return this.cached(this.cacheKey('customerDocumentDetail', user.id, id), async () => {
+
+      const { contactIds, companyIds } = await this.resolveCustomer(user);
+      const ors: any[] = [];
+      if (companyIds.length) ors.push({ related_entity_id: { in: companyIds }, related_entity_type: 'company' });
+      if (contactIds.length) ors.push({ related_entity_id: { in: contactIds }, related_entity_type: 'contact' });
+      const doc = await this.prisma.documents.findFirst({ where: { id, OR: ors, status: 'active' } as any });
+      if (!doc) throw new NotFoundException('Document not found');
+      return { success: true, data: doc };
+
+
+    });
+}
 
   async customerDocumentDownload(user: UserLike, id: number) {
+    await this.invalidateCache();
+
     const doc = await this.customerDocumentDetail(user, id);
     await this.prisma.documents.update({
       where: { id },
@@ -604,24 +675,31 @@ export class PortalsService {
   }
 
   async customerTaskDetail(user: UserLike, id: number) {
-    const { contactIds } = await this.resolveCustomer(user);
-    const task = await this.prisma.project_tasks.findFirst({
-      where: { id, deleted_at: null, customer_id: { in: contactIds } } as any,
-      include: {
-        crm_projects: { select: { id: true, name: true, project_number: true } },
-        profiles_project_tasks_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
-        task_comments: {
-          where: { is_internal: false },
-          orderBy: { created_at: 'asc' as const },
-          include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
+    return this.cached(this.cacheKey('customerTaskDetail', user.id, id), async () => {
+
+      const { contactIds } = await this.resolveCustomer(user);
+      const task = await this.prisma.project_tasks.findFirst({
+        where: { id, deleted_at: null, customer_id: { in: contactIds } } as any,
+        include: {
+          crm_projects: { select: { id: true, name: true, project_number: true } },
+          profiles_project_tasks_assigned_toToprofiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
+          task_comments: {
+            where: { is_internal: false },
+            orderBy: { created_at: 'asc' as const },
+            include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
+          },
         },
-      },
+      });
+      if (!task) throw new NotFoundException('Task not found');
+      return { success: true, data: task };
+
+
     });
-    if (!task) throw new NotFoundException('Task not found');
-    return { success: true, data: task };
-  }
+}
 
   async customerAddTaskComment(user: UserLike, id: number, body: any) {
+    await this.invalidateCache();
+
     await this.customerTaskDetail(user, id);
     const comment = await this.prisma.task_comments.create({
       data: {
@@ -657,78 +735,88 @@ export class PortalsService {
   }
 
   async employeeMe(user: UserLike) {
-    const employee = await this.resolveEmployee(user);
-    return { success: true, data: this.mapEmployee(employee) };
-  }
+    return this.cached(this.cacheKey('employeeMe', user.id), async () => {
+
+      const employee = await this.resolveEmployee(user);
+      return { success: true, data: this.mapEmployee(employee) };
+
+
+    });
+}
 
   async employeeDashboard(user: UserLike) {
-    const employee = await this.resolveEmployee(user);
-    const employeeId = employee.id;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    return this.cached(this.cacheKey('employeeDashboard', user.id), async () => {
 
-    const [
-      activeEntry,
-      upcomingShifts,
-      recentTimeOff,
-      recentPayslips,
-      openTasks,
-      contractCount,
-      pendingTimeOffCount,
-    ] = await Promise.all([
-      this.prisma.hr_time_entries.findFirst({
-        where: { employee_id: employeeId, clock_out_time: null, status: 'active' },
-        orderBy: { clock_in_time: 'desc' },
-      }),
-      this.prisma.hr_shifts.findMany({
-        where: { employee_id: employeeId, shift_date: { gte: todayStart }, status: { not: 'cancelled' } },
-        orderBy: { shift_date: 'asc' },
-        take: 5,
-      }),
-      this.prisma.hr_time_off_requests.findMany({
-        where: { employee_id: employeeId },
-        orderBy: { created_at: 'desc' },
-        take: 5,
-      }),
-      this.prisma.payslips.findMany({
-        where: { employee_id: employeeId },
-        orderBy: { payment_date: 'desc' },
-        take: 5,
-      }),
-      this.prisma.project_tasks.findMany({
-        where: { assigned_to: user.id, deleted_at: null, status: { not: 'completed' } } as any,
-        orderBy: { due_date: 'asc' },
-        take: 5,
-        include: { crm_projects: { select: { id: true, name: true, project_number: true } } },
-      }),
-      this.prisma.hr_contracts.count({ where: { employee_id: employeeId } }),
-      this.prisma.hr_time_off_requests.count({ where: { employee_id: employeeId, status: 'pending' } }),
-    ]);
+      const employee = await this.resolveEmployee(user);
+      const employeeId = employee.id;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
 
-    return {
-      success: true,
-      data: {
-        employee: this.mapEmployee(employee),
-        activeEntry: activeEntry ? this.mapTimeEntry(activeEntry) : null,
-        stats: {
-          openTasks: openTasks.length,
-          pendingTimeOff: pendingTimeOffCount,
-          upcomingShifts: upcomingShifts.length,
-          contracts: contractCount,
-          payslips: recentPayslips.length,
-          annualLeave: toNum0(employee.annual_leave_balance),
-          sickLeave: toNum0(employee.sick_leave_balance),
-          personalLeave: toNum0(employee.personal_leave_balance),
-        },
+      const [
+        activeEntry,
         upcomingShifts,
         recentTimeOff,
         recentPayslips,
         openTasks,
-      },
-    };
-  }
+        contractCount,
+        pendingTimeOffCount,
+      ] = await Promise.all([
+        this.prisma.hr_time_entries.findFirst({
+          where: { employee_id: employeeId, clock_out_time: null, status: 'active' },
+          orderBy: { clock_in_time: 'desc' },
+        }),
+        this.prisma.hr_shifts.findMany({
+          where: { employee_id: employeeId, shift_date: { gte: todayStart }, status: { not: 'cancelled' } },
+          orderBy: { shift_date: 'asc' },
+          take: 5,
+        }),
+        this.prisma.hr_time_off_requests.findMany({
+          where: { employee_id: employeeId },
+          orderBy: { created_at: 'desc' },
+          take: 5,
+        }),
+        this.prisma.payslips.findMany({
+          where: { employee_id: employeeId },
+          orderBy: { payment_date: 'desc' },
+          take: 5,
+        }),
+        this.prisma.project_tasks.findMany({
+          where: { assigned_to: user.id, deleted_at: null, status: { not: 'completed' } } as any,
+          orderBy: { due_date: 'asc' },
+          take: 5,
+          include: { crm_projects: { select: { id: true, name: true, project_number: true } } },
+        }),
+        this.prisma.hr_contracts.count({ where: { employee_id: employeeId } }),
+        this.prisma.hr_time_off_requests.count({ where: { employee_id: employeeId, status: 'pending' } }),
+      ]);
+
+      return {
+        success: true,
+        data: {
+          employee: this.mapEmployee(employee),
+          activeEntry: activeEntry ? this.mapTimeEntry(activeEntry) : null,
+          stats: {
+            openTasks: openTasks.length,
+            pendingTimeOff: pendingTimeOffCount,
+            upcomingShifts: upcomingShifts.length,
+            contracts: contractCount,
+            payslips: recentPayslips.length,
+            annualLeave: toNum0(employee.annual_leave_balance),
+            sickLeave: toNum0(employee.sick_leave_balance),
+            personalLeave: toNum0(employee.personal_leave_balance),
+          },
+          upcomingShifts,
+          recentTimeOff,
+          recentPayslips,
+          openTasks,
+        },
+      };
+
+
+    });
+}
 
   async employeeContracts(user: UserLike, query: any) {
     const employee = await this.resolveEmployee(user);
@@ -759,18 +847,23 @@ export class PortalsService {
   }
 
   async employeeContractDetail(user: UserLike, id: number) {
-    const employee = await this.resolveEmployee(user);
-    const contract = await this.prisma.hr_contracts.findFirst({ where: { id, employee_id: employee.id } });
-    if (!contract) throw new NotFoundException('Contract not found');
-    let manager: any = null;
-    if (contract.manager_id) {
-      manager = await this.prisma.employees.findUnique({
-        where: { id: contract.manager_id },
-        include: { profiles: { select: { first_name: true, last_name: true, email: true } } },
-      });
-    }
-    return { success: true, data: this.mapContract(contract as any, manager) };
-  }
+    return this.cached(this.cacheKey('employeeContractDetail', user.id, id), async () => {
+
+      const employee = await this.resolveEmployee(user);
+      const contract = await this.prisma.hr_contracts.findFirst({ where: { id, employee_id: employee.id } });
+      if (!contract) throw new NotFoundException('Contract not found');
+      let manager: any = null;
+      if (contract.manager_id) {
+        manager = await this.prisma.employees.findUnique({
+          where: { id: contract.manager_id },
+          include: { profiles: { select: { first_name: true, last_name: true, email: true } } },
+        });
+      }
+      return { success: true, data: this.mapContract(contract as any, manager) };
+
+
+    });
+}
 
   async employeePayslips(user: UserLike, query: any) {
     const employee = await this.resolveEmployee(user);
@@ -799,14 +892,19 @@ export class PortalsService {
   }
 
   async employeePayslipDetail(user: UserLike, id: number) {
-    const employee = await this.resolveEmployee(user);
-    const payslip = await this.prisma.payslips.findFirst({
-      where: { id, employee_id: employee.id },
-      include: { employees: { select: { employee_number: true } } },
+    return this.cached(this.cacheKey('employeePayslipDetail', user.id, id), async () => {
+
+      const employee = await this.resolveEmployee(user);
+      const payslip = await this.prisma.payslips.findFirst({
+        where: { id, employee_id: employee.id },
+        include: { employees: { select: { employee_number: true } } },
+      });
+      if (!payslip) throw new NotFoundException('Payslip not found');
+      return { success: true, data: this.mapPayslip(payslip as any) };
+
+
     });
-    if (!payslip) throw new NotFoundException('Payslip not found');
-    return { success: true, data: this.mapPayslip(payslip as any) };
-  }
+}
 
   async employeeTimeOff(user: UserLike, query: any) {
     const employee = await this.resolveEmployee(user);
@@ -866,15 +964,22 @@ export class PortalsService {
   }
 
   async employeeTaskDetail(user: UserLike, id: number) {
-    const task = await this.prisma.project_tasks.findFirst({
-      where: { id, assigned_to: user.id, deleted_at: null } as any,
-      include: { crm_projects: { select: { id: true, name: true, project_number: true } }, contacts: { select: { id: true, name: true, email: true } } },
+    return this.cached(this.cacheKey('employeeTaskDetail', user.id, id), async () => {
+
+      const task = await this.prisma.project_tasks.findFirst({
+        where: { id, assigned_to: user.id, deleted_at: null } as any,
+        include: { crm_projects: { select: { id: true, name: true, project_number: true } }, contacts: { select: { id: true, name: true, email: true } } },
+      });
+      if (!task) throw new NotFoundException('Task not found');
+      return { success: true, data: task };
+
+
     });
-    if (!task) throw new NotFoundException('Task not found');
-    return { success: true, data: task };
-  }
+}
 
   async employeeItSupportTicket(user: UserLike, body: any) {
+    await this.invalidateCache();
+
     const employee = await this.resolveEmployee(user);
     const ticket = await this.prisma.tickets.create({
       data: {

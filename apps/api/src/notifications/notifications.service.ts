@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
+import { CacheService } from '../redis/cache.service';
 
 export interface UserLike {
   id: number;
@@ -14,7 +15,22 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly cache?: CacheService,
   ) {}
+
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('notifications', ...parts) ?? `notifications:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
 
   async handleUptimeKumaWebhook(dto: Record<string, unknown>): Promise<Record<string, unknown>> {
     // Caller (controller) already verifies the webhook token.
@@ -86,6 +102,7 @@ export class NotificationsService {
       });
     }
 
+    await this.invalidateCache();
     return {
       success: true,
       message: 'Site status updated',
@@ -96,6 +113,7 @@ export class NotificationsService {
 
   async findSites(user: UserLike) {
     this.ensureAdminOrManager(user);
+    return this.cached(this.cacheKey('sites', user.id), async () => {
     const sites = await this.prisma.monitored_sites.findMany({
       where: { deleted_at: null },
       orderBy: [{ status: 'asc' }, { updated_at: 'desc' }],
@@ -111,6 +129,7 @@ export class NotificationsService {
       sites: formatted,
       stats: { total: sites.length, up: upCount, down: downCount, paused: pausedCount },
     };
+    });
   }
 
   async updateSiteStatus(id: number, user: UserLike, status: string) {
@@ -140,6 +159,7 @@ export class NotificationsService {
     }
 
     const updated = await this.prisma.monitored_sites.update({ where: { id }, data });
+    await this.invalidateCache();
     return { success: true, message: `Site status updated to ${status}`, site: this.formatSite(updated) };
   }
 
@@ -148,6 +168,7 @@ export class NotificationsService {
     const site = await this.prisma.monitored_sites.findUnique({ where: { id } });
     if (!site) throw new NotFoundException('Site not found');
     await this.prisma.monitored_sites.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
     return { success: true, message: `Site "${site.monitor_name}" removed from monitoring` };
   }
 
@@ -157,16 +178,19 @@ export class NotificationsService {
       where: { deleted_at: null },
       data: { deleted_at: new Date() },
     });
+    await this.invalidateCache();
     return { success: true, message: `Cleared ${count.count} monitored sites` };
   }
 
   async cleanupNotifications(user: UserLike) {
     this.ensureAdminOrManager(user);
     const count = await this.prisma.notifications.deleteMany({});
+    await this.invalidateCache();
     return { success: true, message: `Cleaned up ${count.count} old notifications`, deletedCount: count.count };
   }
 
   async findNotifications(user: UserLike, unreadOnly = false, limit = 20) {
+    return this.cached(this.cacheKey('list', user.id, String(unreadOnly), limit), async () => {
     const where = this.buildNotificationWhere(user, unreadOnly);
     const [data, unreadCount] = await Promise.all([
       this.prisma.notifications.findMany({
@@ -177,6 +201,7 @@ export class NotificationsService {
       this.prisma.notifications.count({ where: this.buildNotificationWhere(user, true) }),
     ]);
     return { success: true, data, unreadCount };
+    });
   }
 
   async markRead(id: number, user: UserLike) {
@@ -190,6 +215,7 @@ export class NotificationsService {
       where: { id },
       data: { is_read: true, read_at: new Date() },
     });
+    await this.invalidateCache();
     const unreadCount = await this.prisma.notifications.count({
       where: this.buildNotificationWhere(user, true),
     });
@@ -202,6 +228,7 @@ export class NotificationsService {
       where,
       data: { is_read: true, read_at: new Date() },
     });
+    await this.invalidateCache();
     return { success: true, message: 'All notifications marked as read', unreadCount: 0 };
   }
 
@@ -212,6 +239,7 @@ export class NotificationsService {
       throw new ForbiddenException('Access denied');
     }
     await this.prisma.notifications.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.invalidateCache();
     const unreadCount = await this.prisma.notifications.count({
       where: this.buildNotificationWhere(user, true),
     });
@@ -240,6 +268,7 @@ export class NotificationsService {
       await this.prisma.notifications.createMany({
         data: users.map((u) => ({ ...base, user_id: u.id })),
       });
+      await this.invalidateCache();
       return { success: true, message: `Notification sent to ${users.length} user(s)` };
     }
 
@@ -248,6 +277,7 @@ export class NotificationsService {
       await this.prisma.notifications.createMany({
         data: users.map((u) => ({ ...base, user_id: u.id })),
       });
+      await this.invalidateCache();
       return { success: true, message: `Notification sent to ${users.length} user(s) with role ${data.role}` };
     }
 
@@ -255,6 +285,7 @@ export class NotificationsService {
     await this.prisma.notifications.create({
       data: { ...base, user_id: targetUserId },
     });
+    await this.invalidateCache();
     return { success: true, message: 'Notification created' };
   }
 
@@ -271,10 +302,12 @@ export class NotificationsService {
         data: { push_tokens: currentTokens as any },
       });
     }
+    await this.invalidateCache();
     return { success: true, message: 'Push token saved successfully' };
   }
 
   async getPushTokenStatus(user: UserLike) {
+    return this.cached(this.cacheKey('push-tokens', user.id), async () => {
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException('Profile not found');
     const tokens = this.asArray<string>(profile.push_tokens);
@@ -285,6 +318,7 @@ export class NotificationsService {
         tokens: tokens.map((t) => `${String(t).slice(0, 18)}…`),
       },
     };
+    });
   }
 
   async testPushNotification(user: UserLike) {

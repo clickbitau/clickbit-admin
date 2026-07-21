@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DevinService } from './devin.service';
 import { GithubService } from './github.service';
 import { BugFixPipelineService } from './bug-fix-pipeline.service';
+import { CacheService } from '../redis/cache.service';
 
 const bugReportInclude = {
   profiles_bug_reports_reported_byToprofiles: { select: { id: true, first_name: true, last_name: true, email: true } },
@@ -24,9 +25,25 @@ export class BugReportsService {
     private readonly devin: DevinService,
     private readonly github: GithubService,
     private readonly pipeline: BugFixPipelineService,
+    private readonly cache?: CacheService,
   ) {}
 
+  private readonly CACHE_TTL_SECONDS = 60;
+
+  private cacheKey(...parts: (string | number | undefined)[]): string {
+    return this.cache?.key('bug-reports', ...parts) ?? `bug-reports:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
+  }
+
+  private async invalidateCache(): Promise<void> {
+    await this.cache?.delPrefix(this.cacheKey());
+  }
+
+  private async cached<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
+  }
+
   async findAll(query: Record<string, unknown>) {
+    return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const where: any = {};
     if (typeof query.status === 'string') where.status = query.status;
     if (typeof query.category === 'string') where.category = query.category;
@@ -57,9 +74,11 @@ export class BugReportsService {
     ]);
 
     return { success: true, data: rows.map(normalize), total: count, limit, offset };
+    });
   }
 
   async getStats() {
+    return this.cached(this.cacheKey('stats'), async () => {
     const statuses = ['pending', 'investigating', 'fixing', 'blocked', 'merged', 'deployed', 'failed'];
     const counts: Record<string, number> = {};
     for (const status of statuses) {
@@ -68,11 +87,14 @@ export class BugReportsService {
     const stats: any = { ...counts, total: Object.values(counts).reduce((a, b) => a + b, 0) };
     stats.active = stats.pending + stats.investigating + stats.fixing + stats.blocked;
     return { success: true, data: stats };
+    });
   }
 
   async getRepos() {
+    return this.cached(this.cacheKey('repos'), async () => {
     const repos = await this.pipeline.getAvailableRepos();
     return { success: true, data: repos };
+    });
   }
 
   async getConfig() {
@@ -94,6 +116,7 @@ export class BugReportsService {
   }
 
   async findOne(user: any, id: number) {
+    return this.cached(this.cacheKey('detail', user.id, id), async () => {
     const bugReport = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
     if (!bugReport) throw new NotFoundException('Bug report not found');
     const role = String(user.role).toLowerCase();
@@ -101,9 +124,11 @@ export class BugReportsService {
       throw new ForbiddenException('Not authorized to view this bug report');
     }
     return { success: true, data: { ...normalize(bugReport), pipelineStatus: this.pipeline.getPipelineStatus(id) } };
+    });
   }
 
   async prDetails(id: number) {
+    return this.cached(this.cacheKey('pr', id), async () => {
     const bugReport = await this.prisma.bug_reports.findUnique({ where: { id } });
     if (!bugReport) throw new NotFoundException('Bug report not found');
     if (!bugReport.pull_request_number) throw new BadRequestException('No pull request associated with this bug report');
@@ -128,6 +153,7 @@ export class BugReportsService {
         ...prDetails,
       },
     };
+    });
   }
 
   async create(user: any, dto: any) {
@@ -158,6 +184,8 @@ export class BugReportsService {
     }
 
     const updated = await this.prisma.bug_reports.findUnique({ where: { id: bugReport.id }, include: bugReportInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', user.id, bugReport.id));
     return { success: true, data: normalize(updated || bugReport), pipeline: pipelineResult };
   }
 
@@ -167,6 +195,8 @@ export class BugReportsService {
       data: { status: dto.status },
       include: bugReportInclude,
     });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(bugReport) };
   }
 
@@ -191,6 +221,8 @@ export class BugReportsService {
       });
     }
 
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(bugReport) };
   }
 
@@ -205,6 +237,8 @@ export class BugReportsService {
     const previousStatus = bugReport.status;
     const result = await this.pipeline.syncBugReport(id);
     const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return {
       success: true,
       message: result ? `Status synced: ${previousStatus} → ${updated?.status}` : 'No changes',
@@ -227,6 +261,8 @@ export class BugReportsService {
     });
 
     const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(updated || bugReport), pipeline: pipelineResult };
   }
 
@@ -237,6 +273,8 @@ export class BugReportsService {
 
     const result = await this.pipeline.approveAndMerge(id, userId);
     const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, data: normalize(updated || bugReport), result };
   }
 
@@ -249,12 +287,15 @@ export class BugReportsService {
 
     const result = await this.pipeline.approveAndMerge(id, userId);
     const updated = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
     return { success: true, message: `PR #${bugReport.pull_request_number} merge attempted`, data: normalize(updated || bugReport), result };
   }
 
   async cancel(id: number) {
     await this.pipeline.cancelPipeline(id);
     const bugReport = await this.prisma.bug_reports.findUnique({ where: { id }, include: bugReportInclude });
+    await this.invalidateCache();
     return { success: true, data: normalize(bugReport || {}), result: { cancelled: true } };
   }
 
@@ -265,6 +306,7 @@ export class BugReportsService {
       throw new BadRequestException('Cannot delete bug reports that are in progress or completed');
     }
     await this.prisma.bug_reports.delete({ where: { id } });
+    await this.invalidateCache();
     return { success: true, message: 'Bug report deleted' };
   }
 }
