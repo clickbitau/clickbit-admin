@@ -1,5 +1,5 @@
 'use client';
-import { Users as UsersIcon, Plus } from 'lucide-react';
+import { Users as UsersIcon, Plus, RefreshCw } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 
 import { useMemo, useState } from 'react';
@@ -9,10 +9,18 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { EmployeeTable } from '@/components/hr/EmployeeTable';
+import { EmployeeForm } from '@/components/hr/EmployeeForm';
 import { StatCards } from '@/components/design-system/StatCards';
+import { Pagination } from '@/components/design-system/Pagination';
 import { fetchEmployees, fetchHrStats, fetchDepartments } from '@/lib/api';
-import Link from 'next/link';
 
 const statusOptions = ['', 'active', 'inactive', 'on_leave', 'terminated'];
 const typeOptions = ['', 'full_time', 'part_time', 'contract', 'casual', 'intern'];
@@ -32,8 +40,9 @@ export default function AdminHrEmployeesPage() {
   const [sortBy, setSortBy] = useState('hire_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['employees', token, page, search, status, department, employmentType, sortBy, sortOrder],
     queryFn: async () => {
       if (!token) throw new Error('No token');
@@ -78,7 +87,16 @@ export default function AdminHrEmployeesPage() {
       title="Employees"
       icon={UsersIcon}
       description="Manage employee records and profiles."
-      actions={<Button asChild><Link href="/admin/hr/employees/new"><Plus className="mr-2 h-4 w-4" /> New Employee</Link></Button>}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh" aria-label="Refresh">
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" /> New Employee
+          </Button>
+        </div>
+      }
     >
       <StatCards cards={statCards.map((s) => ({ ...s, value: statsLoading ? '...' : s.value }))} />
 
@@ -138,19 +156,28 @@ export default function AdminHrEmployeesPage() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Page {pagination.page} of {pagination.pages} ({pagination.total} total)
-        </p>
-        <div className="space-x-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <Button variant="outline" size="sm" disabled={page >= pagination.pages} onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={pagination.page}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        onPageChange={setPage}
+      />
+
+      {token && (
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>New Employee</DialogTitle>
+              <DialogDescription>Create an employee record linked to a user.</DialogDescription>
+            </DialogHeader>
+            <EmployeeForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); refetch(); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </PageShell>
   );
 }
