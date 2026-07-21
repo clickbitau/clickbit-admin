@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
-import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
+import { generateContractPDF } from '../common/pdf/contract-pdf';
 
 interface UserLike {
   id: number;
@@ -295,48 +295,56 @@ export class HrContractsService {
       }
     }
 
-    const employee = contract.employees_hr_contracts_employee_idToemployees?.profiles;
-    const manager = contract.employees_hr_contracts_manager_idToemployees?.profiles;
+    const [employee, manager] = await Promise.all([
+      this.prisma.employees.findUnique({ where: { id: contract.employee_id }, include: { profiles: true } }),
+      contract.manager_id ? this.prisma.employees.findUnique({ where: { id: contract.manager_id }, include: { profiles: true } }) : null,
+    ]);
+
+    const companyInfo = await this.prisma.company_info.findFirst({ where: { id: 1 } });
+    const companyAddress = this.buildCompanyAddress(companyInfo);
+
+    const employeeObj: any = employee
+      ? {
+          ...employee,
+          user: employee.profiles || {},
+          address: employee.address,
+          city: employee.city,
+          state: employee.state,
+          postcode: employee.postcode,
+          country: employee.country,
+        }
+      : { user: {} };
+
+    const managerObj: any = manager
+      ? { ...manager, user: manager.profiles || {}, position: manager.position || 'Manager' }
+      : { user: {}, position: 'Manager' };
+
+    const contractData: any = {
+      ...contract,
+      start_date: this.toDateStr(contract.start_date),
+      end_date: contract.end_date ? this.toDateStr(contract.end_date) : null,
+      created_at: contract.created_at ? this.toDateStr(contract.created_at) : null,
+      employee_accepted_at: contract.employee_accepted_at ? this.toDateStr(contract.employee_accepted_at) : null,
+      employee: employeeObj,
+      contractManager: managerObj,
+      companyAddress,
+    };
+
     const filename = `contract-${contract.contract_number || id}.pdf`;
-    const buffer = await this.generateContractPdf(contract, employee, manager);
+    const buffer = await generateContractPDF(contractData);
     return { buffer, filename };
   }
 
-  private generateContractPdf(contract: any, employee: any, manager: any): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 48 });
-      const chunks: Buffer[] = [];
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+  private buildCompanyAddress(companyInfo: any): string {
+    if (!companyInfo) return '19 Drysdale Approach, Baldivis, WA 6171';
+    const parts = [companyInfo.address_line1, companyInfo.address_line2, companyInfo.city, companyInfo.state, companyInfo.postcode, companyInfo.country].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : '19 Drysdale Approach, Baldivis, WA 6171';
+  }
 
-      doc.fontSize(20).text('Employment Contract', { align: 'center' });
-      doc.moveDown();
-      doc.fontSize(12).text(`Contract Number: ${contract.contract_number || contract.id}`);
-      doc.text(`Employee: ${employee?.first_name || ''} ${employee?.last_name || ''}`);
-      if (contract.position) doc.text(`Position: ${contract.position}`);
-      if (contract.department) doc.text(`Department: ${contract.department}`);
-      if (contract.employment_type) doc.text(`Employment Type: ${contract.employment_type}`);
-      if (contract.start_date) {
-        doc.text(`Start Date: ${new Date(contract.start_date).toISOString().split('T')[0]}`);
-      }
-      if (contract.end_date) {
-        doc.text(`End Date: ${new Date(contract.end_date).toISOString().split('T')[0]}`);
-      }
-      if (contract.pay_frequency) doc.text(`Pay Frequency: ${contract.pay_frequency}`);
-      if (contract.salary) doc.text(`Salary: $${Number(contract.salary).toLocaleString('en-AU')}`);
-      if (contract.hourly_rate) doc.text(`Hourly Rate: $${Number(contract.hourly_rate)}`);
-      if (manager) doc.text(`Manager: ${manager.first_name || ''} ${manager.last_name || ''}`);
-      doc.moveDown();
-      doc.fontSize(14).text('Terms');
-      doc.fontSize(11).text(contract.terms_summary || 'No terms provided.');
-      doc.moveDown();
-      if (contract.notes) {
-        doc.fontSize(14).text('Notes');
-        doc.fontSize(11).text(contract.notes);
-      }
-      doc.end();
-    });
+  private toDateStr(value: unknown): string | null {
+    if (!value) return null;
+    const d = value instanceof Date ? value : new Date(String(value));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
   }
 
   private async checkCOI(user: UserLike, targetEmployeeId: number): Promise<{ message: string } | null> {
