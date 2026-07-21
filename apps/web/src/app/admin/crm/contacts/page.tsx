@@ -13,9 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { DataTable } from '@/components/design-system/DataTable';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Pagination } from '@/components/design-system/Pagination';
+import { ContactForm } from '@/components/crm/ContactForm';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchContacts, fetchContactStats } from '@/lib/crm-api';
@@ -35,7 +43,6 @@ import {
   Mail,
   Phone,
 } from 'lucide-react';
-import Link from 'next/link';
 
 const STAGE_OPTIONS = [
   { value: 'subscriber', label: 'Subscriber' },
@@ -103,6 +110,7 @@ export default function ContactsPage() {
   const [priority, setPriority] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [createOpen, setCreateOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
 
   const queryParams = useMemo(() => {
@@ -169,8 +177,8 @@ export default function ContactsPage() {
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button asChild>
-            <Link href="/admin/crm/contacts/new"><Plus className="mr-1 h-4 w-4" /> New Contact</Link>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Contact
           </Button>
         </div>
       }
@@ -329,6 +337,22 @@ export default function ContactsPage() {
           totalItems={pagination.totalItems}
           onPageChange={setPage}
         />
+      )}
+
+      {token && (
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>New Contact</DialogTitle>
+              <DialogDescription>Add a new CRM contact without leaving the list.</DialogDescription>
+            </DialogHeader>
+            <ContactForm
+              token={token}
+              onSuccess={() => { setCreateOpen(false); refetch(); }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </PageShell>
   );
