@@ -55,6 +55,25 @@ function resolveExpiry(expiresIn?: string | number | null): Date | null {
   return d;
 }
 
+const TIER_DEFAULTS = {
+  FREE: { maxNodes: 1, maxServices: 5 },
+  PRO: { maxNodes: 5, maxServices: 50 },
+  ENTERPRISE: { maxNodes: 999, maxServices: 9999 },
+};
+
+function buildSuccessResponse(row: any, message: string) {
+  const tier = (row.tier || 'PRO').toUpperCase();
+  const defaults = (TIER_DEFAULTS as any)[tier] || TIER_DEFAULTS.PRO;
+  return {
+    valid: true,
+    tier,
+    maxNodes: row.max_nodes ?? defaults.maxNodes,
+    maxServices: row.max_services ?? defaults.maxServices,
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    message,
+  };
+}
+
 @Injectable()
 export class ClickdeployService {
   constructor(private readonly prisma: PrismaService,
@@ -90,7 +109,7 @@ export class ClickdeployService {
     const update: any = { instance_id: instanceId || row.instance_id, hostname: hostname || row.hostname, last_seen_at: new Date() };
     if (!row.activated_at) update.activated_at = new Date();
     await this.prisma.clickdeploy_codes.update({ where: { id: row.id }, data: update });
-    return { valid: true, message: 'Activation successful' };
+    return buildSuccessResponse(row, 'Activation successful');
   }
 
   async heartbeat({ code, instanceId, hostname }: { code?: string; instanceId?: string; hostname?: string }) {
@@ -105,7 +124,7 @@ export class ClickdeployService {
       where: { id: row.id },
       data: { instance_id: instanceId || row.instance_id, hostname: hostname || row.hostname, last_seen_at: new Date() },
     });
-    return { valid: true, message: 'Heartbeat successful' };
+    return buildSuccessResponse(row, 'Heartbeat successful');
   }
 
   async listCustomers() {
