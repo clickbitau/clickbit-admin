@@ -577,6 +577,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <NotificationBell />
             <ThemeToggle />
+            <Link href="/admin/settings/profile" className="p-2 text-muted-foreground hover:text-foreground">
+              <UserCircle className="h-6 w-6" />
+            </Link>
+            <button onClick={logout} className="p-2 text-destructive" aria-label="Logout">
+              <LogOut className="h-6 w-6" />
+            </button>
           </div>
         </header>
 
