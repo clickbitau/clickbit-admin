@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatCards } from '@/components/design-system/StatCards';
@@ -33,7 +32,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchReminders, fetchHrStats } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { Reminder } from '@/types/hr';
-import { Bell as BellIcon, Plus, Search } from 'lucide-react';
+import { Bell as BellIcon, Calendar, Plus, Search } from 'lucide-react';
 
 const statusOptions = [
   { value: '', label: 'All statuses' },
@@ -57,7 +56,6 @@ const sortOptions = [
 
 export default function AdminHrRemindersPage() {
   const { token } = useAuth();
-  const router = useRouter();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
@@ -136,37 +134,34 @@ export default function AdminHrRemindersPage() {
       {error ? (
         <div className="text-destructive text-sm">Failed to load reminders.</div>
       ) : (
-        <DataTable
-          headers={[
-            { key: 'title', label: 'Title' },
-            { key: 'trigger', label: 'Trigger' },
-            { key: 'date', label: 'Reminder date' },
-            { key: 'assignee', label: 'Assignee' },
-            { key: 'status', label: 'Status' },
-          ]}
-          data={reminders}
-          keyExtractor={(r) => r.id}
-          loading={isLoading}
-          onRowClick={(r) => router.push(`/admin/hr/reminders/${r.id}`)}
-          emptyText="No reminders found."
-          emptyDescription="Try adjusting your search or filters."
-          renderRow={(r: Reminder) => [
-            <Link key="title" href={`/admin/hr/reminders/${r.id}`} className="font-medium hover:underline">{r.title}</Link>,
-            <span key="trigger" className="capitalize">{r.trigger_type || 'regular'}</span>,
-            <span key="date">{formatDate(r.reminder_date)}</span>,
-            <div key="assignee" className="flex items-center gap-3">
-              {r.assignee ? (
-                <>
-                  <PersonAvatar name={`${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email} size="sm" />
-                  <span>{`${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email}</span>
-                </>
-              ) : (
-                <span>-</span>
-              )}
-            </div>,
-            <StatusBadge key="status" status={r.status || 'pending'} />,
-          ]}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {reminders.map((r: Reminder) => (
+            <Link key={r.id} href={`/admin/hr/reminders/${r.id}`} className="block group">
+              <Card className="nm-raised h-full hover:brightness-[0.97] dark:hover:brightness-110 transition-all">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-medium line-clamp-2 group-hover:underline">{r.title}</h3>
+                    <StatusBadge status={r.status || 'pending'} />
+                  </div>
+                  {r.description && <p className="text-sm text-muted-foreground line-clamp-3">{r.description}</p>}
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {formatDate(r.reminder_date)}</span>
+                    <span className="capitalize">{(r.trigger_type || 'regular').replace(/_/g, ' ')}</span>
+                  </div>
+                  {r.assignee && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <PersonAvatar name={`${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email} size="sm" />
+                      <span>{`${r.assignee.first_name || ''} ${r.assignee.last_name || ''}`.trim() || r.assignee.email}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+          {reminders.length === 0 && !isLoading && (
+            <div className="col-span-full text-center py-16 text-muted-foreground">No reminders found. Try adjusting filters.</div>
+          )}
+        </div>
       )}
 
       <Pagination currentPage={pagination.page} totalPages={pagination.pages} totalItems={pagination.total} onPageChange={setPage} />

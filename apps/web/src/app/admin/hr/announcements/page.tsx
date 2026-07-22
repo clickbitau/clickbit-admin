@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AnnouncementForm } from '@/components/hr/AnnouncementForm';
-import { DataTable } from '@/components/design-system/DataTable';
 import { Pagination } from '@/components/design-system/Pagination';
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
@@ -32,6 +32,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchAnnouncements, fetchHrStats } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { Announcement } from '@/types/hr';
+import { cn } from '@/lib/utils';
 import { Megaphone as MegaphoneIcon, Plus, Search } from 'lucide-react';
 
 const statusOptions = [
@@ -58,9 +59,22 @@ const sortOptions = [
   { value: 'priority', label: 'Priority' },
 ];
 
+function priorityBorder(priority?: string | null) {
+  switch (priority) {
+    case 'urgent': return 'border-l-red-500';
+    case 'high': return 'border-l-orange-500';
+    case 'low': return 'border-l-gray-400';
+    default: return 'border-l-blue-500';
+  }
+}
+
+function snippet(text?: string | null) {
+  if (!text) return '';
+  return text.replace(/<[^>]*>/g, '').slice(0, 160);
+}
+
 export default function AdminHrAnnouncementsPage() {
   const { token } = useAuth();
-  const router = useRouter();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
@@ -140,33 +154,30 @@ export default function AdminHrAnnouncementsPage() {
       {error ? (
         <div className="text-destructive text-sm">Failed to load announcements.</div>
       ) : (
-        <DataTable
-          headers={[
-            { key: 'title', label: 'Title' },
-            { key: 'type', label: 'Type' },
-            { key: 'priority', label: 'Priority' },
-            { key: 'status', label: 'Status' },
-            { key: 'publish', label: 'Publish' },
-            { key: 'expires', label: 'Expires' },
-          ]}
-          data={announcements}
-          keyExtractor={(a) => a.id}
-          loading={isLoading}
-          onRowClick={(a) => router.push(`/admin/hr/announcements/${a.id}`)}
-          emptyText="No announcements found."
-          emptyDescription="Try adjusting your search or filters."
-          renderRow={(a: Announcement) => [
-            <div key="title">
-              <Link href={`/admin/hr/announcements/${a.id}`} className="font-medium hover:underline">{a.title}</Link>
-              {a.is_pinned && <span className="ml-2 text-xs text-amber-500">(pinned)</span>}
-            </div>,
-            <span key="type" className="capitalize">{(a.type || 'general').replace(/_/g, ' ')}</span>,
-            <StatusBadge key="priority" status={a.priority || 'normal'} />,
-            <StatusBadge key="status" status={a.status || 'draft'} />,
-            <span key="publish">{formatDate(a.publish_at)}</span>,
-            <span key="expires">{formatDate(a.expires_at)}</span>,
-          ]}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {announcements.map((a: Announcement) => (
+            <Link key={a.id} href={`/admin/hr/announcements/${a.id}`} className="block group">
+              <Card className={cn('nm-raised h-full overflow-hidden border-l-4 hover:brightness-[0.97] dark:hover:brightness-110 transition-all', priorityBorder(a.priority))}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-medium line-clamp-2 group-hover:underline">{a.title}</h3>
+                    {a.is_pinned && <Badge variant="secondary" className="whitespace-nowrap">Pinned</Badge>}
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-3">{snippet(a.content)}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <StatusBadge status={a.status || 'draft'} />
+                    <span className="capitalize">{(a.type || 'general').replace(/_/g, ' ')}</span>
+                    <span>{formatDate(a.publish_at)}</span>
+                    {a.expires_at && <span>– {formatDate(a.expires_at)}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+          {announcements.length === 0 && !isLoading && (
+            <div className="col-span-full text-center py-16 text-muted-foreground">No announcements found. Try adjusting filters.</div>
+          )}
+        </div>
       )}
 
       <Pagination currentPage={pagination.page} totalPages={pagination.pages} totalItems={pagination.total} onPageChange={setPage} />

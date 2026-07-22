@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DataTable } from '@/components/design-system/DataTable';
+
 import { Pagination } from '@/components/design-system/Pagination';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatCards } from '@/components/design-system/StatCards';
@@ -33,7 +33,7 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchTimeOff, fetchHrStats } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { TimeOffRequest } from '@/types/hr';
-import { Calendar as CalendarIcon, Plus, Search } from 'lucide-react';
+import { Calendar as CalendarIcon, CalendarRange, Plus, Search } from 'lucide-react';
 
 const statusOptions = [
   { value: '', label: 'All statuses' },
@@ -64,7 +64,6 @@ const sortOptions = [
 
 export default function AdminHrTimeOffPage() {
   const { token } = useAuth();
-  const router = useRouter();
   const currentYear = new Date().getFullYear();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -170,33 +169,32 @@ export default function AdminHrTimeOffPage() {
       {error ? (
         <div className="text-destructive text-sm">Failed to load time off.</div>
       ) : (
-        <DataTable
-          headers={[
-            { key: 'employee', label: 'Employee' },
-            { key: 'type', label: 'Type' },
-            { key: 'from', label: 'From' },
-            { key: 'to', label: 'To' },
-            { key: 'days', label: 'Days' },
-            { key: 'status', label: 'Status' },
-          ]}
-          data={requests}
-          keyExtractor={(r) => r.id}
-          loading={isLoading}
-          onRowClick={(r) => router.push(`/admin/hr/time-off/${r.id}`)}
-          emptyText="No time-off requests found."
-          emptyDescription="Try adjusting filters or submit a new request."
-          renderRow={(r: TimeOffRequest) => [
-            <div key="employee" className="flex items-center gap-3">
-              <PersonAvatar name={employeeName(r)} />
-              <Link href={`/admin/hr/time-off/${r.id}`} className="font-medium hover:underline">{employeeName(r)}</Link>
-            </div>,
-            <span key="type" className="capitalize">{r.leave_type || '-'}</span>,
-            <span key="from">{formatDate(r.start_date)}</span>,
-            <span key="to">{formatDate(r.end_date)}</span>,
-            <span key="days">{r.total_days ?? '-'}</span>,
-            <StatusBadge key="status" status={r.status || 'pending'} />,
-          ]}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {requests.map((r: TimeOffRequest) => (
+            <Link key={r.id} href={`/admin/hr/time-off/${r.id}`} className="block group">
+              <Card className="nm-raised h-full hover:brightness-[0.97] dark:hover:brightness-110 transition-all">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <PersonAvatar name={employeeName(r)} size="sm" />
+                      <span className="font-medium truncate">{employeeName(r)}</span>
+                    </div>
+                    <StatusBadge status={r.status || 'pending'} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1"><CalendarRange className="h-4 w-4" /> {formatDate(r.start_date)} – {formatDate(r.end_date)}</span>
+                    <span className="capitalize">{(r.leave_type || '-').replace(/_/g, ' ')}</span>
+                    {r.total_days !== null && r.total_days !== undefined && <span>{r.total_days} day{r.total_days === 1 ? '' : 's'}</span>}
+                  </div>
+                  {r.reason && <p className="text-sm text-muted-foreground line-clamp-2">{r.reason}</p>}
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+          {requests.length === 0 && !isLoading && (
+            <div className="col-span-full text-center py-16 text-muted-foreground">No time-off requests found. Try adjusting filters.</div>
+          )}
+        </div>
       )}
 
       <Pagination currentPage={pagination.page} totalPages={pagination.pages} totalItems={pagination.total} onPageChange={setPage} />

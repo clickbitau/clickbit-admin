@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DataTable } from '@/components/design-system/DataTable';
+
 import { StatCards } from '@/components/design-system/StatCards';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PublicHolidayForm } from '@/components/hr/PublicHolidayForm';
@@ -30,13 +30,12 @@ import { useRealtimeRefresh } from '@/lib/realtime';
 import { fetchPublicHolidays, fetchHrStats } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { PublicHoliday } from '@/types/hr';
-import { Globe as GlobeIcon, Plus, Search } from 'lucide-react';
+import { Calendar, Globe as GlobeIcon, Plus, Search } from 'lucide-react';
 
 const locationOptions = ['All locations', 'Australia', 'Both', 'Global'];
 
 export default function AdminHrPublicHolidaysPage() {
   const { token } = useAuth();
-  const router = useRouter();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(String(currentYear));
   const [location, setLocation] = useState('All locations');
@@ -101,28 +100,27 @@ export default function AdminHrPublicHolidaysPage() {
       {error ? (
         <div className="text-destructive text-sm">Failed to load public holidays.</div>
       ) : (
-        <DataTable
-          headers={[
-            { key: 'name', label: 'Name' },
-            { key: 'date', label: 'Date' },
-            { key: 'location', label: 'Location' },
-            { key: 'recurring', label: 'Recurring' },
-            { key: 'year', label: 'Year' },
-          ]}
-          data={filtered}
-          keyExtractor={(h) => h.id}
-          loading={isLoading}
-          onRowClick={(h) => router.push(`/admin/hr/public-holidays/${h.id}`)}
-          emptyText="No public holidays found."
-          emptyDescription="Try adjusting year, location, or search."
-          renderRow={(h: PublicHoliday) => [
-            <Link key="name" href={`/admin/hr/public-holidays/${h.id}`} className="font-medium hover:underline">{h.name}</Link>,
-            <span key="date">{formatDate(h.holiday_date)}</span>,
-            <span key="location">{h.location || '-'}</span>,
-            <StatusBadge key="recurring" status={h.is_recurring ? 'yes' : 'no'} />,
-            <span key="year">{h.holiday_date ? new Date(h.holiday_date).getFullYear() : '-'}</span>,
-          ]}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((h: PublicHoliday) => (
+            <Link key={h.id} href={`/admin/hr/public-holidays/${h.id}`} className="block group">
+              <Card className="nm-raised h-full hover:brightness-[0.97] dark:hover:brightness-110 transition-all">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-medium line-clamp-2 group-hover:underline">{h.name}</h3>
+                    <StatusBadge status={h.is_recurring ? 'recurring' : 'one-time'} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {formatDate(h.holiday_date)}</span>
+                    {h.location && <span className="flex items-center gap-1"><GlobeIcon className="h-4 w-4" /> {h.location}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+          {filtered.length === 0 && !isLoading && (
+            <div className="col-span-full text-center py-16 text-muted-foreground">No public holidays found. Try adjusting filters.</div>
+          )}
+        </div>
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
