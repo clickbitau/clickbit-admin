@@ -2672,4 +2672,72 @@ export async function deleteTrustedDevice(token: string, id: number): Promise<{ 
   return (await api.delete(`/api/auth/trusted-devices/${id}`, { headers: authHeaders(token) })).data;
 }
 
+// ─── ClickDeploy ─────────────────────────────────────────────────────────────
+
+export interface ClickDeployCode {
+  id: number;
+  code: string;
+  tier: string;
+  maxNodes: number | null;
+  maxServices: number | null;
+  status: 'active' | 'activated' | 'revoked' | 'superseded';
+  instanceId: string | null;
+  hostname: string | null;
+  issuedAt: string | null;
+  activatedAt: string | null;
+  expiresAt: string | null;
+  lastSeenAt: string | null;
+}
+
+export interface ClickDeployCustomer {
+  id: number;
+  name: string;
+  email: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  codes: ClickDeployCode[];
+}
+
+export async function fetchClickDeployCustomers(token: string): Promise<{ customers: ClickDeployCustomer[] }> {
+  return (await api.get('/api/clickdeploy/admin/customers', { headers: authHeaders(token) })).data;
+}
+
+export async function createClickDeployCustomer(
+  token: string,
+  data: { name: string; email?: string; notes?: string },
+): Promise<{ customer: ClickDeployCustomer }> {
+  return (await api.post('/api/clickdeploy/admin/customers', data, { headers: authHeaders(token) })).data;
+}
+
+export async function updateClickDeployCustomer(
+  token: string,
+  id: number,
+  data: { name?: string; email?: string; notes?: string },
+): Promise<{ customer: ClickDeployCustomer }> {
+  return (await api.patch(`/api/clickdeploy/admin/customers/${id}`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function issueClickDeployCode(
+  token: string,
+  data: { customerId: number; tier?: string; expiresIn?: string },
+): Promise<{ code: ClickDeployCode }> {
+  return (await api.post('/api/clickdeploy/admin/codes', data, { headers: authHeaders(token) })).data;
+}
+
+export async function revealClickDeployCode(token: string, id: number): Promise<{ code: string }> {
+  return (await api.get(`/api/clickdeploy/admin/codes/${id}/reveal`, { headers: authHeaders(token) })).data;
+}
+
+export async function updateClickDeploySubscription(
+  token: string,
+  id: number,
+  data: { tier?: string; maxNodes?: number | null; maxServices?: number | null; expiresIn?: string },
+): Promise<{ code: ClickDeployCode }> {
+  return (await api.patch(`/api/clickdeploy/admin/codes/${id}/subscription`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function revokeClickDeployCode(token: string, id: number): Promise<{ code: ClickDeployCode }> {
+  return (await api.post(`/api/clickdeploy/admin/codes/${id}/revoke`, {}, { headers: authHeaders(token) })).data;
+}
+
 export default api;
