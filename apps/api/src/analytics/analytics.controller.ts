@@ -16,6 +16,12 @@ export class AnalyticsController {
     return this.analyticsService.track(req, dto as unknown as Record<string, unknown>);
   }
 
+  @Post('events')
+  @UseGuards(OptionalAuthGuard)
+  trackEvent(@Req() req: any, @Body() dto: TrackEventDto) {
+    return this.analyticsService.track(req, dto as unknown as Record<string, unknown>);
+  }
+
   @Get('dashboard')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('admin', 'manager')
