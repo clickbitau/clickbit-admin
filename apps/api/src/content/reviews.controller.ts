@@ -16,6 +16,18 @@ export class ReviewsController {
     return this.reviewsService.listPublic(query);
   }
 
+  @Get('approved')
+  @UseGuards(OptionalAuthGuard)
+  approved(@Query() query: Record<string, unknown>) {
+    return this.reviewsService.listPublic({ ...query, status: 'approved' });
+  }
+
+  @Get('featured')
+  @UseGuards(OptionalAuthGuard)
+  featured(@Query() query: Record<string, unknown>) {
+    return this.reviewsService.listPublic({ ...query, featured: 'true' });
+  }
+
   @Post()
   @UseGuards(OptionalAuthGuard)
   create(@Body() dto: CreateReviewDto) {

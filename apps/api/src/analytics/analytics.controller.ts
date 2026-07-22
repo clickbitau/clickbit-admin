@@ -4,7 +4,7 @@ import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AnalyticsService } from './analytics.service';
-import { TrackEventDto, AnalyticsQueryDto, ExportBigQueryDto, AudienceExportDto } from './dto/analytics.dto';
+import { AnalyticsQueryDto, ExportBigQueryDto, AudienceExportDto } from './dto/analytics.dto';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -12,8 +12,14 @@ export class AnalyticsController {
 
   @Post('track')
   @UseGuards(OptionalAuthGuard)
-  track(@Req() req: any, @Body() dto: TrackEventDto) {
-    return this.analyticsService.track(req, dto as unknown as Record<string, unknown>);
+  track(@Req() req: any, @Body() dto: any) {
+    return this.analyticsService.track(req, dto as Record<string, unknown>);
+  }
+
+  @Post('events')
+  @UseGuards(OptionalAuthGuard)
+  trackEvent(@Req() req: any, @Body() dto: any) {
+    return this.analyticsService.track(req, dto as Record<string, unknown>);
   }
 
   @Get('dashboard')
