@@ -17,12 +17,6 @@ import type {
 import type { Profile } from '@clickbit/shared';
 import { CacheService } from '../redis/cache.service';
 
-function getRegisterableDomain(hostname: string): string {
-  const parts = hostname.split('.');
-  if (parts.length <= 2 || !hostname.includes('.') || hostname === 'localhost') return hostname;
-  return parts.slice(-2).join('.');
-}
-
 function rpConfig(config: ConfigService, requestOrigin?: string) {
   const rpName = config.get<string>('WEBAUTHN_RP_NAME') || 'ClickBit';
   const defaultOrigin = (config.get<string>('WEBAUTHN_ORIGIN') || config.get<string>('FRONTEND_URL') || 'https://localhost').replace(/\/$/, '');
@@ -30,7 +24,7 @@ function rpConfig(config: ConfigService, requestOrigin?: string) {
   if (!rpID) {
     const originToUse = requestOrigin || defaultOrigin;
     try {
-      rpID = getRegisterableDomain(new URL(originToUse).hostname);
+      rpID = new URL(originToUse).hostname.replace(/^www\./, '');
     } catch {
       rpID = 'localhost';
     }
