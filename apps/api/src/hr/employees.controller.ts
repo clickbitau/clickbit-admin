@@ -9,10 +9,13 @@ import {
   Query,
   Req,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   ParseIntPipe,
   HttpStatus,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -66,6 +69,19 @@ export class EmployeesController {
   ) {
     setNoCache(res);
     return res.json(await this.employeesService.deleteDocument(employeeId, docId, req.user));
+  }
+
+  @Post(':employeeId/documents')
+  @UseInterceptors(FileInterceptor('document'))
+  async addDocument(
+    @Param('employeeId', ParseIntPipe) employeeId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { name?: string; description?: string; category?: string },
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+  ) {
+    setNoCache(res);
+    return res.json(await this.employeesService.addDocument(employeeId, file, body, req.user));
   }
 
   @Get(':id')

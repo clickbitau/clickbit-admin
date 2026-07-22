@@ -53,4 +53,10 @@ export class RemindersController {
     setNoCache(res);
     return res.json(await this.remindersService.complete(id, req.user));
   }
+
+  @Post(':id/send-email')
+  async sendEmail(@Param('id', ParseIntPipe) id: number, @Req() req: RequestWithUser, @Res() res: Response) {
+    setNoCache(res);
+    return res.json(await this.remindersService.sendEmail(id, req.user));
+  }
 }

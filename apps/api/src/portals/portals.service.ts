@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
 import { PublicInvoicesService } from '../finance/public-invoices.service';
+import Stripe from 'stripe';
 
 interface UserLike {
   id: number;
@@ -29,11 +31,19 @@ function cleanIds(values: (number | null | undefined)[]): number[] {
 
 @Injectable()
 export class PortalsService {
+  private stripe: Stripe | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly publicInvoices: PublicInvoicesService,
+    private readonly config: ConfigService,
     private readonly cache?: CacheService,
-  ) {}
+  ) {
+    const secret = this.config.get<string>('STRIPE_SECRET_KEY');
+    if (secret) {
+      this.stripe = new Stripe(secret, { apiVersion: '2025-02-24.acacia' as any });
+    }
+  }
 
   private readonly CACHE_TTL_SECONDS = 60;
 
@@ -711,6 +721,287 @@ export class PortalsService {
       include: { profiles: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
     });
     return { success: true, data: comment };
+  }
+
+  // -------------------------------------------------------------------------
+  // Customer addresses
+  // -------------------------------------------------------------------------
+
+  private parsePreferences(profile: any) {
+    try {
+      return JSON.parse(profile?.preferences || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  private async savePreferences(userId: number, preferences: Record<string, any>) {
+    await this.prisma.profiles.update({ where: { id: userId }, data: { preferences: JSON.stringify(preferences) } });
+  }
+
+  private normalizeAddress(body: any, existing: any = {}) {
+    const address = { ...existing };
+    for (const field of ['label', 'type', 'full_name', 'phone', 'line1', 'line2', 'city', 'state', 'postal_code', 'country', 'is_default']) {
+      if (body[field] !== undefined) address[field] = body[field];
+    }
+    if (!['billing', 'shipping', 'both'].includes(address.type)) address.type = 'both';
+    address.is_default = Boolean(address.is_default);
+    return address;
+  }
+
+  async customerAddresses(user: UserLike) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    const prefs = this.parsePreferences(profile);
+    return { addresses: Array.isArray(prefs.customer_addresses) ? prefs.customer_addresses : [] };
+  }
+
+  async addCustomerAddress(user: UserLike, body: any) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    const prefs = this.parsePreferences(profile);
+    const addresses = Array.isArray(prefs.customer_addresses) ? prefs.customer_addresses : [];
+    const address = this.normalizeAddress(body);
+    address.id = randomUUID();
+    if (address.is_default || addresses.length === 0) {
+      addresses.forEach((a: any) => { a.is_default = false; });
+      address.is_default = true;
+    }
+    addresses.push(address);
+    prefs.customer_addresses = addresses;
+    await this.savePreferences(user.id, prefs);
+    return { address };
+  }
+
+  async updateCustomerAddress(user: UserLike, id: string, body: any) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    const prefs = this.parsePreferences(profile);
+    const addresses = Array.isArray(prefs.customer_addresses) ? prefs.customer_addresses : [];
+    const index = addresses.findIndex((a: any) => a.id === id);
+    if (index === -1) throw new NotFoundException({ success: false, message: 'Address not found' });
+    const address = this.normalizeAddress(body, addresses[index]);
+    if (address.is_default) {
+      addresses.forEach((a: any, i: number) => { a.is_default = i === index; });
+    } else if (addresses[index].is_default && body.is_default === false) {
+      address.is_default = false;
+    }
+    addresses[index] = address;
+    if (!addresses.some((a: any) => a.is_default) && addresses.length > 0) addresses[0].is_default = true;
+    prefs.customer_addresses = addresses;
+    await this.savePreferences(user.id, prefs);
+    return { address };
+  }
+
+  async deleteCustomerAddress(user: UserLike, id: string) {
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    const prefs = this.parsePreferences(profile);
+    const addresses = Array.isArray(prefs.customer_addresses) ? prefs.customer_addresses : [];
+    const index = addresses.findIndex((a: any) => a.id === id);
+    if (index === -1) throw new NotFoundException({ success: false, message: 'Address not found' });
+    const wasDefault = addresses[index].is_default;
+    addresses.splice(index, 1);
+    if (wasDefault && addresses.length > 0) addresses[0].is_default = true;
+    prefs.customer_addresses = addresses;
+    await this.savePreferences(user.id, prefs);
+    return { success: true };
+  }
+
+  // -------------------------------------------------------------------------
+  // Customer payment methods (Stripe)
+  // -------------------------------------------------------------------------
+
+  private async ensureStripeCustomer(profile: any) {
+    if (!this.stripe) return null;
+    if (profile.stripe_customer_id) {
+      try {
+        await this.stripe.customers.retrieve(profile.stripe_customer_id);
+        return profile.stripe_customer_id;
+      } catch { /* fall through and create new */ }
+    }
+    const customer = await this.stripe.customers.create({
+      email: profile.email,
+      name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || undefined,
+    });
+    await this.prisma.profiles.update({ where: { id: profile.id }, data: { stripe_customer_id: customer.id } });
+    return customer.id;
+  }
+
+  private requireStripe() {
+    if (!this.stripe) throw new BadRequestException({ success: false, message: 'Payments are not configured' });
+  }
+
+  async customerPaymentMethods(user: UserLike) {
+    this.requireStripe();
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+    const customerId = await this.ensureStripeCustomer(profile);
+    if (!customerId) throw new BadRequestException({ success: false, message: 'Payments are not configured' });
+
+    const [paymentMethods, customer] = await Promise.all([
+      this.stripe!.paymentMethods.list({ customer: customerId, type: 'card' }),
+      this.stripe!.customers.retrieve(customerId),
+    ]);
+
+    return {
+      paymentMethods: paymentMethods.data.map((method: any) => ({
+        id: method.id,
+        brand: method.card?.brand || 'card',
+        last4: method.card?.last4 || '',
+        exp_month: method.card?.exp_month,
+        exp_year: method.card?.exp_year,
+      })),
+      defaultPaymentMethodId: (customer as any).deleted
+        ? null
+        : (customer as any).invoice_settings?.default_payment_method || null,
+    };
+  }
+
+  async createSetupSession(user: UserLike, origin?: string) {
+    this.requireStripe();
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+    const customerId = await this.ensureStripeCustomer(profile);
+    if (!customerId) throw new BadRequestException({ success: false, message: 'Payments are not configured' });
+
+    const frontendUrl = origin || this.config.get<string>('FRONTEND_URL') || 'https://clickbit.com.au';
+    const session = await this.stripe!.checkout.sessions.create({
+      mode: 'setup',
+      payment_method_types: ['card'],
+      customer: customerId,
+      success_url: `${frontendUrl}/payment-method-saved`,
+      cancel_url: `${frontendUrl}/payment-method-cancelled`,
+    });
+    return { url: session.url };
+  }
+
+  private async getOwnedPaymentMethod(user: UserLike, paymentMethodId: string) {
+    this.requireStripe();
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+    const customerId = await this.ensureStripeCustomer(profile);
+    if (!customerId) throw new BadRequestException({ success: false, message: 'Payments are not configured' });
+
+    const paymentMethod = await this.stripe!.paymentMethods.retrieve(paymentMethodId);
+    if ((paymentMethod as any).customer !== customerId) throw new NotFoundException({ success: false, message: 'Payment method not found' });
+    return { customerId, paymentMethod };
+  }
+
+  async deleteCustomerPaymentMethod(user: UserLike, paymentMethodId: string) {
+    const { paymentMethod } = await this.getOwnedPaymentMethod(user, paymentMethodId);
+    await this.stripe!.paymentMethods.detach(paymentMethod.id);
+    return { success: true };
+  }
+
+  async setDefaultPaymentMethod(user: UserLike, paymentMethodId: string) {
+    const { customerId } = await this.getOwnedPaymentMethod(user, paymentMethodId);
+    await this.stripe!.customers.update(customerId, {
+      invoice_settings: { default_payment_method: paymentMethodId } as any,
+    });
+    return { success: true, defaultPaymentMethodId: paymentMethodId };
+  }
+
+  // -------------------------------------------------------------------------
+  // Customer quotes
+  // -------------------------------------------------------------------------
+
+  async createQuote(user: UserLike, body: any) {
+    const { service_id, service_name, message, additional_details } = body;
+    if (!service_name) throw new BadRequestException({ success: false, message: 'Service name is required' });
+
+    const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
+    if (!profile) throw new NotFoundException('Profile not found');
+    const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email;
+
+    let contact = profile.contact_id
+      ? await this.prisma.contacts.findUnique({ where: { id: profile.contact_id, deleted_at: null } })
+      : null;
+    if (!contact) {
+      contact = await this.prisma.contacts.findFirst({
+        where: { email: { equals: profile.email, mode: 'insensitive' }, deleted_at: null },
+        orderBy: { id: 'asc' },
+      });
+    }
+
+    if (contact) {
+      const update: any = {};
+      if (!contact.user_id) update.user_id = user.id;
+      if (!contact.company_id && profile.company_id) update.company_id = profile.company_id;
+      if (Object.keys(update).length) {
+        await this.prisma.contacts.update({ where: { id: contact.id }, data: update });
+      }
+    } else {
+      contact = await this.prisma.contacts.create({
+        data: {
+          name,
+          email: profile.email,
+          subject: `Quote Request: ${service_name}`,
+          message: message || `Customer ${name} requested a quote for ${service_name}.`,
+          contact_type: 'sales',
+          priority: 'high',
+          status: 'new',
+          source: 'Mobile App Quote Request',
+          user_id: user.id,
+          company_id: profile.company_id || null,
+          lifecycle_stage: 'lead',
+          lead_status: 'new',
+          custom_fields: JSON.stringify({ service_id, service_name, additional_details, submitted_via: 'mobile_app' }),
+        } as any,
+      });
+    }
+
+    const pipeline = await this.prisma.crm_pipelines.findFirst({
+      where: { is_default: true, is_active: true },
+      orderBy: { id: 'asc' },
+    }) || await this.prisma.crm_pipelines.findFirst({ where: { is_active: true }, orderBy: { id: 'asc' } });
+
+    let lead = null;
+    if (pipeline) {
+      const firstStage = await this.prisma.crm_pipeline_stages.findFirst({
+        where: { pipeline_id: pipeline.id, is_won: false, is_lost: false, is_active: true },
+        orderBy: { position: 'asc' },
+      });
+      if (firstStage) {
+        const description = [
+          `Quote request for ${service_name}.`,
+          message ? `\n\n${message}` : '',
+          additional_details ? `\n\nAdditional details: ${additional_details}` : '',
+        ].join('');
+        lead = await this.prisma.crm_leads.create({
+          data: {
+            name,
+            email: profile.email,
+            description,
+            pipeline_id: pipeline.id,
+            stage_id: firstStage.id,
+            contact_id: contact.id,
+            company_id: profile.company_id || null,
+            lead_source: 'Mobile App',
+            status: 'open',
+            priority: 'high',
+            estimated_value: 0,
+          } as any,
+        });
+      }
+    }
+
+    // Notify admins
+    try {
+      const admins = await this.prisma.profiles.findMany({
+        where: { role: { in: ['admin', 'manager'] } },
+        select: { id: true },
+      });
+      const notifications = admins.map((admin) => ({
+        user_id: admin.id,
+        title: 'New Quote Request',
+        message: `${name} requested a quote for ${service_name}.`,
+        type: 'info',
+        source: 'crm',
+        metadata: JSON.stringify({ type: 'quote_request', lead_id: lead?.id, contact_id: contact.id }),
+      }));
+      if (notifications.length) {
+        await this.prisma.notifications.createMany({ data: notifications as any, skipDuplicates: true });
+      }
+    } catch { /* best-effort */ }
+
+    return { success: true, contact, lead };
   }
 
   private async resolveEmployee(user: UserLike) {

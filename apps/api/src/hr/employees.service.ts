@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { asJsonInput, buildLegacyDataEnvelope, buildLegacyListEnvelope, buildLegacyMessageEnvelope, parseNumber } from './hr-utils';
 import { CacheService } from '../redis/cache.service';
+import { StorageService } from '../storage/storage.service';
 
 const employeeInclude = {
   profiles: {
@@ -68,6 +69,7 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly storage?: StorageService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -597,6 +599,49 @@ export class EmployeesService {
     await this.prisma.employee_documents.delete({ where: { id: docId } });
     await this.invalidateCache();
     return buildLegacyMessageEnvelope('Document deleted');
+  }
+
+  async addDocument(
+    employeeId: number,
+    file: Express.Multer.File,
+    body: { name?: string; description?: string; category?: string },
+    user: Profile,
+  ) {
+    const employee = await this.prisma.employees.findUnique({ where: { id: employeeId, deleted_at: null } });
+    if (!employee) throw new NotFoundException({ success: false, message: 'Employee not found' });
+    if (!this.isAdminOrManager(user) && employee.user_id !== user.id) {
+      throw new ForbiddenException({ success: false, message: 'Not authorized to add documents' });
+    }
+    if (!file) throw new BadRequestException({ success: false, message: 'No file uploaded' });
+
+    let fileUrl: string;
+    if (this.storage?.isConfigured()) {
+      const upload = await this.storage.upload(file.buffer, 'documents', file.originalname, file.mimetype, `employee-${employeeId}`);
+      if (!upload.success) {
+        throw new BadRequestException({ success: false, message: upload.error || 'Failed to upload file' });
+      }
+      fileUrl = upload.url;
+    } else {
+      fileUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    }
+
+    const document = await this.prisma.employee_documents.create({
+      data: {
+        employee_id: employeeId,
+        name: body.name || file.originalname,
+        description: body.description || null,
+        file_url: fileUrl,
+        file_name: file.originalname,
+        file_size: file.size,
+        file_type: file.mimetype,
+        category: body.category || 'other',
+        uploaded_by: user.id,
+        status: 'active',
+      } as any,
+    });
+
+    await this.invalidateCache();
+    return buildLegacyDataEnvelope(document);
   }
 
   private buildEmployeeInput(dto: Record<string, unknown>): Record<string, unknown> {

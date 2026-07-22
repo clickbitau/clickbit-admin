@@ -23,6 +23,7 @@ import { TimeClockService } from './time-clock.service';
 import { TimesheetsService } from './timesheets.service';
 import { ShiftsService } from './shifts.service';
 import { SettingsModule } from '../settings/settings.module';
+import { EmailService } from '../common/email.service';
 
 @Module({
   imports: [AuthModule, StorageModule, SettingsModule],
@@ -39,6 +40,6 @@ import { SettingsModule } from '../settings/settings.module';
     TimesheetsController,
     ShiftsController,
   ],
-  providers: [EmployeesService, TimeOffService, AnnouncementsService, RemindersService, PublicHolidaysService, PayslipsService, KpiService, TimeClockService, TimesheetsService, ShiftsService],
+  providers: [EmployeesService, TimeOffService, AnnouncementsService, RemindersService, PublicHolidaysService, PayslipsService, KpiService, TimeClockService, TimesheetsService, ShiftsService, EmailService],
 })
 export class HrModule {}
