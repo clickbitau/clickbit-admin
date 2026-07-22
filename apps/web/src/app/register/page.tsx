@@ -14,7 +14,7 @@ function getDashboardPath(role?: string) {
   const r = (role || 'customer').toLowerCase();
   if (['admin', 'manager', 'employee'].includes(r)) return '/admin';
   if (r === 'agent') return '/agent/dashboard';
-  return '/customer/dashboard';
+  return '/login';
 }
 
 export default function RegisterPage() {

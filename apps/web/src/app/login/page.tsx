@@ -16,12 +16,13 @@ function getDashboardPath(role?: string) {
   if (['admin', 'manager'].includes(r)) return '/admin';
   if (r === 'agent') return '/agent/dashboard';
   if (r === 'employee') return '/employee/dashboard';
-  return '/customer/dashboard';
+  return '/login';
 }
 
 export default function LoginPage() {
-  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, cancelMfa, clearError, oauthSignIn, sendMagicLink, setToken } = useAuth();
+  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, cancelMfa, clearError, oauthSignIn, sendMagicLink, setToken, clearToken } = useAuth();
   const router = useRouter();
+  const [customerBlocked, setCustomerBlocked] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +37,12 @@ export default function LoginPage() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCustomerBlocked(new URLSearchParams(window.location.search).get('customer') === '1');
+    }
+  }, []);
+
+  useEffect(() => {
     if (mfaRequired && mfaFactors.length > 0 && !selectedFactorId) {
       setSelectedFactorId(mfaFactors[0].id);
     }
@@ -43,9 +50,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user && !loading && !mfaRequired) {
-      router.replace(getDashboardPath(user.role));
+      if (user.role === 'customer') {
+        clearToken();
+        router.replace('/login?customer=1');
+      } else {
+        router.replace(getDashboardPath(user.role));
+      }
     }
-  }, [user, loading, mfaRequired, router]);
+  }, [user, loading, mfaRequired, router, clearToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +149,11 @@ export default function LoginPage() {
         </div>
 
         <div className="nm-raised p-6 sm:p-8 rounded-3xl space-y-6">
+          {customerBlocked && (
+            <div className="rounded-xl bg-destructive/10 text-destructive text-sm p-3">
+              Customer access is not available here. Please use the customer portal.
+            </div>
+          )}
           {mfaRequired ? (
             <div className="space-y-6">
               <div className="text-center">
