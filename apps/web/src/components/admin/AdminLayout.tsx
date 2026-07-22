@@ -270,8 +270,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     const current = sections.find(
       (s) => s.links.some((l) => isActive(pathname || '', l.href)) || (s.href && isActive(pathname || '', s.href))
     );
-    if (current) setExpanded(current.id);
-  }, [pathname]);
+    if (current && current.id !== expanded) setExpanded(current.id);
+  }, [pathname, expanded]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

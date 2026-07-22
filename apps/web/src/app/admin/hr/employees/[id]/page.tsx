@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { fetchEmployee, updateEmployee, deleteEmployee } from '@/lib/api';
+import { fetchEmployee, updateEmployee, deleteEmployee, fetchDocumentSignedUrl } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime, formatLeaveHours } from '@/lib/format';
 import type { Employee } from '@/types/hr';
 import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase, FileClock, ClipboardList, GraduationCap, Plus, HandCoins, Target } from 'lucide-react';
@@ -320,7 +320,15 @@ export default function AdminEmployeeDetailPage() {
                     {(employee.documents || []).slice(0, 5).map((row: any) => (
                       <li key={row.id} className="flex items-center justify-between">
                         <span className="truncate max-w-[200px]">{row.document_name || row.title || `Document #${row.id}`}</span>
-                        {row.file_url && <Button variant="ghost" size="sm" className="h-6 px-2" asChild><a href={row.file_url} target="_blank" rel="noreferrer">View</a></Button>}
+                        <Button variant="ghost" size="sm" className="h-6 px-2" onClick={async () => {
+                          if (!token) return;
+                          try {
+                            const { url } = await fetchDocumentSignedUrl(token, row.id);
+                            window.open(url, '_blank', 'noopener,noreferrer');
+                          } catch {
+                            toast.error('Failed to open document');
+                          }
+                        }}>View</Button>
                       </li>
                     ))}
                   </ul>
