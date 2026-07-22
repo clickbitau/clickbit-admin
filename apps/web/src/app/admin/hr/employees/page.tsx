@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { toast } from 'sonner';
 import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +33,7 @@ import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { EmployeeForm } from '@/components/hr/EmployeeForm';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
-import { fetchEmployees, fetchHrStats, fetchDepartments } from '@/lib/api';
+import { fetchEmployees, fetchHrStats, fetchDepartments, deleteEmployee } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { Employee } from '@/types/hr';
 import { Users as UsersIcon, Plus, RefreshCw, Search, Building2, UserCircle, List } from 'lucide-react';
@@ -64,8 +65,9 @@ const sortOptions = [
 ];
 
 export default function AdminHrEmployeesPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
+  const canManage = user?.role === 'admin' || user?.role === 'manager';
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
@@ -75,7 +77,7 @@ export default function AdminHrEmployeesPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'department' | 'employment_type'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'department' | 'employment_type'>('employment_type');
 
   const isGrouped = viewMode === 'department' || viewMode === 'employment_type';
 
@@ -126,6 +128,12 @@ export default function AdminHrEmployeesPage() {
     ];
   }, [stats]);
 
+  const removeMutation = useMutation({
+    mutationFn: (id: number) => { if (!token) throw new Error('No token'); return deleteEmployee(token, id); },
+    onSuccess: () => { toast.success('Employee deleted'); refetch(); },
+    onError: () => toast.error('Failed to delete employee'),
+  });
+
   function employeeName(employee: Employee) {
     if (employee.user) {
       const full = `${employee.user.first_name || ''} ${employee.user.last_name || ''}`.trim();
@@ -173,6 +181,9 @@ export default function AdminHrEmployeesPage() {
           typeOptions={typeOptions}
           isLoading={isLoading}
           onRowClick={(e) => router.push(`/admin/hr/employees/${e.id}`)}
+          onView={(e) => router.push(`/admin/hr/employees/${e.id}`)}
+          onDelete={(e) => { if (window.confirm(`Delete ${employeeName(e)}?`)) removeMutation.mutate(e.id); }}
+          canManage={canManage}
         />
       )}
 
