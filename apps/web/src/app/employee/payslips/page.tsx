@@ -5,18 +5,26 @@ import Link from 'next/link';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
-import { DataTable } from '@/components/design-system/DataTable';
+import { StatCards } from '@/components/design-system/StatCards';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Pagination } from '@/components/design-system/Pagination';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fetchEmployeePayslips, fetchPayslipPdf } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { Receipt, Download, Wallet, ArrowUpRight } from 'lucide-react';
+import { Receipt, Download, ArrowUpRight, Search, Wallet, Calendar, CalendarRange } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Payslip } from '@/types/hr';
+
+const STATUS_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'paid', label: 'Paid' },
+  { key: 'draft', label: 'Draft' },
+  { key: 'sent', label: 'Sent' },
+];
 
 function getYears() {
   const current = new Date().getFullYear();
@@ -29,6 +37,8 @@ export default function EmployeePayslipsPage() {
   const { token } = useAuth();
   const [page, setPage] = useState(1);
   const [year, setYear] = useState<string>('all');
+  const [status, setStatus] = useState('all');
+  const [search, setSearch] = useState('');
   const limit = 25;
 
   const { data, isLoading } = useQuery({
@@ -71,97 +81,110 @@ export default function EmployeePayslipsPage() {
     };
   }, [latest]);
 
-  const summary = useMemo(() => {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = payslips;
+    if (status !== 'all') rows = rows.filter((p) => p.status?.toLowerCase() === status);
+    if (q) {
+      rows = rows.filter((p) =>
+        formatDate(p.pay_period_start).toLowerCase().includes(q) ||
+        formatDate(p.pay_period_end).toLowerCase().includes(q) ||
+        formatDate(p.payment_date).toLowerCase().includes(q)
+      );
+    }
+    return rows;
+  }, [payslips, status, search]);
+
+  const stats = useMemo(() => {
+    const paid = payslips.filter((p) => p.status?.toLowerCase() === 'paid');
     return {
-      total: payslips.reduce((sum, p) => sum + Number(p.gross_pay ?? 0), 0),
-      net: payslips.reduce((sum, p) => sum + Number(p.net_pay ?? 0), 0),
-      tax: payslips.reduce((sum, p) => sum + Number(p.tax_withheld ?? 0), 0),
-      count: payslips.length,
+      ytdGross: ytd.gross,
+      ytdTax: ytd.tax,
+      ytdSuper: ytd.super,
+      paidCount: paid.length,
     };
-  }, [payslips]);
+  }, [payslips, ytd]);
 
   return (
-    <PageShell title="My Payslips" icon={Receipt} description="Your payment history and year-to-date summary.">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">YTD Gross</p>
-            <p className="text-2xl font-bold mt-1">{formatCurrency(ytd.gross)}</p>
-          </CardContent>
-        </Card>
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">YTD Tax</p>
-            <p className="text-2xl font-bold mt-1">{formatCurrency(ytd.tax)}</p>
-          </CardContent>
-        </Card>
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">YTD Super</p>
-            <p className="text-2xl font-bold mt-1">{formatCurrency(ytd.super)}</p>
-          </CardContent>
-        </Card>
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payslips</p>
-            <p className="text-2xl font-bold mt-1">{summary.count}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="nm-raised">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Wallet className="h-4 w-4" /> Payslips
-            </CardTitle>
-            <Select value={year} onValueChange={(v) => { setYear(v); setPage(1); }}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All years</SelectItem>
-                {getYears().map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+    <PageShell
+      title="My Payslips"
+      icon={Receipt}
+      description="Your payment history and year-to-date summary."
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            {STATUS_TABS.map((s) => (
+              <Button
+                key={s.key}
+                size="sm"
+                variant={status === s.key ? 'default' : 'outline'}
+                onClick={() => { setStatus(s.key); setPage(1); }}
+              >
+                {s.label}
+              </Button>
+            ))}
           </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-            </div>
-          ) : (
-            <DataTable
-              headers={[
-                { key: 'period', label: 'Period' },
-                { key: 'payment', label: 'Payment Date' },
-                { key: 'gross', label: 'Gross' },
-                { key: 'tax', label: 'Tax' },
-                { key: 'super', label: 'Super' },
-                { key: 'net', label: 'Net' },
-                { key: 'status', label: 'Status' },
-                { key: 'actions', label: '', className: 'w-24' },
-              ]}
-              data={payslips}
-              keyExtractor={(p) => p.id}
-              loading={isLoading}
-              emptyText="No payslips found."
-              renderRow={(p: Payslip) => [
-                <Link key="period" href={`/employee/payslips/${p.id}`} className="hover:underline font-medium">
-                  {formatDate(p.pay_period_start)} - {formatDate(p.pay_period_end)}
-                </Link>,
-                <span key="payment">{formatDate(p.payment_date)}</span>,
-                <span key="gross">{formatCurrency(Number(p.gross_pay), p.currency)}</span>,
-                <span key="tax">{formatCurrency(Number(p.tax_withheld), p.currency)}</span>,
-                <span key="super">{formatCurrency(Number(p.superannuation), p.currency)}</span>,
-                <span key="net" className="font-medium">{formatCurrency(Number(p.net_pay), p.currency)}</span>,
-                <StatusBadge key="status" status={p.status} />,
-                <div key="actions" className="flex items-center justify-end gap-1">
+        </div>
+      }
+    >
+      <StatCards
+        cards={[
+          { label: 'YTD Gross', value: formatCurrency(stats.ytdGross), icon: Wallet, accent: 'primary' },
+          { label: 'YTD Tax', value: formatCurrency(stats.ytdTax), icon: Receipt, accent: 'warning' },
+          { label: 'YTD Super', value: formatCurrency(stats.ytdSuper), icon: Wallet, accent: 'secondary' },
+          { label: 'Paid', value: stats.paidCount, icon: Calendar, accent: 'success' },
+        ]}
+      />
+
+      <Card className="nm-raised p-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search payslips..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={year} onValueChange={(v) => { setYear(v); setPage(1); }}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All years</SelectItem>
+              {getYears().map((y) => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </Card>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="nm-raised p-8 text-center text-sm text-muted-foreground">
+          {search || status !== 'all' ? 'No payslips match your filters.' : 'No payslips found.'}
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((p: Payslip) => (
+            <Card key={p.id} className="nm-raised hover:shadow-md transition-all">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 p-4">
+                <div>
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CalendarRange className="h-4 w-4 text-primary" />
+                    {formatDate(p.pay_period_start)} – {formatDate(p.pay_period_end)}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Paid {formatDate(p.payment_date)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={p.status} />
                   <Button
                     size="icon"
                     variant="ghost"
@@ -177,39 +200,38 @@ export default function EmployeePayslipsPage() {
                       <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </Button>
-                </div>,
-              ]}
-            />
-          )}
-          {pagination && (
-            <Pagination
-              currentPage={pagination.currentPage}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.totalItems}
-              onPageChange={setPage}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      {payslips.length > 0 && (
-        <div className="nm-raised p-4 sm:p-5">
-          <h3 className="text-sm font-semibold mb-3">Period Summary</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Total Gross</p>
-              <p className="font-semibold">{formatCurrency(summary.total)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Total Tax</p>
-              <p className="font-semibold">{formatCurrency(summary.tax)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Total Net</p>
-              <p className="font-semibold">{formatCurrency(summary.net)}</p>
-            </div>
-          </div>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Gross</p>
+                  <p className="font-medium">{formatCurrency(Number(p.gross_pay), p.currency)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tax</p>
+                  <p className="font-medium">{formatCurrency(Number(p.tax_withheld), p.currency)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Super</p>
+                  <p className="font-medium">{formatCurrency(Number(p.superannuation), p.currency)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Net</p>
+                  <p className="font-semibold">{formatCurrency(Number(p.net_pay), p.currency)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
+      )}
+
+      {pagination && (
+        <Pagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          onPageChange={setPage}
+        />
       )}
     </PageShell>
   );

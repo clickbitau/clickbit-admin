@@ -51,6 +51,8 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder /app/apps/api/fonts ./apps/api/fonts
+ENV FONTS_DIR=/app/apps/api/fonts
 
 # Web artifacts (standalone layout preserves apps/web path)
 COPY --from=builder /app/apps/web/.next/standalone ./

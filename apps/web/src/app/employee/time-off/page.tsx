@@ -5,24 +5,26 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
-import { DataTable } from '@/components/design-system/DataTable';
-import { Pagination } from '@/components/design-system/Pagination';
-import { StatusBadge } from '@/components/design-system/StatusBadge';
-import { Button } from '@/components/ui/button';
+import { StatCards } from '@/components/design-system/StatCards';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Pagination } from '@/components/design-system/Pagination';
+import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { fetchEmployeeTimeOff, fetchEmployeeMe } from '@/lib/api';
 import { formatDate, formatLeaveHours } from '@/lib/format';
-import { Calendar, Plus, Plane, Clock, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Calendar, Plus, Plane, Search, Clock, CheckCircle2, XCircle, AlertCircle, CalendarRange } from 'lucide-react';
 import type { TimeOffRequest } from '@clickbit/shared';
 
 const STATUS_TABS = [
-  { key: '', label: 'All', icon: Calendar },
-  { key: 'pending', label: 'Pending', icon: Clock },
-  { key: 'approved', label: 'Approved', icon: CheckCircle2 },
-  { key: 'rejected', label: 'Rejected', icon: XCircle },
-  { key: 'cancelled', label: 'Cancelled', icon: AlertCircle },
+  { key: '', label: 'All' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'cancelled', label: 'Cancelled' },
 ];
 
 function getYears() {
@@ -37,6 +39,7 @@ export default function EmployeeTimeOffPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [year, setYear] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const limit = 25;
 
   const { data, isLoading } = useQuery({
@@ -64,64 +67,76 @@ export default function EmployeeTimeOffPage() {
   const pagination = data?.pagination;
   const employee = meData?.data;
 
-  const summary = useMemo(() => {
-    const all = requests;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return requests;
+    return requests.filter((r) =>
+      r.leave_type.toLowerCase().includes(q) ||
+      (r.reason?.toLowerCase() || '').includes(q) ||
+      formatDate(r.start_date).toLowerCase().includes(q) ||
+      formatDate(r.end_date).toLowerCase().includes(q) ||
+      (r.request_number?.toLowerCase() || '').includes(q)
+    );
+  }, [requests, search]);
+
+  const stats = useMemo(() => {
     return {
-      total: all.length,
-      pending: all.filter((r) => r.status === 'pending').length,
-      approved: all.filter((r) => r.status === 'approved').length,
-      rejected: all.filter((r) => r.status === 'rejected').length,
+      annual: employee?.annual_leave_balance ?? 0,
+      sick: employee?.sick_leave_balance ?? 0,
+      personal: employee?.personal_leave_balance ?? 0,
+      pending: requests.filter((r) => r.status === 'pending').length,
     };
-  }, [requests]);
+  }, [employee, requests]);
 
   return (
-    <PageShell title="My Time Off" icon={Plane} description="Request leave and track your balances.">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Annual Leave</p>
-            <p className="text-2xl font-bold mt-1">{formatLeaveHours(employee?.annual_leave_balance)}</p>
-          </CardContent>
-        </Card>
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sick Leave</p>
-            <p className="text-2xl font-bold mt-1">{formatLeaveHours(employee?.sick_leave_balance)}</p>
-          </CardContent>
-        </Card>
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Personal Leave</p>
-            <p className="text-2xl font-bold mt-1">{formatLeaveHours(employee?.personal_leave_balance)}</p>
-          </CardContent>
-        </Card>
-        <Card className="nm-raised">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Requests</p>
-            <p className="text-2xl font-bold mt-1">{summary.pending}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {STATUS_TABS.map((s) => {
-            const Icon = s.icon;
-            return (
+    <PageShell
+      title="My Time Off"
+      icon={Plane}
+      description="Request leave and track your balances."
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            {STATUS_TABS.map((s) => (
               <Button
                 key={s.key}
                 size="sm"
                 variant={status === s.key ? 'default' : 'outline'}
                 onClick={() => { setStatus(s.key); setPage(1); }}
               >
-                <Icon className="mr-1 h-4 w-4" /> {s.label}
+                {s.label}
               </Button>
-            );
-          })}
+            ))}
+          </div>
+          <Button asChild>
+            <Link href="/employee/time-off/new">
+              <Plus className="mr-1 h-4 w-4" /> New Request
+            </Link>
+          </Button>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+      }
+    >
+      <StatCards
+        cards={[
+          { label: 'Annual Leave', value: formatLeaveHours(stats.annual), icon: Calendar, accent: 'success' },
+          { label: 'Sick Leave', value: formatLeaveHours(stats.sick), icon: AlertCircle, accent: 'warning' },
+          { label: 'Personal Leave', value: formatLeaveHours(stats.personal), icon: Clock, accent: 'primary' },
+          { label: 'Pending', value: stats.pending, icon: CheckCircle2, accent: 'secondary' },
+        ]}
+      />
+
+      <Card className="nm-raised p-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search requests..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
           <Select value={year} onValueChange={(v) => { setYear(v); setPage(1); }}>
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
@@ -131,59 +146,75 @@ export default function EmployeeTimeOffPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button asChild>
-            <Link href="/employee/time-off/new">
-              <Plus className="mr-1 h-4 w-4" /> New Request
-            </Link>
-          </Button>
         </div>
-      </div>
-
-      <Card className="nm-raised">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Calendar className="h-4 w-4" /> Leave Requests
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading || loadingMe ? (
-            <div className="space-y-3">
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-            </div>
-          ) : (
-            <DataTable
-              headers={[
-                { key: 'type', label: 'Type' },
-                { key: 'dates', label: 'Dates' },
-                { key: 'days', label: 'Days' },
-                { key: 'status', label: 'Status' },
-                { key: 'reviewer', label: 'Reviewed By' },
-              ]}
-              data={requests}
-              keyExtractor={(r: TimeOffRequest) => r.id}
-              loading={isLoading}
-              emptyText="No time-off requests found."
-              renderRow={(r: TimeOffRequest) => [
-                <span key="type" className="capitalize">{r.leave_type?.replace(/_/g, ' ')}</span>,
-                <span key="dates">{formatDate(r.start_date)} - {formatDate(r.end_date)}</span>,
-                <span key="days">{r.total_days ?? '-'}</span>,
-                <StatusBadge key="status" status={r.status || undefined} />,
-                <span key="reviewer">{r.reviewer ? `${r.reviewer.first_name || ''} ${r.reviewer.last_name || ''}`.trim() || '-' : '-'}</span>,
-              ]}
-            />
-          )}
-          {pagination && (
-            <Pagination
-              currentPage={pagination.currentPage}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.totalItems}
-              onPageChange={setPage}
-            />
-          )}
-        </CardContent>
       </Card>
+
+      {isLoading || loadingMe ? (
+        <div className="space-y-3">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="nm-raised p-8 text-center text-sm text-muted-foreground">
+          {search ? 'No requests match your search.' : 'No time-off requests found.'}
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((r: TimeOffRequest) => (
+            <Card
+              key={r.id}
+              className={cn(
+                'nm-raised hover:shadow-md transition-all border-l-4',
+                r.status === 'approved' ? 'border-l-emerald-500' :
+                r.status === 'pending' ? 'border-l-amber-500' :
+                r.status === 'rejected' ? 'border-l-red-500' :
+                r.status === 'cancelled' ? 'border-l-gray-400' : 'border-l-primary'
+              )}
+            >
+              <CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 p-4">
+                <div>
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CalendarRange className="h-4 w-4 text-primary" />
+                    {r.request_number ? `${r.request_number} · ` : ''}{formatDate(r.start_date)} – {formatDate(r.end_date)}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1 capitalize">{r.leave_type?.replace(/_/g, ' ')} · {r.total_days ?? '-'} day(s)</p>
+                </div>
+                <StatusBadge status={r.status || undefined} />
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                {r.reason && (
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-muted-foreground">Reason</p>
+                    <p className="line-clamp-2">{r.reason}</p>
+                  </div>
+                )}
+                {r.reviewer && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Reviewed By</p>
+                    <p>{`${r.reviewer.first_name || ''} ${r.reviewer.last_name || ''}`.trim() || '-'}</p>
+                  </div>
+                )}
+                {r.reviewed_at && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Reviewed At</p>
+                    <p>{formatDate(r.reviewed_at)}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {pagination && (
+        <Pagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          onPageChange={setPage}
+        />
+      )}
     </PageShell>
   );
 }

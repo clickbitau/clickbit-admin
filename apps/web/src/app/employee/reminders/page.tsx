@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
+import { StatCards } from '@/components/design-system/StatCards';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,14 +15,24 @@ import { Pagination } from '@/components/design-system/Pagination';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { fetchReminders, createReminder, completeReminder } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { Bell, Plus, CheckCircle2, Clock, AlertCircle, Calendar } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Bell, Plus, CheckCircle2, Clock, AlertCircle, Calendar, Search, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Reminder } from '@clickbit/shared';
+
+const STATUS_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'complete', label: 'Complete' },
+  { key: 'overdue', label: 'Overdue' },
+];
 
 export default function EmployeeRemindersPage() {
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const [status, setStatus] = useState('all');
+  const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', reminder_date: '' });
   const limit = 10;
@@ -39,15 +50,6 @@ export default function EmployeeRemindersPage() {
 
   const reminders = useMemo(() => data?.data ?? [], [data]);
   const pagination = data?.pagination;
-
-  const summary = useMemo(() => {
-    return {
-      total: reminders.length,
-      pending: reminders.filter((r) => r.status === 'pending' || r.status === 'initiation').length,
-      complete: reminders.filter((r) => r.status === 'complete').length,
-      overdue: reminders.filter((r) => r.status === 'pending' && new Date(r.reminder_date) < new Date()).length,
-    };
-  }, [reminders]);
 
   const create = useMutation({
     mutationFn: () => {
@@ -81,47 +83,125 @@ export default function EmployeeRemindersPage() {
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to complete reminder'),
   });
 
-  return (
-    <PageShell title="My Reminders" icon={Bell} description="Track and manage your reminders.">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="nm-raised"><CardContent className="p-5"><p className="text-xs uppercase text-muted-foreground">Total</p><p className="text-2xl font-bold">{summary.total}</p></CardContent></Card>
-        <Card className="nm-raised"><CardContent className="p-5"><p className="text-xs uppercase text-muted-foreground">Pending</p><p className="text-2xl font-bold">{summary.pending}</p></CardContent></Card>
-        <Card className="nm-raised"><CardContent className="p-5"><p className="text-xs uppercase text-muted-foreground">Complete</p><p className="text-2xl font-bold">{summary.complete}</p></CardContent></Card>
-        <Card className="nm-raised"><CardContent className="p-5"><p className="text-xs uppercase text-muted-foreground">Overdue</p><p className="text-2xl font-bold">{summary.overdue}</p></CardContent></Card>
-      </div>
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = reminders;
+    if (status !== 'all') {
+      rows = rows.filter((r) => {
+        if (status === 'overdue') return r.status === 'pending' && new Date(r.reminder_date) < new Date();
+        return r.status === status;
+      });
+    }
+    if (q) {
+      rows = rows.filter((r) =>
+        r.title.toLowerCase().includes(q) ||
+        (r.description?.toLowerCase() || '').includes(q)
+      );
+    }
+    return rows;
+  }, [reminders, status, search]);
 
-      <div className="flex justify-end">
-        <Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> New Reminder</Button>
-      </div>
+  const stats = useMemo(() => {
+    return {
+      total: reminders.length,
+      pending: reminders.filter((r) => r.status === 'pending' || r.status === 'initiation').length,
+      complete: reminders.filter((r) => r.status === 'complete').length,
+      overdue: reminders.filter((r) => r.status === 'pending' && new Date(r.reminder_date) < new Date()).length,
+    };
+  }, [reminders]);
+
+  return (
+    <PageShell
+      title="My Reminders"
+      icon={Bell}
+      description="Track and manage your reminders."
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            {STATUS_TABS.map((s) => (
+              <Button
+                key={s.key}
+                size="sm"
+                variant={status === s.key ? 'default' : 'outline'}
+                onClick={() => { setStatus(s.key); setPage(1); }}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Reminder
+          </Button>
+        </div>
+      }
+    >
+      <StatCards
+        cards={[
+          { label: 'Total', value: stats.total, icon: Bell, accent: 'primary' },
+          { label: 'Pending', value: stats.pending, icon: Clock, accent: 'warning' },
+          { label: 'Complete', value: stats.complete, icon: CheckCircle2, accent: 'success' },
+          { label: 'Overdue', value: stats.overdue, icon: AlertCircle, accent: 'destructive' },
+        ]}
+      />
+
+      <Card className="nm-raised p-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search reminders..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </Card>
 
       {isLoading ? (
-        <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
-      ) : reminders.length === 0 ? (
-        <Card className="nm-raised p-8 text-center text-sm text-muted-foreground">No reminders yet.</Card>
+        <div className="space-y-3">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="nm-raised p-8 text-center text-sm text-muted-foreground">
+          {search || status !== 'all' ? 'No reminders match your filters.' : 'No reminders yet.'}
+        </Card>
       ) : (
         <div className="space-y-3">
-          {reminders.map((r: Reminder) => {
+          {filtered.map((r: Reminder) => {
             const isOverdue = r.status === 'pending' && new Date(r.reminder_date) < new Date();
             return (
-              <Card key={r.id} className="nm-raised">
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4">
-                  <div className="flex items-center gap-2">
-                    {isOverdue ? <AlertCircle className="h-4 w-4 text-red-500" /> : <Clock className="h-4 w-4 text-muted-foreground" />}
-                    <CardTitle className="text-sm font-medium">{r.title}</CardTitle>
+              <Card
+                key={r.id}
+                className={cn(
+                  'nm-raised hover:shadow-md transition-all border-l-4',
+                  r.status === 'complete' ? 'border-l-emerald-500' :
+                  isOverdue ? 'border-l-red-500' :
+                  r.status === 'pending' ? 'border-l-amber-500' : 'border-l-gray-400'
+                )}
+              >
+                <CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 p-4">
+                  <div className="flex items-start gap-2">
+                    {isOverdue ? <AlertCircle className="h-4 w-4 text-red-500 mt-0.5" /> : <Clock className="h-4 w-4 text-muted-foreground mt-0.5" />}
+                    <div>
+                      <CardTitle className="text-sm font-medium">{r.title}</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDate(r.reminder_date)}</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={r.status || undefined} />
                     {r.status !== 'complete' && (
                       <Button size="sm" variant="outline" onClick={() => complete.mutate(r.id)} disabled={complete.isPending}>
-                        <CheckCircle2 className="mr-1 h-3 w-3" /> Done
+                        <Check className="h-3 w-3" />
                       </Button>
                     )}
                   </div>
                 </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0">
-                  <p className="text-sm text-muted-foreground">{r.description}</p>
-                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDate(r.reminder_date)}</p>
-                </CardContent>
+                {r.description && (
+                  <CardContent className="px-4 pb-4 pt-0">
+                    <p className="text-sm text-muted-foreground">{r.description}</p>
+                  </CardContent>
+                )}
               </Card>
             );
           })}
