@@ -2301,7 +2301,9 @@ export async function fetchAnalyticsEvents(token: string, type: string, period?:
 // ─── PDF Templates ───────────────────────────────────────────────────────────
 
 export async function fetchPdfTemplates(token: string, type?: string): Promise<PdfTemplate[]> {
-  return (await api.get('/api/settings/pdf-templates', { params: type ? { type } : undefined, headers: authHeaders(token) })).data.templates;
+  const res = (await api.get('/api/settings/pdf-templates', { params: type ? { type } : undefined, headers: authHeaders(token) })).data;
+  const templates = res?.templates ?? res?.data?.templates;
+  return Array.isArray(templates) ? templates : [];
 }
 
 export async function createPdfTemplate(token: string, data: Partial<PdfTemplate>) {

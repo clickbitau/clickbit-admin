@@ -210,11 +210,14 @@ export class PdfTemplatesService {
     return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
   }
 
-  private async getTemplates() {
+  private async getTemplates(): Promise<any[]> {
     const row = await this.prisma.site_settings.findFirst({ where: { setting_key: KEY } });
     if (!row?.setting_value) return [];
     try {
-      return JSON.parse(row.setting_value) || [];
+      const parsed = JSON.parse(row.setting_value);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && Array.isArray(parsed.templates)) return parsed.templates;
+      return [];
     } catch {
       return [];
     }
