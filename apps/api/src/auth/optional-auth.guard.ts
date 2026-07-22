@@ -12,6 +12,13 @@ export class OptionalAuthGuard extends SupabaseAuthGuard {
     if (!hasToken) {
       return true;
     }
-    return super.canActivate(context);
+    try {
+      return await super.canActivate(context);
+    } catch {
+      // Invalid or expired token on an optional-auth route: allow the request
+      // through as an anonymous user. Public endpoints should not break just
+      // because a stale client token is still attached.
+      return true;
+    }
   }
 }
