@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Optional, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { PasskeysService } from './passkeys.service';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
@@ -17,6 +18,12 @@ import {
   TrustDeviceDto,
   VerifyEmailDto,
 } from './dto';
+
+function getRequestOrigin(req: any): string | undefined {
+  const origin = req?.headers?.origin || req?.headers?.referer || req?.headers?.['x-forwarded-origin'];
+  if (typeof origin === 'string' && origin.startsWith('http')) return origin.replace(/\/$/, '');
+  return undefined;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -114,11 +121,11 @@ export class AuthController {
   // Passkeys
   @Post('passkeys/register-options')
   @UseGuards(SupabaseAuthGuard)
-  passkeyRegisterOptions(@Req() req: RequestWithUser) { return this.passkeysService!.generateRegistrationOptions(req.user); }
+  passkeyRegisterOptions(@Req() req: RequestWithUser) { return this.passkeysService!.generateRegistrationOptions(req.user, getRequestOrigin(req)); }
 
   @Post('passkeys/register')
   @UseGuards(SupabaseAuthGuard)
-  passkeyRegister(@Req() req: RequestWithUser, @Body() body: any) { return this.passkeysService!.verifyRegistration(req.user, body); }
+  passkeyRegister(@Req() req: RequestWithUser, @Body() body: any) { return this.passkeysService!.verifyRegistration(req.user, body, getRequestOrigin(req)); }
 
   @Get('passkeys')
   @UseGuards(SupabaseAuthGuard)
@@ -129,8 +136,8 @@ export class AuthController {
   deletePasskey(@Req() req: RequestWithUser, @Param('id') id: string) { return this.passkeysService!.deletePasskey(req.user, Number(id)); }
 
   @Post('passkeys/login-options')
-  passkeyLoginOptions() { return this.passkeysService!.generateLoginOptions(); }
+  passkeyLoginOptions(@Req() req: Request) { return this.passkeysService!.generateLoginOptions(getRequestOrigin(req)); }
 
   @Post('passkeys/login')
-  passkeyLogin(@Body() body: any) { return this.passkeysService!.verifyLogin(body); }
+  passkeyLogin(@Req() req: Request, @Body() body: any) { return this.passkeysService!.verifyLogin(body, getRequestOrigin(req)); }
 }
