@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Mail, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,8 +36,8 @@ export default function ForgotPasswordPage() {
         className="w-full max-w-md space-y-6"
       >
         <div className="text-center">
-          <div className="mx-auto mb-6 nm-raised-sm w-14 h-14 flex items-center justify-center rounded-2xl">
-            <span className="text-primary font-bold text-2xl">C</span>
+          <div className="mx-auto mb-6 flex items-center justify-center">
+            <Logo width={56} height={56} />
           </div>
           <h1 className="text-3xl font-bold">Reset password</h1>
           <p className="mt-2 text-sm text-muted-foreground">We will send a reset link to your email</p>

@@ -9,6 +9,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/ui/button';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
+import { Logo } from '@/components/Logo';
 import {
   Home,
   Banknote,
@@ -312,12 +313,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between mb-6 mt-4 px-2">
           {!collapsedMode && (
             <Link href="/admin" className="flex items-center gap-2 px-2">
-              <div className="nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">C</div>
+              <Logo width={36} height={36} />
               <span className="font-bold text-lg tracking-tight">ClickBit</span>
             </Link>
           )}
           {collapsedMode && (
-            <div className="mx-auto nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">C</div>
+            <div className="mx-auto">
+              <Logo width={36} height={36} />
+            </div>
           )}
           {!collapsedMode && (
             <button

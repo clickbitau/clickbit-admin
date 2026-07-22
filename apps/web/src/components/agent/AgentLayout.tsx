@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ThemeToggle } from '@/components/admin/ThemeToggle';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
+import { Logo } from '@/components/Logo';
 import {
   LayoutDashboard, Users, Building2, Receipt, FolderKanban, Ticket,
   LogOut, Menu, X, User, Briefcase, Loader2,
@@ -57,12 +58,14 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
       <div className="flex items-center justify-between mb-6 mt-4 px-3">
         {!collapsed && (
           <Link href="/agent/dashboard" className="flex items-center gap-2 px-2">
-            <div className="nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">A</div>
+            <Logo width={36} height={36} />
             <span className="font-bold text-lg tracking-tight">ClickBit</span>
           </Link>
         )}
         {collapsed && (
-          <div className="mx-auto nm-raised-sm w-9 h-9 flex items-center justify-center text-primary font-bold">A</div>
+          <div className="mx-auto">
+            <Logo width={36} height={36} />
+          </div>
         )}
       </div>
 

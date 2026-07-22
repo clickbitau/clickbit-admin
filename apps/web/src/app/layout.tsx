@@ -11,7 +11,14 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   title: 'ClickBit Admin',
-  description: 'Staged ClickBit admin frontend',
+  description: 'ClickBit staff admin portal',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/logo.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({
