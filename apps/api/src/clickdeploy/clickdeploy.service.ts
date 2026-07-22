@@ -39,6 +39,22 @@ function generateCode() {
   return parts.join('-');
 }
 
+function resolveExpiry(expiresIn?: string | number | null): Date | null {
+  if (!expiresIn && expiresIn !== 0) return null;
+  const match = String(expiresIn).match(/^(\d+)(d|m|y)$/);
+  if (!match) {
+    const d = new Date(String(expiresIn));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const [, num, unit] = match;
+  const d = new Date();
+  const n = parseInt(num, 10);
+  if (unit === 'd') d.setDate(d.getDate() + n);
+  else if (unit === 'm') d.setMonth(d.getMonth() + n);
+  else if (unit === 'y') d.setFullYear(d.getFullYear() + n);
+  return d;
+}
+
 @Injectable()
 export class ClickdeployService {
   constructor(private readonly prisma: PrismaService,
@@ -132,17 +148,17 @@ export class ClickdeployService {
     return { customer: row };
   }
 
-  async issueCode(data: { customerId: number; tier?: string; expiresIn?: number; maxNodes?: number; maxServices?: number }) {
+  async issueCode(data: { customerId: number; tier?: string; expiresIn?: string | number | null; maxNodes?: number | null; maxServices?: number | null }) {
     await this.invalidateCache();
 
     if (!data.customerId) throw new BadRequestException('customerId is required');
     const customer = await this.prisma.clickdeploy_customers.findUnique({ where: { id: data.customerId } });
     if (!customer) throw new NotFoundException('Customer not found');
     const code = generateCode();
-    const expiresAt = data.expiresIn ? new Date(Date.now() + data.expiresIn * 24 * 60 * 60 * 1000) : null;
-    // Supersede prior active codes
+    const expiresAt = resolveExpiry(data.expiresIn);
+    // Supersede prior active/activated codes
     await this.prisma.clickdeploy_codes.updateMany({
-      where: { customer_id: data.customerId, status: 'active' },
+      where: { customer_id: data.customerId, status: { in: ['active', 'activated'] } },
       data: { status: 'superseded' } as any,
     });
     const row = await this.prisma.clickdeploy_codes.create({
@@ -166,16 +182,16 @@ export class ClickdeployService {
     return { code: row.code };
   }
 
-  async updateSubscription(id: number, data: { tier?: string; expiresIn?: number; maxNodes?: number; maxServices?: number }) {
+  async updateSubscription(id: number, data: { tier?: string; expiresIn?: string | number | null; maxNodes?: number | null; maxServices?: number | null }) {
     await this.invalidateCache();
 
     const existing = await this.prisma.clickdeploy_codes.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Code not found');
     const update: any = {};
-    if (data.tier) update.tier = data.tier;
+    if (data.tier !== undefined && data.tier !== '') update.tier = data.tier;
     if (data.maxNodes !== undefined) update.max_nodes = data.maxNodes;
     if (data.maxServices !== undefined) update.max_services = data.maxServices;
-    if (data.expiresIn) update.expires_at = new Date(Date.now() + data.expiresIn * 24 * 60 * 60 * 1000);
+    if (data.expiresIn !== undefined) update.expires_at = resolveExpiry(data.expiresIn);
     const row = await this.prisma.clickdeploy_codes.update({ where: { id }, data: update });
     return { code: serializeCode(row) };
   }

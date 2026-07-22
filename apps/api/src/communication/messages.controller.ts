@@ -53,4 +53,14 @@ export class MessagesController {
   search(@Req() req: any, @Query() query: SearchMessagesDto) {
     return this.messagesService.search(req.user, query as unknown as Record<string, unknown>);
   }
+
+  @Get(':messageId/receipts')
+  getReceipts(@Param('messageId', ParseIntPipe) messageId: number, @Req() req: any) {
+    return this.messagesService.getReceipts(req.user, messageId);
+  }
+
+  @Post(':messageId/receipts')
+  updateReceipt(@Param('messageId', ParseIntPipe) messageId: number, @Req() req: any, @Body() body: { status: string }) {
+    return this.messagesService.updateReceipt(req.user, messageId, body.status);
+  }
 }

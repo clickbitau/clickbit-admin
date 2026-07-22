@@ -144,6 +144,10 @@ export class MessagesService {
       await this.upsertThread(parentId, channelId, dmId);
     }
 
+    try {
+      await this.createDeliveryReceipts(created as any);
+    } catch { /* best-effort */ }
+
     return buildDataEnvelope(this.mapMessage(created as any));
   }
 
@@ -281,6 +285,104 @@ export class MessagesService {
       if (!Number.isNaN(id) && id > 0) users.push({ id, name: `User ${id}` });
     }
     return users;
+  }
+
+  private async assertMessageAccess(user: Profile, message: any) {
+    if (user.role === 'admin') return;
+    if (message.channel_id) {
+      const channel = await this.prisma.channels.findUnique({ where: { id: message.channel_id } });
+      if (channel) await this.assertWorkspaceMember(channel.workspace_id, user.id, user.role);
+    } else if (message.direct_message_id) {
+      const participant = await this.prisma.direct_message_participants.findFirst({ where: { direct_message_id: message.direct_message_id, user_id: user.id } });
+      if (!participant) throw new ForbiddenException({ success: false, message: 'Not authorized to view receipts for this message' });
+    } else {
+      throw new ForbiddenException({ success: false, message: 'Not authorized to view receipts for this message' });
+    }
+  }
+
+  private async createDeliveryReceipts(message: any) {
+    const recipientIds: number[] = [];
+    if (message.direct_message_id) {
+      const participants = await this.prisma.direct_message_participants.findMany({
+        where: { direct_message_id: message.direct_message_id },
+        select: { user_id: true },
+      });
+      recipientIds.push(...participants.map((p) => p.user_id).filter((id) => id !== message.user_id));
+    } else if (message.channel_id) {
+      const channel = await this.prisma.channels.findUnique({ where: { id: message.channel_id } });
+      if (channel) {
+        const members = await this.prisma.workspace_members.findMany({
+          where: { workspace_id: channel.workspace_id },
+          select: { user_id: true },
+        });
+        recipientIds.push(...members.map((m) => m.user_id).filter((id) => id !== message.user_id));
+      }
+    }
+    const unique = [...new Set(recipientIds)];
+    for (const userId of unique) {
+      await this.prisma.message_delivery_receipts.upsert({
+        where: { message_id_user_id: { message_id: message.id, user_id: userId } },
+        create: { message_id: message.id, user_id: userId, status: 'sent', delivered_at: null, read_at: null },
+        update: {},
+      });
+    }
+  }
+
+  async getReceipts(user: Profile, messageId: number) {
+    const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
+    if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
+    await this.assertMessageAccess(user, message);
+
+    const receipts = await this.prisma.message_delivery_receipts.findMany({
+      where: { message_id: messageId },
+      include: { profiles: { select: profileSelect } },
+      orderBy: { created_at: 'asc' },
+    });
+
+    return buildListEnvelope(
+      receipts.map((r: any) => ({ ...r, user: r.profiles })),
+      receipts.length,
+      receipts.length,
+      0,
+    );
+  }
+
+  async updateReceipt(user: Profile, messageId: number, status: string) {
+    if (!['delivered', 'read'].includes(status)) {
+      throw new BadRequestException({ success: false, message: 'Invalid status. Must be "delivered" or "read"' });
+    }
+
+    const message = await this.prisma.messages.findUnique({ where: { id: messageId } });
+    if (!message || message.deleted_at) throw new NotFoundException({ success: false, message: 'Message not found' });
+    await this.assertMessageAccess(user, message);
+
+    const existing = await this.prisma.message_delivery_receipts.findFirst({
+      where: { message_id: messageId, user_id: user.id },
+    });
+
+    if (!existing) {
+      const receipt = await this.prisma.message_delivery_receipts.create({
+        data: {
+          message_id: messageId,
+          user_id: user.id,
+          status: status as any,
+          delivered_at: status === 'delivered' || status === 'read' ? new Date() : null,
+          read_at: status === 'read' ? new Date() : null,
+        },
+      });
+      return buildDataEnvelope({ receipt });
+    }
+
+    const update: any = { status };
+    if (status === 'delivered' && !existing.delivered_at) update.delivered_at = new Date();
+    else if (status === 'read' && !existing.read_at) update.read_at = new Date();
+
+    const receipt = await this.prisma.message_delivery_receipts.update({
+      where: { message_id_user_id: { message_id: messageId, user_id: user.id } },
+      data: update,
+    });
+
+    return buildDataEnvelope({ receipt });
   }
 
   private mapMessage(message: any) {

@@ -336,12 +336,29 @@ export class PdfTemplatesService {
     });
   }
 
+  async findOne(id: number) {
+    const templates = await this.getTemplates();
+    const template = templates.find((t: any) => t.id === id);
+    if (!template) throw new NotFoundException('Template not found');
+    return { template };
+  }
+
   async getDefaultTemplateSettings(templateType: string) {
     return this.cached(this.cacheKey('default-settings', templateType), async () => {
       const templates = await this.getTemplates();
       const template = templates.find((t: any) => t.template_type === templateType && t.is_default)
         || templates.find((t: any) => t.template_type === templateType);
       return template?.settings || {};
+    });
+  }
+
+  async getDefaultTemplate(templateType: string) {
+    return this.cached(this.cacheKey('default-template', templateType), async () => {
+      const templates = await this.getTemplates();
+      const template = templates.find((t: any) => t.template_type === templateType && t.is_default)
+        || templates.find((t: any) => t.template_type === templateType);
+      if (!template) throw new NotFoundException('Default template not found');
+      return { template };
     });
   }
 

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -228,6 +229,60 @@ export class CustomerController {
   @Roles('customer', 'admin')
   async addTaskComment(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number, @Body() body: any) {
     return this.service.customerAddTaskComment(req.user, id, body);
+  }
+
+  @Get('addresses')
+  @Roles('customer', 'admin')
+  async addresses(@Req() req: RequestWithUser) {
+    return this.service.customerAddresses(req.user);
+  }
+
+  @Post('addresses')
+  @Roles('customer', 'admin')
+  async addAddress(@Req() req: RequestWithUser, @Body() body: any) {
+    return this.service.addCustomerAddress(req.user, body);
+  }
+
+  @Put('addresses/:id')
+  @Roles('customer', 'admin')
+  async updateAddress(@Req() req: RequestWithUser, @Param('id') id: string, @Body() body: any) {
+    return this.service.updateCustomerAddress(req.user, id, body);
+  }
+
+  @Delete('addresses/:id')
+  @Roles('customer', 'admin')
+  async deleteAddress(@Req() req: RequestWithUser, @Param('id') id: string) {
+    return this.service.deleteCustomerAddress(req.user, id);
+  }
+
+  @Get('payment-methods')
+  @Roles('customer', 'admin')
+  async paymentMethods(@Req() req: RequestWithUser) {
+    return this.service.customerPaymentMethods(req.user);
+  }
+
+  @Post('payment-methods/setup-session')
+  @Roles('customer', 'admin')
+  async setupPaymentSession(@Req() req: RequestWithUser) {
+    return this.service.createSetupSession(req.user);
+  }
+
+  @Delete('payment-methods/:id')
+  @Roles('customer', 'admin')
+  async deletePaymentMethod(@Req() req: RequestWithUser, @Param('id') id: string) {
+    return this.service.deleteCustomerPaymentMethod(req.user, id);
+  }
+
+  @Post('payment-methods/:id/default')
+  @Roles('customer', 'admin')
+  async setDefaultPaymentMethod(@Req() req: RequestWithUser, @Param('id') id: string) {
+    return this.service.setDefaultPaymentMethod(req.user, id);
+  }
+
+  @Post('quotes')
+  @Roles('customer', 'admin')
+  async createQuote(@Req() req: RequestWithUser, @Body() body: any) {
+    return this.service.createQuote(req.user, body);
   }
 }
 

@@ -82,6 +82,13 @@ export class HrContractsController {
     return this.hrContractsService.findOne(req.user, id);
   }
 
+  @Post(':id/send')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'contracts:manage')
+  send(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
+    return this.hrContractsService.send(req.user, id);
+  }
+
   @Get(':id/pdf')
   @Header('Content-Type', 'application/pdf')
   async downloadPdf(

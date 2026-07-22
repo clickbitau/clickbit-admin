@@ -55,6 +55,7 @@ import {
   ChevronLeft,
   ChevronDown,
   HeartHandshake,
+  Rocket,
 } from 'lucide-react';
 
 interface NavLink {
@@ -228,6 +229,7 @@ const sections: NavSection[] = [
       { href: '/admin/settings/audit-logs', label: 'Audit Logs', icon: Activity },
       { href: '/admin/settings/pdf-templates', label: 'PDF Templates', icon: FileText },
       { href: '/admin/settings/public-content', label: 'Public Content', icon: Globe },
+      { href: '/admin/clickdeploy', label: 'ClickDeploy', icon: Rocket },
       { href: '/admin/settings/billing', label: 'Billing', icon: CreditCard },
       { href: '/admin/settings/profile', label: 'Profile', icon: UserCircle },
     ],

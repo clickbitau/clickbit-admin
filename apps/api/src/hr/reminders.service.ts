@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildLegacyDataEnvelope, buildLegacyListEnvelope, buildLegacyMessageEnvelope } from './hr-utils';
 import { CacheService } from '../redis/cache.service';
+import { EmailService } from '../common/email.service';
 
 const profileSelect = { select: { id: true, first_name: true, last_name: true, email: true } } as const;
 
@@ -34,6 +35,7 @@ function parseDateOnly(value?: string | Date | null): Date | undefined {
 export class RemindersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -176,6 +178,52 @@ export class RemindersService {
     await this.invalidateCache();
     await this.cache?.del(this.cacheKey('detail', id));
     return buildLegacyMessageEnvelope('Reminder marked as complete', mapReminder(updated));
+  }
+
+  async sendEmail(id: number, user: Profile) {
+    const reminder = await this.prisma.hr_reminders.findUnique({
+      where: { id },
+      include: reminderInclude,
+    });
+    if (!reminder) throw new NotFoundException({ success: false, message: 'Reminder not found' });
+    if (!reminder.send_email) {
+      throw new BadRequestException({ success: false, message: 'Email notifications are disabled for this reminder. Enable send_email first.' });
+    }
+
+    const recipient = reminder.assigned_to
+      ? reminder.profiles_hr_reminders_assigned_toToprofiles
+      : reminder.profiles_hr_reminders_created_byToprofiles;
+    if (!recipient || !recipient.email) {
+      throw new BadRequestException({ success: false, message: 'No recipient email found for this reminder' });
+    }
+
+    const name = `${recipient.first_name || ''} ${recipient.last_name || ''}`.trim() || recipient.email;
+    const result = await this.emailService.send({
+      to: recipient.email,
+      subject: `Reminder: ${reminder.title}`,
+      html: `
+        <div style="font-family: Sora, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
+          <h2 style="color: #1FBBD2;">Hi ${name},</h2>
+          <p><strong>${reminder.title}</strong></p>
+          <p>${reminder.description || ''}</p>
+          <p><strong>Date:</strong> ${reminder.reminder_date ? new Date(reminder.reminder_date).toLocaleDateString('en-AU') : '—'}</p>
+          <p><em>Trigger:</em> ${reminder.trigger_type}</p>
+        </div>
+      `,
+    });
+
+    if (!result.sent) {
+      return buildLegacyMessageEnvelope(result.error || 'Failed to send reminder email');
+    }
+
+    await this.prisma.hr_reminders.update({
+      where: { id },
+      data: { email_sent: true, email_sent_at: new Date() },
+    });
+    await this.invalidateCache();
+    await this.cache?.del(this.cacheKey('detail', id));
+
+    return buildLegacyMessageEnvelope(`Reminder email sent to ${recipient.email}`);
   }
 
   private async findReminder(id: number) {

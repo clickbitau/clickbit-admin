@@ -4,6 +4,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
 import { PdfTemplatesService } from '../settings/pdf-templates.service';
+import { EmailService } from '../common/email.service';
 import { generateContractPDF } from '../common/pdf/contract-pdf';
 
 interface UserLike {
@@ -57,6 +58,7 @@ export class HrContractsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pdfTemplatesService: PdfTemplatesService,
+    private readonly emailService: EmailService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -337,6 +339,51 @@ export class HrContractsService {
     contractData.templateSettings = templateSettings;
     const buffer = await generateContractPDF(contractData);
     return { buffer, filename };
+  }
+
+  async send(user: UserLike, id: number) {
+    const contract = await this.prisma.hr_contracts.findUnique({
+      where: { id },
+      include: contractInclude,
+    });
+    if (!contract) throw new NotFoundException('Contract not found');
+
+    if (!['admin', 'manager'].includes(user.role.toLowerCase())) {
+      const self = await this.prisma.employees.findUnique({ where: { user_id: user.id } });
+      if (!self || self.id !== contract.employee_id) {
+        throw new ForbiddenException('Not authorized to send this contract');
+      }
+    }
+
+    const normalized = normalizeContract(contract);
+    const employeeEmail = normalized.employee?.email;
+    if (!employeeEmail) throw new BadRequestException('Employee has no email address');
+
+    const { buffer, filename } = await this.downloadPdf(user, id);
+    const employeeName = normalized.employee?.name || 'Employee';
+
+    const result = await this.emailService.send({
+      to: employeeEmail,
+      subject: `Employment Contract - ${contract.contract_number || id}`,
+      html: `
+        <div style="font-family: Sora, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
+          <h2 style="color: #1FBBD2;">Hi ${employeeName},</h2>
+          <p>Please find your employment contract attached.</p>
+          <p><strong>Position:</strong> ${contract.position || 'Employee'}<br/>
+          <strong>Start date:</strong> ${this.toDateStr(contract.start_date) || '—'}</p>
+          <p>Review and accept the contract through the employee portal.</p>
+        </div>
+      `,
+      attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
+    });
+
+    if (!result.sent) {
+      return { success: false, message: result.error || 'Failed to send contract email' };
+    }
+
+    await this.prisma.hr_contracts.update({ where: { id }, data: { updated_at: new Date() } });
+
+    return { success: true, message: `Contract sent to ${employeeEmail}` };
   }
 
   private buildCompanyAddress(companyInfo: any): string {

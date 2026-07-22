@@ -16,6 +16,16 @@ export class PdfTemplatesController {
     return this.pdfTemplatesService.findAll(type);
   }
 
+  @Get('default/:type')
+  async getDefault(@Param('type') type: string) {
+    return this.pdfTemplatesService.getDefaultTemplate(type);
+  }
+
+  @Get(':id')
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.pdfTemplatesService.findOne(id);
+  }
+
   @Post()
   async create(@Body() body: any) {
     return this.pdfTemplatesService.create(body || {});
@@ -32,6 +42,7 @@ export class PdfTemplatesController {
   }
 
   @Post(':id/set-default')
+  @Put(':id/set-default')
   async setDefault(@Param('id', ParseIntPipe) id: number) {
     return this.pdfTemplatesService.setDefault(id);
   }
