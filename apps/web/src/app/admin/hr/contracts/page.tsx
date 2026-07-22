@@ -4,15 +4,15 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { CheckCircle, FileText, Plus, Power, Search, XCircle } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronUp, Download, FileText, Plus, Power, Search, XCircle } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
-import { DataTable } from '@/components/design-system/DataTable';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { ContractForm } from '@/components/hr/ContractForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { activateContract, fetchContracts, fetchHrStats, terminateContract } from '@/lib/api';
+import { activateContract, fetchContractPdfUrl, fetchContracts, fetchHrStats, terminateContract } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
@@ -52,6 +52,7 @@ export default function AdminHrContractsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
@@ -112,6 +113,21 @@ export default function AdminHrContractsPage() {
     onSuccess: refresh,
   });
 
+  const download = useMutation({
+    mutationFn: async (c: Contract) => {
+      if (!token) throw new Error('No token');
+      const blob = await fetchContractPdfUrl(token, c.id);
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `contract-${c.contract_number || c.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
+  });
+
   const statCards = useMemo(() => {
     if (!stats) return [];
     return [
@@ -122,6 +138,14 @@ export default function AdminHrContractsPage() {
     ];
   }, [stats]);
 
+  function toggleExpanded(id: number) {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  function employeeName(c: Contract) {
+    return c.employee?.name || `Employee ${c.employee_id}`;
+  }
+
   return (
     <PageShell
       title="Contracts"
@@ -131,69 +155,157 @@ export default function AdminHrContractsPage() {
     >
       <StatCards cards={statCards.map((s) => ({ ...s, value: statsLoading ? '...' : s.value }))} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search contracts..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      <div className="nm-raised p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search contracts..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Select value={status} onValueChange={(v) => { setStatus(v); }}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>{statusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+            <SelectContent>{sortOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
+            {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+          </Button>
         </div>
-        <Select value={status} onValueChange={(v) => { setStatus(v); }}>
-          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>{statusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
-          <SelectContent>{sortOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <Button variant="outline" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
-          {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-        </Button>
       </div>
 
       {error ? (
         <div className="text-destructive text-sm">Failed to load contracts.</div>
       ) : (
-        <DataTable
-          headers={[
-            { key: 'employee', label: 'Employee' },
-            { key: 'position', label: 'Position' },
-            { key: 'type', label: 'Type' },
-            { key: 'start', label: 'Start' },
-            { key: 'end', label: 'End' },
-            { key: 'salary', label: 'Salary' },
-            { key: 'status', label: 'Status' },
-            { key: 'actions', label: '' },
-          ]}
-          data={filtered}
-          keyExtractor={(c) => c.id}
-          loading={isLoading}
-          onRowClick={(c) => router.push(`/admin/hr/contracts/${c.id}`)}
-          emptyText="No contracts found."
-          emptyDescription="Try adjusting your search or status filter."
-          renderRow={(c: Contract) => [
-            <div key="employee" className="flex items-center gap-3">
-              <PersonAvatar name={c.employee?.name || `Employee ${c.employee_id}`} />
-              <Link href={`/admin/hr/contracts/${c.id}`} className="font-medium hover:underline">{c.employee?.name || `Employee ${c.employee_id}`}</Link>
-            </div>,
-            <span key="position">{c.position || '-'}</span>,
-            <span key="type" className="capitalize">{(c.employment_type || '').replace(/_/g, ' ')}</span>,
-            <span key="start">{formatDate(c.start_date)}</span>,
-            <span key="end">{formatDate(c.end_date)}</span>,
-            <span key="salary">{c.salary ? formatCurrency(Number(c.salary) || 0, c.currency || 'AUD') : '-'}</span>,
-            <StatusBadge key="status" status={c.status || 'active'} />,
-            <div key="actions" className="flex justify-end gap-1">
-              {c.status !== 'active' && (
-                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); activate.mutate(c.id); }} disabled={activate.isPending}>
-                  <CheckCircle className="h-4 w-4" />
-                </Button>
-              )}
-              {c.status !== 'terminated' && (
-                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); terminate.mutate(c.id); }} disabled={terminate.isPending}>
-                  <XCircle className="h-4 w-4" />
-                </Button>
-              )}
-            </div>,
-          ]}
-        />
+        <div className="space-y-4">
+          {isLoading && filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">Loading contracts…</div>
+          ) : filtered.length === 0 ? (
+            <div className="nm-raised p-12 text-center text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-4 opacity-40" />
+              <p className="text-lg font-medium">No contracts found</p>
+              <p className="text-sm mt-1">Try adjusting your search or status filter.</p>
+            </div>
+          ) : (
+            filtered.map((c: Contract) => {
+              const isExpanded = expandedId === c.id;
+              return (
+                <Card key={c.id} className={`overflow-hidden ${c.status === 'active' ? 'border-l-4 border-l-emerald-400' : ''}`}>
+                  <div
+                    className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer hover:brightness-[0.97] dark:hover:brightness-110"
+                    onClick={() => toggleExpanded(c.id)}
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <PersonAvatar name={employeeName(c)} />
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          <Link href={`/admin/hr/contracts/${c.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                            {employeeName(c)}
+                          </Link>
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {c.contract_number || `Contract #${c.id}`} · {c.position || 'No position'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="text-right hidden sm:block">
+                        <p className="text-sm font-medium">
+                          {c.hourly_rate ? `${formatCurrency(Number(c.hourly_rate), c.currency || 'AUD')}/hr` : (c.salary ? formatCurrency(Number(c.salary), c.currency || 'AUD') : '-')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(c.start_date)} → {c.end_date ? formatDate(c.end_date) : 'Ongoing'}
+                        </p>
+                      </div>
+                      <StatusBadge status={c.status || 'active'} />
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); toggleExpanded(c.id); }}>
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <CardContent className="border-t bg-muted/30 px-5 py-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Employment Type</p>
+                          <p className="font-medium capitalize">{(c.employment_type || '').replace(/_/g, ' ')}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Department</p>
+                          <p className="font-medium">{c.department || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Hourly Rate</p>
+                          <p className="font-medium">{c.hourly_rate ? formatCurrency(Number(c.hourly_rate), c.currency || 'AUD') : '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Annual Salary</p>
+                          <p className="font-medium">{c.salary ? formatCurrency(Number(c.salary), c.currency || 'AUD') : '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Weekly Hours</p>
+                          <p className="font-medium">{c.default_weekly_hours ? `${c.default_weekly_hours} hrs` : '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Pay Frequency</p>
+                          <p className="font-medium capitalize">{c.pay_frequency || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Start Date</p>
+                          <p className="font-medium">{formatDate(c.start_date)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">End Date</p>
+                          <p className="font-medium">{c.end_date ? formatDate(c.end_date) : 'Ongoing'}</p>
+                        </div>
+                      </div>
+
+                      {c.renewal_date && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">
+                          Renewal review: {formatDate(c.renewal_date)}
+                        </p>
+                      )}
+                      {c.terms_summary && (
+                        <div className="mb-3">
+                          <p className="text-xs text-muted-foreground mb-1">Terms / Notes</p>
+                          <p className="text-sm whitespace-pre-wrap">{c.terms_summary}</p>
+                        </div>
+                      )}
+                      {c.change_reason && (
+                        <div className="mb-3">
+                          <p className="text-xs text-muted-foreground mb-1">Reason for Change</p>
+                          <p className="text-sm">{c.change_reason}</p>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 pt-3 border-t">
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/admin/hr/contracts/${c.id}`)}>
+                          <FileText className="mr-1 h-4 w-4" /> View
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => download.mutate(c)} disabled={download.isPending}>
+                          <Download className="mr-1 h-4 w-4" /> PDF
+                        </Button>
+                        {c.status !== 'active' && (
+                          <Button size="sm" variant="outline" onClick={() => activate.mutate(c.id)} disabled={activate.isPending}>
+                            <Power className="mr-1 h-4 w-4" /> Activate
+                          </Button>
+                        )}
+                        {c.status !== 'terminated' && (
+                          <Button size="sm" variant="destructive" onClick={() => terminate.mutate(c.id)} disabled={terminate.isPending}>
+                            <XCircle className="mr-1 h-4 w-4" /> Terminate
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })
+          )}
+        </div>
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
