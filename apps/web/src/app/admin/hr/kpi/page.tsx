@@ -1,15 +1,16 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { BarChart3, Calendar, RefreshCw, Search, Trophy, Users } from 'lucide-react';
+import { ArrowRight, BarChart3, Calendar, RefreshCw, Search, Trophy, TrendingUp, Users } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
-import { DataTable } from '@/components/design-system/DataTable';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useDebounce } from '@/lib/useDebounce';
@@ -25,6 +26,13 @@ function scoreVariant(score: number) {
   if (score >= 80) return 'default';
   if (score >= 60) return 'secondary';
   return 'destructive';
+}
+
+function rankBadgeClass(index: number) {
+  if (index === 0) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-200';
+  if (index === 1) return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
+  if (index === 2) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200';
+  return 'bg-muted text-muted-foreground border-border';
 }
 
 const sortOptions = [
@@ -43,6 +51,7 @@ export default function AdminHrKpiPage() {
   const debouncedSearch = useDebounce(search, 300);
   const [sortBy, setSortBy] = useState('total_score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [selected, setSelected] = useState<KpiScore | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['kpi-dashboard', token, period],
@@ -52,7 +61,7 @@ export default function AdminHrKpiPage() {
 
   const scores = useMemo(() => data?.scores ?? [], [data?.scores]);
 
-  const filtered = useMemo(() => {
+  const sortedScores = useMemo(() => {
     let rows = [...scores];
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase();
@@ -92,67 +101,130 @@ export default function AdminHrKpiPage() {
     { label: 'Needs Attention', value: stats.low?.employee?.name || '-', icon: Trophy, accent: 'destructive' as const },
   ];
 
+  function employeeName(s?: KpiScore | null) {
+    return s?.employee?.name || `Employee ${s?.employee_id}`;
+  }
+
+  function metadataCounts(s: KpiScore) {
+    const taskCount = (s.metadata?.taskCount as number) ?? 0;
+    const ticketCount = (s.metadata?.ticketCount as number) ?? 0;
+    return { taskCount, ticketCount };
+  }
+
+  const detailCards = selected ? [
+    { label: 'Total Score', value: selected.total_score?.toFixed(1) || 0, icon: Trophy, accent: scoreVariant(selected.total_score) as any },
+    { label: 'Punctuality', value: selected.punctuality_score?.toFixed(1) || 0, icon: Calendar },
+    { label: 'Task Efficiency', value: selected.task_efficiency_score?.toFixed(1) || 0, icon: TrendingUp },
+    { label: 'Task Timeliness', value: selected.task_timeliness_score?.toFixed(1) || 0, icon: Calendar },
+    { label: 'Support Resolution', value: selected.support_resolution_score?.toFixed(1) || 0, icon: Trophy },
+    { label: 'Leadership', value: selected.leadership_score?.toFixed(1) || 0, icon: Users },
+    { label: 'Documentation', value: selected.documentation_score?.toFixed(1) || 0, icon: BarChart3 },
+  ] : [];
+
   return (
     <PageShell title="KPI Dashboard" icon={BarChart3} description="Track employee performance and KPI scores by month.">
       <StatCards cards={statCards} />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="YYYY-MM" className="max-w-[140px]" />
+      <div className="nm-raised p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="YYYY-MM" className="max-w-[140px]" />
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search employee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+            {sortOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))} className="flex-1">
+              {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+            </Button>
+            <Button onClick={() => snapshot.mutate()} disabled={snapshot.isPending}>
+              <RefreshCw className={`mr-1 h-4 w-4 ${snapshot.isPending ? 'animate-spin' : ''}`} /> Snapshot
+            </Button>
+          </div>
         </div>
-        <Button onClick={() => snapshot.mutate()} disabled={snapshot.isPending}>
-          <RefreshCw className="mr-2 h-4 w-4" /> Snapshot KPI
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search employee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          {sortOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <Button variant="outline" onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
-          {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-        </Button>
       </div>
 
       {error ? (
         <div className="text-destructive text-sm">Failed to load KPI dashboard.</div>
       ) : (
-        <DataTable
-          headers={[
-            { key: 'employee', label: 'Employee' },
-            { key: 'total', label: 'Total' },
-            { key: 'punctuality', label: 'Punctuality' },
-            { key: 'efficiency', label: 'Efficiency' },
-            { key: 'timeliness', label: 'Timeliness' },
-            { key: 'support', label: 'Support' },
-            { key: 'leadership', label: 'Leadership' },
-            { key: 'docs', label: 'Docs' },
-          ]}
-          data={filtered}
-          keyExtractor={(s) => `${s.employee_id}-${s.period}`}
-          loading={isLoading}
-          onRowClick={(s) => router.push(`/admin/hr/kpi/${s.employee_id}`)}
-          emptyText="No KPI data for this period."
-          emptyDescription="Try another period or run the snapshot."
-          renderRow={(s: KpiScore) => [
-            <div key="employee" className="flex items-center gap-3">
-              <PersonAvatar name={s.employee?.name || `Employee ${s.employee_id}`} />
-              <span className="font-medium">{s.employee?.name || `Employee ${s.employee_id}`}</span>
-            </div>,
-            <Badge key="total" variant={scoreVariant(s.total_score) as any}>{s.total_score?.toFixed(1) || 0}</Badge>,
-            <span key="punctuality">{s.punctuality_score?.toFixed(1) || 0}</span>,
-            <span key="efficiency">{s.task_efficiency_score?.toFixed(1) || 0}</span>,
-            <span key="timeliness">{s.task_timeliness_score?.toFixed(1) || 0}</span>,
-            <span key="support">{s.support_resolution_score?.toFixed(1) || 0}</span>,
-            <span key="leadership">{s.leadership_score?.toFixed(1) || 0}</span>,
-            <span key="docs">{s.documentation_score?.toFixed(1) || 0}</span>,
-          ]}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 space-y-3">
+            <Card className="overflow-hidden">
+              <CardHeader className="p-4">
+                <CardTitle className="text-base">Leaderboard</CardTitle>
+              </CardHeader>
+              <div className="divide-y max-h-[600px] overflow-y-auto">
+                {isLoading && sortedScores.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground">Loading…</div>
+                ) : sortedScores.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    <p>No calculations run for {period}</p>
+                    <p className="text-xs mt-1">Click Snapshot to generate.</p>
+                  </div>
+                ) : (
+                  sortedScores.map((s, idx) => {
+                    const { taskCount, ticketCount } = metadataCounts(s);
+                    const isSelected = selected?.employee_id === s.employee_id;
+                    return (
+                      <button
+                        key={`${s.employee_id}-${s.period}`}
+                        onClick={() => setSelected(s)}
+                        className={`w-full text-left flex items-center justify-between gap-3 p-4 transition-colors border-l-4 ${isSelected ? 'border-l-primary bg-primary/5' : 'border-l-transparent hover:bg-muted/50'}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border ${rankBadgeClass(idx)}`}>
+                            #{idx + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate">{employeeName(s)}</p>
+                            <p className="text-xs text-muted-foreground">{taskCount} tasks · {ticketCount} tickets</p>
+                          </div>
+                        </div>
+                        <p className={`font-bold text-lg ${s.total_score >= 100 ? 'text-green-600' : ''}`}>{s.total_score?.toFixed(1) || 0}</p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
+          </div>
+
+          <div className="lg:col-span-2">
+            {selected ? (
+              <Card className="h-full">
+                <CardHeader className="p-5 border-b">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <PersonAvatar name={employeeName(selected)} />
+                      <div>
+                        <CardTitle className="text-xl">{employeeName(selected)}</CardTitle>
+                        <p className="text-sm text-muted-foreground">{selected.period} · Total score {selected.total_score?.toFixed(1) || 0}</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/admin/hr/kpi/${selected.employee_id}`}>
+                        History <ArrowRight className="ml-1 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <StatCards cards={detailCards} />
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full min-h-[400px] nm-raised text-muted-foreground">
+                <TrendingUp className="h-12 w-12 mb-3 opacity-20" />
+                <p>Select an employee from the leaderboard to view details</p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </PageShell>
   );
