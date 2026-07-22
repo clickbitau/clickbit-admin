@@ -9,7 +9,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GroupedEmployeeSections } from './grouped-sections';
 import {
   Dialog,
   DialogContent,
@@ -77,14 +77,16 @@ export default function AdminHrEmployeesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'department' | 'employment_type'>('list');
 
+  const isGrouped = viewMode === 'department' || viewMode === 'employment_type';
+
   const queryParams = useMemo(() => {
-    const params: Record<string, string | number> = { page, limit: 12, sortBy, sortOrder };
+    const params: Record<string, string | number> = { page, limit: isGrouped ? 500 : 12, sortBy, sortOrder };
     if (debouncedSearch) params.search = debouncedSearch;
     if (status) params.employment_status = status;
     if (department) params.department = department;
     if (employmentType) params.employment_type = employmentType;
     return params;
-  }, [page, debouncedSearch, status, department, employmentType, sortBy, sortOrder]);
+  }, [page, debouncedSearch, status, department, employmentType, sortBy, sortOrder, isGrouped]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['employees', queryParams],
@@ -109,7 +111,7 @@ export default function AdminHrEmployeesPage() {
 
   useRealtimeRefresh(['employees'], ['employees'], { enabled: !!token });
 
-  const employees = data?.data ?? [];
+  const employees = useMemo(() => data?.data ?? [], [data?.data]);
   const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: 12 };
   const stats = statsData?.data;
   const departments = departmentsData?.data ?? [];
@@ -160,28 +162,17 @@ export default function AdminHrEmployeesPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('list')}><List className="mr-1 h-4 w-4" /> List</Button>
-        <Button variant={viewMode === 'department' ? 'default' : 'outline'} size="sm" onClick={() => { setDepartment(''); setViewMode('department'); }}><Building2 className="mr-1 h-4 w-4" /> By Department</Button>
-        <Button variant={viewMode === 'employment_type' ? 'default' : 'outline'} size="sm" onClick={() => { setEmploymentType(''); setViewMode('employment_type'); }}><UserCircle className="mr-1 h-4 w-4" /> By Type</Button>
+        <Button variant={viewMode === 'employment_type' ? 'default' : 'outline'} size="sm" onClick={() => { setEmploymentType(''); setPage(1); setViewMode('employment_type'); }}><UserCircle className="mr-1 h-4 w-4" /> By Type</Button>
+        <Button variant={viewMode === 'department' ? 'default' : 'outline'} size="sm" onClick={() => { setDepartment(''); setPage(1); setViewMode('department'); }}><Building2 className="mr-1 h-4 w-4" /> By Department</Button>
       </div>
 
-      {viewMode === 'department' && (
-        <EmployeeGroupCards
-          groups={stats?.employees.byDepartment || []}
-          labelKey="department"
-          onSelect={(value) => { setDepartment(value); setViewMode('list'); setPage(1); }}
-          loading={statsLoading}
-          icon={Building2}
-        />
-      )}
-
-      {viewMode === 'employment_type' && (
-        <EmployeeGroupCards
-          groups={stats?.employees.byType.map((t) => ({ ...t, label: typeOptions.find((o) => o.value === t.type)?.label || t.type })) || []}
-          labelKey="label"
-          valueKey="type"
-          onSelect={(value) => { setEmploymentType(value); setViewMode('list'); setPage(1); }}
-          loading={statsLoading}
-          icon={UserCircle}
+      {isGrouped && (
+        <GroupedEmployeeSections
+          employees={employees}
+          mode={viewMode}
+          typeOptions={typeOptions}
+          isLoading={isLoading}
+          onRowClick={(e) => router.push(`/admin/hr/employees/${e.id}`)}
         />
       )}
 
@@ -303,47 +294,4 @@ export default function AdminHrEmployeesPage() {
   );
 }
 
-function EmployeeGroupCards({
-  groups,
-  labelKey,
-  valueKey = labelKey,
-  onSelect,
-  loading,
-  icon: Icon,
-}: {
-  groups: Array<{ count: number; [key: string]: string | number }>;
-  labelKey: string;
-  valueKey?: string;
-  onSelect: (value: string) => void;
-  loading?: boolean;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  if (loading) {
-    return <div className="text-sm text-muted-foreground py-4">Loading groups...</div>;
-  }
-  if (groups.length === 0) {
-    return <div className="text-sm text-muted-foreground py-4">No groups found.</div>;
-  }
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {groups.map((g) => {
-        const label = String(g[labelKey] || 'Unspecified');
-        const value = String(g[valueKey] || label);
-        return (
-          <Card key={value} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => onSelect(value)}>
-            <CardContent className="flex items-center gap-4 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                <Icon className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate capitalize">{label.replace(/_/g, ' ')}</div>
-                <div className="text-sm text-muted-foreground">{g.count} employees</div>
-              </div>
-              <Button variant="ghost" size="sm">View</Button>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
+
