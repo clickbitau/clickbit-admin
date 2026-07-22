@@ -116,3 +116,18 @@ export class SocialLoginDto {
   @IsString()
   provider_id?: string;
 }
+
+export class GenerateBackupCodesDto {
+  @IsOptional()
+  count?: number | string;
+}
+
+export class BackupCodeVerifyDto {
+  @IsString()
+  @MinLength(1)
+  code: string;
+
+  @IsOptional()
+  @IsString()
+  refreshToken?: string;
+}

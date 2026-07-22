@@ -5734,3 +5734,16 @@ model passkey_challenges {
   @@index([expires_at])
   @@schema("public")
 }
+
+model user_backup_codes {
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  code_hash  String    @db.VarChar(255)
+  used_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, code_hash], map: "unique_user_backup_code")
+  @@index([user_id], map: "idx_user_backup_codes_user_id")
+  @@schema("public")
+}
