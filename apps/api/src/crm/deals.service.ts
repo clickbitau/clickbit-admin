@@ -554,6 +554,11 @@ export class DealsService {
     const deal = await this.prisma.deals.findUnique({ where: { id } });
     if (!deal) throw new NotFoundException('Deal not found');
 
+    const existingProject = await this.prisma.crm_projects.findFirst({ where: { deal_id: id, deleted_at: null } });
+    if (existingProject) {
+      return { message: 'A project already exists for this deal', project: existingProject };
+    }
+
     const project = await this.prisma.crm_projects.create({
       data: {
         project_number: `PROJ-${Date.now()}`,

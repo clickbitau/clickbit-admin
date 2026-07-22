@@ -203,6 +203,16 @@ export class CompaniesController {
     return this.companiesService.uploadDocument(req.user.id, id, file, dto);
   }
 
+  @Post(':companyId/documents/:docId/download')
+  async trackDocumentDownload(
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Param('docId', ParseIntPipe) docId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.companiesService.trackDocumentDownload(companyId, docId);
+  }
+
   @Get(':companyId/documents/:docId')
   async getDocument(
     @Param('companyId', ParseIntPipe) companyId: number,

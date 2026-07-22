@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
+import { EmailService } from '../common/email.service';
 import { CompaniesController } from './companies.controller';
 import { CompaniesService } from './companies.service';
 import { ContactsController } from './contacts.controller';
@@ -28,6 +29,9 @@ import { CrmProjectsController } from './crm-projects.controller';
 import { UsersController } from './users.controller';
 import { AdminContactsController } from './admin-contacts.controller';
 import { TasksController } from './tasks.controller';
+import { CrmController } from './crm.controller';
+import { CrmService } from './crm.service';
+import { ProjectsLegacyController } from './projects-legacy.controller';
 
 @Module({
   imports: [AuthModule, StorageModule],
@@ -48,6 +52,8 @@ import { TasksController } from './tasks.controller';
     UsersController,
     AdminContactsController,
     TasksController,
+    CrmController,
+    ProjectsLegacyController,
   ],
   providers: [
     CompaniesService,
@@ -61,6 +67,8 @@ import { TasksController } from './tasks.controller';
     AutomationsService,
     ReportsService,
     IntegrationsService,
+    EmailService,
+    CrmService,
   ],
 })
 export class CrmModule {}

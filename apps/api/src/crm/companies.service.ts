@@ -1187,6 +1187,23 @@ export class CompaniesService {
     return document;
   }
 
+  async trackDocumentDownload(companyId: number, docId: number) {
+    const document = await this.prisma.company_documents.findFirst({
+      where: { id: docId, company_id: companyId },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+
+    await this.prisma.company_documents.update({
+      where: { id: docId },
+      data: {
+        download_count: { increment: 1 },
+        last_viewed_at: new Date(),
+      },
+    });
+
+    return { message: 'Download tracked', download_url: document.file_url };
+  }
+
   async updateDocument(
     companyId: number,
     docId: number,
