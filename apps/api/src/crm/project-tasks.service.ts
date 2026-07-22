@@ -277,7 +277,19 @@ export class ProjectTasksService {
       include: this.taskListInclude,
       orderBy: [{ priority: 'desc' }, { due_date: 'asc' }],
     });
-    return { success: true, tasks: tasks.map((t) => this.mapTask(t)) };
+    const data = tasks.map((t) => this.mapTask(t));
+    const stats = {
+      total: data.length,
+      todo: data.filter((t) => t.status === 'todo').length,
+      inProgress: data.filter((t) => t.status === 'in_progress').length,
+      review: data.filter((t) => t.status === 'review').length,
+      completed: data.filter((t) => t.status === 'completed').length,
+      blocked: data.filter((t) => t.status === 'blocked').length,
+      overdue: data.filter(
+        (t) => t.status !== 'completed' && t.due_date && new Date(t.due_date) < new Date(),
+      ).length,
+    };
+    return { success: true, data, stats, tasks: data };
   }
 
   async getOverdueTasks(_user: UserLike) {
