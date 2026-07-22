@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
 import { checkTrust, trustDevice } from '@/lib/api';
+import { getSharedToken, getSharedRefreshToken, setSharedTokens, clearSharedTokens } from '@/lib/cookie';
 
 interface UserProfile {
   id: number;
@@ -95,16 +96,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       setUser(null);
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
+      clearSharedTokens();
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedRefresh = localStorage.getItem(REFRESH_KEY);
+    const storedToken = getSharedToken();
+    const storedRefresh = getSharedRefreshToken();
     setTokenState(storedToken);
     setRefreshTokenState(storedRefresh);
     if (storedToken) {
@@ -119,10 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token, fetchUser]);
 
   const setToken = useCallback((value: string, refresh?: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(TOKEN_KEY, value);
-      if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-    }
+    setSharedTokens(value, refresh);
     setTokenState(value);
     if (refresh) setRefreshTokenState(refresh);
   }, []);
@@ -135,10 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearToken = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-    }
+    clearSharedTokens();
     setTokenState(null);
     setRefreshTokenState(null);
     setUser(null);

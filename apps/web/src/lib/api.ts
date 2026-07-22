@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getSharedToken, getSharedRefreshToken, setSharedTokens, clearSharedTokens } from './cookie';
 import { CompaniesListResponse } from '@clickbit/shared';
 import type {
   Activity,
@@ -89,8 +90,8 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('clickbit:access_token');
+  if (typeof window !== 'undefined' && !config.url?.includes('/auth/refresh')) {
+    const token = getSharedToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -98,10 +99,25 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('clickbit:access_token');
-      localStorage.removeItem('clickbit:refresh_token');
+  async (error) => {
+    const originalRequest = error?.config;
+    if (error?.response?.status === 401 && typeof window !== 'undefined' && !originalRequest?._retry) {
+      originalRequest._retry = true;
+      const refreshToken = getSharedRefreshToken();
+      if (refreshToken) {
+        try {
+          const { data } = await api.post('/api/auth/refresh', { refreshToken }, { headers: { Authorization: '' } });
+          const tokens = data?.data;
+          if (tokens?.accessToken) {
+            setSharedTokens(tokens.accessToken, tokens.refreshToken);
+            originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
+            return api(originalRequest);
+          }
+        } catch {
+          // fall through to logout
+        }
+      }
+      clearSharedTokens();
       if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
         window.location.href = '/login';
       }
