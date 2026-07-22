@@ -154,7 +154,14 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <span className="font-semibold">Agent Portal</span>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <div className="p-1" title={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'Agent'}>
+              <PersonAvatar name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'Agent'} avatar_url={user?.avatar} size="sm" />
+            </div>
+            <button onClick={logout} className="p-2 text-destructive" aria-label="Logout">
+              <LogOut className="h-6 w-6" />
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-2 lg:p-4">{children}</main>
