@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, InternalServerErrorException, NotFound
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Prisma } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
 
@@ -482,5 +482,52 @@ export class AuthService {
 
 
     });
-}
+  }
+
+  private hashBackupCode(code: string) {
+    return createHash('sha256').update(code.trim().toLowerCase()).digest('hex');
+  }
+
+  async generateBackupCodes(user: any, count = 10) {
+    await this.invalidateCache();
+    if (!user?.id) throw new BadRequestException('user required');
+    const userId = Number(user.id);
+    await this.prisma.user_backup_codes.deleteMany({ where: { user_id: userId } });
+
+    const codes: string[] = [];
+    const rows: { user_id: number; code_hash: string }[] = [];
+    while (codes.length < count) {
+      const raw = randomBytes(6).toString('hex');
+      const code = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+      const hash = this.hashBackupCode(code);
+      if (rows.some((r) => r.code_hash === hash)) continue;
+      rows.push({ user_id: userId, code_hash: hash });
+      codes.push(code);
+    }
+
+    await this.prisma.user_backup_codes.createMany({ data: rows, skipDuplicates: true });
+    return { success: true, data: { codes, count: codes.length } };
+  }
+
+  async listBackupCodes(user: any) {
+    if (!user?.id) throw new BadRequestException('user required');
+    const rows = await this.prisma.user_backup_codes.findMany({
+      where: { user_id: Number(user.id) },
+      orderBy: { created_at: 'desc' as const },
+      select: { id: true, used_at: true, created_at: true, updated_at: true },
+    });
+    return { success: true, data: rows };
+  }
+
+  async verifyBackupCode(user: any, code: string) {
+    if (!user?.id || !code) throw new BadRequestException('user and code required');
+    const hash = this.hashBackupCode(code);
+    const row = await this.prisma.user_backup_codes.findFirst({
+      where: { user_id: Number(user.id), code_hash: hash },
+    });
+    if (!row) throw new BadRequestException('Invalid backup code');
+    if (row.used_at) throw new BadRequestException('Backup code already used');
+    await this.prisma.user_backup_codes.update({ where: { id: row.id }, data: { used_at: new Date() } });
+    return { success: true, data: { verified: true } };
+  }
 }

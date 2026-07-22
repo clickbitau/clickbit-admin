@@ -1945,6 +1945,18 @@ export async function fetchMfaFactors(token: string) {
   return (await api.get('/api/auth/mfa/factors', { headers: authHeaders(token) })).data;
 }
 
+export async function generateBackupCodes(token: string): Promise<{ success: boolean; data: { codes: string[] } }> {
+  return (await api.post('/api/auth/mfa/backup-codes', {}, { headers: authHeaders(token) })).data;
+}
+
+export async function listBackupCodes(token: string): Promise<{ success: boolean; data: { id: number; used_at: string | null; created_at: string }[] }> {
+  return (await api.get('/api/auth/mfa/backup-codes', { headers: authHeaders(token) })).data;
+}
+
+export async function verifyBackupCode(token: string, code: string, refreshToken?: string): Promise<{ success: boolean; data: { verified: boolean } }> {
+  return (await api.post('/api/auth/mfa/backup-codes/verify', { code, refreshToken }, { headers: authHeaders(token) })).data;
+}
+
 export async function linkProvider(token: string, provider: string, access_token?: string) {
   return (await api.post('/api/auth/link-provider', { provider, access_token }, { headers: authHeaders(token) })).data;
 }

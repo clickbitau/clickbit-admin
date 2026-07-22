@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
-import { checkTrust, trustDevice } from '@/lib/api';
+import { checkTrust, trustDevice, verifyBackupCode } from '@/lib/api';
 import { getSharedToken, getSharedRefreshToken, setSharedTokens, clearSharedTokens } from '@/lib/cookie';
 
 interface UserProfile {
@@ -42,6 +42,7 @@ interface AuthContextValue {
   clearToken: () => void;
   login: (email: string, password: string) => Promise<{ user: UserProfile; accessToken: string; refreshToken: string; requiresMfa?: boolean }>;
   completeMfa: (factorId: string, code: string, trustDevice?: boolean) => Promise<void>;
+  completeBackupCode: (code: string, rememberDevice?: boolean) => Promise<void>;
   cancelMfa: () => void;
   register: (data: RegisterData) => Promise<{ message: string }>;
   logout: () => Promise<void>;
@@ -239,6 +240,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [mfaToken, mfaRefreshToken, setToken, clearMfa, router, clearToken],
   );
 
+  const completeBackupCode = useCallback(
+    async (code: string, rememberDevice = false) => {
+      if (!mfaToken || !mfaRefreshToken) throw new Error('MFA session not available');
+      setLoading(true);
+      setError(null);
+      try {
+        await verifyBackupCode(mfaToken, code, mfaRefreshToken);
+        setToken(mfaToken, mfaRefreshToken);
+        clearMfa();
+        const { data: me } = await axios.get('/api/auth/me', { headers: { Authorization: `Bearer ${mfaToken}` } });
+        if (me?.data?.user) {
+          if (me.data.user.role === 'customer') {
+            clearToken();
+            router.replace('/login?customer=1');
+            return;
+          }
+          setUser(me.data.user);
+          if (rememberDevice) {
+            try {
+              const trusted = await trustDevice(mfaToken);
+              if (typeof window !== 'undefined' && trusted.data?.token) {
+                localStorage.setItem(TRUST_TOKEN_KEY, trusted.data.token);
+              }
+            } catch {
+              // non-fatal
+            }
+          }
+          router.replace(getDashboardPath(me.data.user.role));
+        }
+      } catch (err: any) {
+        const message = err?.response?.data?.message || err?.message || 'Backup code verification failed';
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mfaToken, mfaRefreshToken, setToken, clearMfa, router, clearToken],
+  );
+
   const cancelMfa = useCallback(() => {
     clearMfa();
     setError(null);
@@ -324,6 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearToken,
     login,
     completeMfa,
+    completeBackupCode,
     cancelMfa,
     register,
     logout,

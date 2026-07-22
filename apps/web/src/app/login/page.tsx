@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2, ShieldCheck, Fingerprint } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2, ShieldCheck, Fingerprint, Key } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaApple, FaGithub } from 'react-icons/fa';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -23,7 +23,7 @@ function getDashboardPath(role?: string) {
 }
 
 export default function LoginPage() {
-  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, cancelMfa, clearError, oauthSignIn, sendMagicLink, setToken, clearToken } = useAuth();
+  const { user, loading, error, mfaRequired, mfaFactors, login, completeMfa, completeBackupCode, cancelMfa, clearError, oauthSignIn, sendMagicLink, setToken, clearToken } = useAuth();
   const router = useRouter();
   const [customerBlocked, setCustomerBlocked] = useState(false);
   const [email, setEmail] = useState('');
@@ -38,6 +38,8 @@ export default function LoginPage() {
   const [isMfaLoading, setIsMfaLoading] = useState(false);
   const [trustDevice, setTrustDevice] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [backupMode, setBackupMode] = useState(false);
+  const [backupCode, setBackupCode] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -75,6 +77,16 @@ export default function LoginPage() {
 
   const handleMfaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (backupMode) {
+      if (backupCode.length < 6) return;
+      setIsMfaLoading(true);
+      try {
+        await completeBackupCode(backupCode, trustDevice);
+      } finally {
+        setIsMfaLoading(false);
+      }
+      return;
+    }
     if (!selectedFactorId || mfaCode.length < 6) return;
     setIsMfaLoading(true);
     try {
@@ -168,7 +180,7 @@ export default function LoginPage() {
               </div>
 
               <form onSubmit={handleMfaSubmit} className="space-y-4">
-                {mfaFactors.length > 1 && (
+                {!backupMode && mfaFactors.length > 1 && (
                   <div>
                     <Label htmlFor="factor">Authenticator</Label>
                     <select
@@ -187,20 +199,33 @@ export default function LoginPage() {
                 )}
 
                 <div>
-                  <Label htmlFor="mfa-code">Authentication code</Label>
-                  <Input
-                    id="mfa-code"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    required
-                    minLength={6}
-                    maxLength={6}
-                    value={mfaCode}
-                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="mt-1.5 text-center tracking-[0.5em] text-lg font-semibold"
-                    placeholder="000000"
-                  />
+                  <Label htmlFor="mfa-code">{backupMode ? 'Backup code' : 'Authentication code'}</Label>
+                  {backupMode ? (
+                    <Input
+                      id="backup-code"
+                      type="text"
+                      autoComplete="off"
+                      required
+                      value={backupCode}
+                      onChange={(e) => setBackupCode(e.target.value.replace(/\s/g, '').toLowerCase())}
+                      className="mt-1.5 text-center font-mono text-lg font-semibold tracking-widest"
+                      placeholder="xxxx-xxxx-xxxx"
+                    />
+                  ) : (
+                    <Input
+                      id="mfa-code"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      required
+                      minLength={6}
+                      maxLength={6}
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="mt-1.5 text-center tracking-[0.5em] text-lg font-semibold"
+                      placeholder="000000"
+                    />
+                  )}
                 </div>
 
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -219,13 +244,25 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={isMfaLoading || mfaCode.length < 6 || !selectedFactorId}>
+                <Button type="submit" className="w-full" disabled={isMfaLoading || (backupMode ? backupCode.length < 6 : mfaCode.length < 6 || !selectedFactorId)}>
                   {isMfaLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
                   Verify
                 </Button>
 
                 <Button type="button" variant="outline" className="w-full" onClick={cancelMfa} disabled={isMfaLoading}>
                   Cancel
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setBackupMode((v) => !v)}
+                  disabled={isMfaLoading}
+                >
+                  <Key className="h-4 w-4 mr-1" />
+                  {backupMode ? 'Use authenticator code' : 'Use backup code'}
                 </Button>
               </form>
             </div>

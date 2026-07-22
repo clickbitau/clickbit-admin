@@ -5,8 +5,10 @@ import { PasskeysService } from './passkeys.service';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { RequestWithUser } from '../types/request-with-user';
 import {
+  BackupCodeVerifyDto,
   CheckTrustDto,
   ForgotPasswordDto,
+  GenerateBackupCodesDto,
   LinkProviderDto,
   LoginDto,
   MagicLinkDto,
@@ -49,6 +51,22 @@ export class AuthController {
   @Get('mfa/factors')
   @UseGuards(SupabaseAuthGuard)
   async mfaFactors(@Req() req: RequestWithUser) { return this.authService.listMfaFactors(req.user); }
+
+  @Get('mfa/backup-codes')
+  @UseGuards(SupabaseAuthGuard)
+  async listBackupCodes(@Req() req: RequestWithUser) { return this.authService.listBackupCodes(req.user); }
+
+  @Post('mfa/backup-codes')
+  @UseGuards(SupabaseAuthGuard)
+  async generateBackupCodes(@Req() req: RequestWithUser, @Body() body: GenerateBackupCodesDto) {
+    return this.authService.generateBackupCodes(req.user, Number(body?.count || 10));
+  }
+
+  @Post('mfa/backup-codes/verify')
+  @UseGuards(SupabaseAuthGuard)
+  async verifyBackupCode(@Req() req: RequestWithUser, @Body() body: BackupCodeVerifyDto) {
+    return this.authService.verifyBackupCode(req.user, body.code);
+  }
 
   @Post('refresh')
   async refresh(@Body() body: RefreshDto) { return this.authService.refresh(body || {}); }
