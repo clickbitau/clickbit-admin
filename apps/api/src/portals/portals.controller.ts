@@ -121,8 +121,8 @@ export class CustomerController {
 
   @Get('dashboard')
   @Roles('customer', 'admin')
-  async dashboard(@Req() req: RequestWithUser) {
-    return this.service.customerDashboard(req.user);
+  async dashboard(@Req() req: RequestWithUser, @Query() query: any) {
+    return this.service.customerDashboard(req.user, query);
   }
 
   @Get('company')
