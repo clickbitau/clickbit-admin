@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
-import { createEmployeeItSupportTicket, fetchCustomerTickets } from '@/lib/api';
+import { createEmployeeItSupportTicket, fetchMyTickets } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { Headset, Info, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,7 +29,7 @@ export default function EmployeeItSupportPage() {
     queryKey: ['employee-it-tickets', token],
     queryFn: async () => {
       if (!token) throw new Error('No token');
-      return fetchCustomerTickets(token, { limit: 50 });
+      return fetchMyTickets(token, { limit: 50 });
     },
     enabled: !!token,
   });
