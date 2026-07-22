@@ -417,30 +417,71 @@ export class PortalsService {
   // -------------------------------------------------------------------------
   // Customer portal
   // -------------------------------------------------------------------------
-  async customerDashboard(user: UserLike) {
-    return this.cached(this.cacheKey('customerDashboard', user.id), async () => {
+  async customerDashboard(user: UserLike, query?: any) {
+    const includeRecent = query?.includeRecent !== 'false' && query?.includeRecent !== false;
+    return this.cached(this.cacheKey('customerDashboard', user.id, includeRecent ? 'recent' : 'norecent'), async () => {
 
       const { contactIds, companyIds, profile, emails } = await this.resolveCustomer(user);
       const invoiceWhere = this.invoiceScope(contactIds, companyIds);
       const projectWhere = this.projectScope(contactIds, companyIds);
       const ticketWhere = this.ticketScopeByEmails(emails, [user.id]);
-      const [invoiceStats, invoiceCount, projectCount, taskCount, documentCount, paymentCount, orderCount, ticketCount] = await Promise.all([
+      const orderWhere: any = { deleted_at: null, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] };
+      const [
+        invoiceStats, invoiceCount, projectCount, taskCount, documentCount, paymentCount, orderCount, ticketCount,
+        paidInvoiceCount, activeProjectCount, openTicketCount, resolvedTicketCount, orderStatusCounts,
+        recentOrders, recentTickets,
+      ] = await Promise.all([
         this.prisma.invoices.aggregate({ where: invoiceWhere, _sum: { total_amount: true, amount_paid: true } }),
         this.prisma.invoices.count({ where: invoiceWhere }),
         this.prisma.crm_projects.count({ where: projectWhere }),
         this.prisma.project_tasks.count({ where: { customer_id: { in: contactIds }, deleted_at: null } as any }),
         this.prisma.documents.count({ where: { OR: [{ related_entity_id: { in: companyIds }, related_entity_type: 'company' }, { related_entity_id: { in: contactIds }, related_entity_type: 'contact' }], status: 'active' } as any }),
         this.prisma.payments.count({ where: { user_id: user.id, deleted_at: null } }),
-        this.prisma.orders.count({ where: { OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }], deleted_at: null } as any }),
+        this.prisma.orders.count({ where: orderWhere }),
         this.prisma.tickets.count({ where: ticketWhere }),
+        this.prisma.invoices.count({ where: { ...invoiceWhere, status: 'paid' } }),
+        this.prisma.crm_projects.count({ where: { ...projectWhere, status: { notIn: ['completed', 'cancelled', 'on_hold'] } } }),
+        this.prisma.tickets.count({ where: { ...ticketWhere, status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] } } }),
+        this.prisma.tickets.count({ where: { ...ticketWhere, status: { in: ['resolved', 'closed'] } } }),
+        this.prisma.orders.groupBy({ by: ['status'], where: orderWhere, _count: { id: true } }),
+        includeRecent
+          ? this.prisma.orders.findMany({
+              where: orderWhere,
+              orderBy: { created_at: 'desc' },
+              take: 5,
+              select: { id: true, order_number: true, total_amount: true, status: true, created_at: true },
+            })
+          : Promise.resolve([] as any[]),
+        includeRecent
+          ? this.prisma.tickets.findMany({
+              where: ticketWhere,
+              orderBy: { created_at: 'desc' },
+              take: 5,
+              select: { id: true, ticket_number: true, subject: true, status: true, priority: true, created_at: true },
+            })
+          : Promise.resolve([] as any[]),
       ]);
       const total = toNum0(invoiceStats._sum?.total_amount);
       const paid = toNum0(invoiceStats._sum?.amount_paid);
+      const outstanding = total - paid;
+
+      const orderStatusMap = (orderStatusCounts as any[]).reduce<Record<string, number>>((acc, s) => {
+        acc[s.status as string] = (s._count as any)?.id ?? 0;
+        return acc;
+      }, {});
+      const pendingOrders = orderStatusMap['pending'] || 0;
+      const processingOrders = orderStatusMap['processing'] || 0;
+      const completedOrders =
+        (orderStatusMap['shipped'] || 0) +
+        (orderStatusMap['delivered'] || 0) +
+        (orderStatusMap['refunded'] || 0) +
+        (orderStatusMap['partially_refunded'] || 0);
+
       return {
         success: true,
         data: {
           name: profile ? `${profile.first_name} ${profile.last_name}` : null,
-          outstanding_balance: total - paid,
+          outstanding_balance: outstanding,
           total_invoiced: total,
           total_paid: paid,
           invoice_count: invoiceCount,
@@ -450,6 +491,33 @@ export class PortalsService {
           payment_count: paymentCount,
           order_count: orderCount,
           ticket_count: ticketCount,
+          orders: {
+            total: orderCount,
+            pending: pendingOrders,
+            processing: processingOrders,
+            completed: completedOrders,
+          },
+          tickets: {
+            total: ticketCount,
+            open: openTicketCount,
+            awaiting_response: 0,
+            resolved: resolvedTicketCount,
+          },
+          invoices: {
+            total: invoiceCount,
+            paid: paidInvoiceCount,
+            unpaid: invoiceCount - paidInvoiceCount,
+          },
+          projects: {
+            total: projectCount,
+            active: activeProjectCount,
+          },
+          payments: {
+            totalPaid: paid,
+            pendingPayments: outstanding,
+          },
+          recentOrders: (recentOrders as any[]).map((o) => ({ ...o, total_amount: toNum0(o.total_amount) })),
+          recentTickets,
         },
       };
 
