@@ -130,7 +130,6 @@ const sections: NavSection[] = [
     links: [
       { href: '/admin/hr/employees', label: 'Employees', icon: Users },
       { href: '/admin/hr/timesheets', label: 'Timesheets', icon: FileClock },
-      { href: '/admin/hr/shifts', label: 'Shifts', icon: Calendar },
       { href: '/admin/hr/payslips', label: 'Payslips', icon: Banknote },
       { href: '/admin/hr/contracts', label: 'Contracts', icon: FileText },
       { href: '/admin/hr/kpi', label: 'KPI', icon: BarChart3 },

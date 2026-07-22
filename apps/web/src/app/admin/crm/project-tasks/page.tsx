@@ -27,6 +27,7 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { ProjectTaskForm } from '@/components/crm/ProjectTaskForm';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
+import { StatCards } from '@/components/design-system/StatCards';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import {
@@ -60,6 +61,7 @@ import {
   Filter,
   Eye,
   EyeOff,
+  AlertTriangle,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -193,6 +195,26 @@ export default function ProjectTasksPage() {
   const tasks = useMemo(() => data?.data ?? [], [data?.data]);
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 };
 
+  const taskStats = useMemo(() => {
+    const total = pagination.totalItems || tasks.length;
+    const todo = tasks.filter((t) => t.status === 'todo').length;
+    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
+    const review = tasks.filter((t) => t.status === 'review').length;
+    const completed = tasks.filter((t) => t.status === 'completed').length;
+    const blocked = tasks.filter((t) => t.status === 'blocked').length;
+    const overdue = tasks.filter((t) => isOverdue(t)).length;
+    return { total, todo, inProgress, review, completed, blocked, overdue };
+  }, [tasks, pagination.totalItems]);
+
+  const statCards = useMemo(() => [
+    { label: 'Total', value: taskStats.total, icon: FolderKanban },
+    { label: 'To Do', value: taskStats.todo, icon: List, accent: 'secondary' as const, onClick: () => { setStatus('todo'); setPage(1); } },
+    { label: 'In Progress', value: taskStats.inProgress, icon: Clock, accent: 'primary' as const, onClick: () => { setStatus('in_progress'); setPage(1); } },
+    { label: 'Completed', value: taskStats.completed, icon: CheckSquare, accent: 'success' as const, onClick: () => { setStatus('completed'); setPage(1); } },
+    { label: 'Blocked', value: taskStats.blocked, icon: AlertTriangle, accent: 'destructive' as const, onClick: () => { setStatus('blocked'); setPage(1); } },
+    { label: 'Overdue', value: taskStats.overdue, icon: Calendar, accent: 'warning' as const },
+  ], [taskStats]);
+
   const assigneeIdsFromTasks = useMemo(() => {
     const ids = new Set<number>();
     tasks.forEach((t) => {
@@ -206,7 +228,6 @@ export default function ProjectTasksPage() {
     const selectedSet = new Set(selectedAssignees);
     return (assignees ?? []).filter((u) => assigneeIdsFromTasks.has(Number(u.id)) || selectedSet.has(Number(u.id)));
   }, [assignees, assigneeIdsFromTasks, selectedAssignees]);
-
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<ProjectTask> }) => updateTask(token!, id, data),
     onSuccess: () => {
@@ -453,6 +474,8 @@ export default function ProjectTasksPage() {
         </Button>
       }
     >
+      <StatCards cards={statCards.map((s) => ({ ...s, value: isLoading && tasks.length === 0 ? '...' : s.value }))} />
+
       <div className="flex flex-wrap gap-2">
         {STATUS_TABS.map((s) => (
           <Button
@@ -510,6 +533,7 @@ export default function ProjectTasksPage() {
                       </button>
                     );
                   })}
+                  {visibleAssignees.length === 0 && <span className="text-xs text-muted-foreground">No assignees match filters</span>}
                 </div>
                 {selectedAssignees.length > 0 && (
                   <Button variant="ghost" size="sm" onClick={() => setSelectedAssignees([])}>
