@@ -182,6 +182,8 @@ export interface CachedEmail {
   folder_path: string;
   uid: number;
   message_id?: string | null;
+  in_reply_to?: string | null;
+  references_header?: string | null;
   subject?: string | null;
   from_address?: string | null;
   from_name?: string | null;
