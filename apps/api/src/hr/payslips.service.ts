@@ -955,13 +955,20 @@ export class PayslipsService {
 
   private mapPayslip(p: any) {
     const profile = p.employees?.profiles;
+    const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
     return {
       ...p,
       employee: p.employees
         ? {
             ...p.employees,
-            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || profile?.email || `Employee ${p.employees.id}`,
+            name: fullName || profile?.email || `Employee ${p.employees.id}`,
             email: profile?.email,
+            user: {
+              first_name: profile?.first_name || '',
+              last_name: profile?.last_name || '',
+              email: profile?.email,
+              avatar: profile?.avatar,
+            },
           }
         : undefined,
     };
