@@ -27,7 +27,6 @@ import { PageShell } from '@/components/design-system/PageShell';
 import { ProjectTaskForm } from '@/components/crm/ProjectTaskForm';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { PriorityBadge } from '@/components/design-system/PriorityBadge';
-import { StatCards } from '@/components/design-system/StatCards';
 import { useDebounce } from '@/lib/useDebounce';
 import { useRealtimeRefresh } from '@/lib/realtime';
 import {
@@ -61,7 +60,6 @@ import {
   Filter,
   Eye,
   EyeOff,
-  AlertTriangle,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -226,26 +224,6 @@ export default function ProjectTasksPage() {
 
   const tasks = useMemo(() => data?.data ?? [], [data?.data]);
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 };
-
-  const taskStats = useMemo(() => {
-    const total = pagination.totalItems || tasks.length;
-    const todo = tasks.filter((t) => t.status === 'todo').length;
-    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
-    const review = tasks.filter((t) => t.status === 'review').length;
-    const completed = tasks.filter((t) => t.status === 'completed').length;
-    const blocked = tasks.filter((t) => t.status === 'blocked').length;
-    const overdue = tasks.filter((t) => isOverdue(t)).length;
-    return { total, todo, inProgress, review, completed, blocked, overdue };
-  }, [tasks, pagination.totalItems]);
-
-  const statCards = useMemo(() => [
-    { label: 'Total', value: taskStats.total, icon: FolderKanban },
-    { label: 'To Do', value: taskStats.todo, icon: List, accent: 'secondary' as const, onClick: () => { setStatus('todo'); setPage(1); } },
-    { label: 'In Progress', value: taskStats.inProgress, icon: Clock, accent: 'primary' as const, onClick: () => { setStatus('in_progress'); setPage(1); } },
-    { label: 'Completed', value: taskStats.completed, icon: CheckSquare, accent: 'success' as const, onClick: () => { setStatus('completed'); setPage(1); } },
-    { label: 'Blocked', value: taskStats.blocked, icon: AlertTriangle, accent: 'destructive' as const, onClick: () => { setStatus('blocked'); setPage(1); } },
-    { label: 'Overdue', value: taskStats.overdue, icon: Calendar, accent: 'warning' as const },
-  ], [taskStats]);
 
   const assigneeIdsFromTasks = useMemo(() => {
     const ids = new Set<number>();
@@ -556,26 +534,25 @@ export default function ProjectTasksPage() {
       icon={FolderKanban}
       description={pageDescription}
       actions={
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" /> New Task
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_TABS.map((s) => (
+              <Button
+                key={s.key}
+                size="sm"
+                variant={status === s.key ? 'default' : 'outline'}
+                onClick={() => { setStatus(s.key); setPage(1); }}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New Task
+          </Button>
+        </div>
       }
     >
-      <StatCards cards={statCards.map((s) => ({ ...s, value: isLoading && tasks.length === 0 ? '...' : s.value }))} />
-
-      <div className="flex flex-wrap gap-2">
-        {STATUS_TABS.map((s) => (
-          <Button
-            key={s.key}
-            size="sm"
-            variant={status === s.key ? 'default' : 'outline'}
-            onClick={() => { setStatus(s.key); setPage(1); }}
-          >
-            {s.label}
-          </Button>
-        ))}
-      </div>
-
       <Card className="nm-raised p-3">
         <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
           <div className="flex flex-wrap items-center gap-4">
@@ -646,33 +623,38 @@ export default function ProjectTasksPage() {
                 variant={view === 'list' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setView('list')}
-                className="h-8 rounded-sm"
+                className="h-8 w-8 rounded-sm"
+                title="List"
               >
-                <List className="h-4 w-4 mr-1" /> List
+                <List className="h-4 w-4" />
               </Button>
               <Button
                 variant={view === 'kanban' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setView('kanban')}
-                className="h-8 rounded-sm"
+                className="h-8 w-8 rounded-sm"
+                title="Kanban"
               >
-                <LayoutGrid className="h-4 w-4 mr-1" /> Kanban
+                <LayoutGrid className="h-4 w-4" />
               </Button>
             </div>
             <Button
               variant={hideCompleted ? 'default' : 'outline'}
               size="sm"
               onClick={() => { setHideCompleted((prev) => !prev); setPage(1); }}
+              className="h-8 w-8 p-0"
+              title={hideCompleted ? 'Completed hidden' : 'Hide completed'}
             >
-              {hideCompleted ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
-              {hideCompleted ? 'Completed hidden' : 'Hide completed'}
+              {hideCompleted ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
             <Button
               variant={showFilters ? 'default' : 'outline'}
               size="sm"
               onClick={() => setShowFilters((v) => !v)}
+              className="h-8 w-8 p-0"
+              title="Filters"
             >
-              <Filter className="mr-1 h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" />
             </Button>
           </div>
         </div>
