@@ -11,7 +11,10 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 import { Profile } from '@clickbit/shared';
+
+const TOKEN_CACHE_TTL_SECONDS = 60;
 
 function isSupabaseToken(token: string): boolean {
   try {
@@ -29,12 +32,31 @@ function isSupabaseToken(token: string): boolean {
   return false;
 }
 
+function tokenTtlSeconds(token: string): number {
+  try {
+    const decoded = jwt.decode(token, { complete: true });
+    if (decoded && typeof decoded === 'object' && decoded.payload) {
+      const payload = decoded.payload as JwtPayload;
+      if (typeof payload.exp === 'number' && payload.exp > 0) {
+        const ttl = Math.floor(payload.exp - Date.now() / 1000);
+        return ttl > 0 ? Math.min(ttl, TOKEN_CACHE_TTL_SECONDS) : 0;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return TOKEN_CACHE_TTL_SECONDS;
+}
+
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    private cache: CacheService,
   ) {}
+
+  private static tokenQueue = new Map<string, Promise<Profile>>();
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -63,16 +85,48 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     if (isSupabaseToken(token)) {
-      return this.authenticateSupabaseToken(request, token);
+      const profile = await this.verifySupabaseTokenWithCache(token);
+      request.user = profile;
+      return true;
     }
 
     return this.authenticateCustomJwt(request, token);
   }
 
-  private async authenticateSupabaseToken(
-    request: Request,
-    token: string,
-  ): Promise<boolean> {
+  private async verifySupabaseTokenWithCache(token: string): Promise<Profile> {
+    // Serialize verification per token so concurrent requests with the same
+    // access token do not hammer Supabase with parallel getUser() calls.
+    const existing = SupabaseAuthGuard.tokenQueue.get(token);
+    if (existing) {
+      return existing;
+    }
+
+    const verification = this.verifySupabaseTokenQueued(token);
+    SupabaseAuthGuard.tokenQueue.set(token, verification);
+    verification.finally(() => {
+      SupabaseAuthGuard.tokenQueue.delete(token);
+    });
+
+    return verification;
+  }
+
+  private async verifySupabaseTokenQueued(token: string): Promise<Profile> {
+    const cacheKey = this.cache.key('auth', 'guard', token);
+    const cached = await this.cache.get<Profile>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const profile = await this.verifySupabaseToken(token);
+    const ttl = tokenTtlSeconds(token);
+    if (ttl > 0) {
+      await this.cache.set(cacheKey, profile, ttl);
+    }
+
+    return profile;
+  }
+
+  private async verifySupabaseToken(token: string): Promise<Profile> {
     const supabaseUrl = this.config.get<string>('SUPABASE_URL');
     const supabaseServiceKey = this.config.get<string>(
       'SUPABASE_SERVICE_ROLE_KEY',
@@ -128,8 +182,7 @@ export class SupabaseAuthGuard implements CanActivate {
         });
       }
 
-      request.user = profile as Profile;
-      return true;
+      return profile as Profile;
     } catch (err) {
       if (err instanceof UnauthorizedException) {
         throw err;
