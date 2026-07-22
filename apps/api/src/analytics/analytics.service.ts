@@ -25,8 +25,15 @@ function sanitizeUrl(url: string | undefined, maxLength = 2000): string | null {
   }
 }
 
-function asStr(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined;
+function asStr(v: unknown, maxLength?: number): string | undefined {
+  if (typeof v === 'string') {
+    return maxLength && v.length > maxLength ? v.substring(0, maxLength) : v;
+  }
+  if (typeof v === 'object' && v !== null) {
+    const json = JSON.stringify(v);
+    return maxLength && json.length > maxLength ? json.substring(0, maxLength) : json;
+  }
+  return undefined;
 }
 
 function asNum(v: unknown): number | undefined {
@@ -67,33 +74,33 @@ export class AnalyticsService {
     try {
       const analytics = await this.prisma.analytics.create({
         data: {
-          event_type: asStr(dto.event_type) || 'custom',
-          event_name: asStr(dto.event_name) || 'custom_event',
+          event_type: asStr(dto.event_type, 50) || 'custom',
+          event_name: asStr(dto.event_name, 255) || 'custom_event',
           user_id: asNum(dto.user_id),
-          session_id: asStr(dto.session_id),
+          session_id: asStr(dto.session_id, 255),
           page_url: sanitizeUrl(asStr(dto.page_url)),
-          page_title: asStr(dto.page_title),
+          page_title: asStr(dto.page_title, 255),
           referrer_url: sanitizeUrl(asStr(dto.referrer_url)),
           ip_address: clientIP,
           user_agent: asStr(dto.user_agent) || req.get('User-Agent'),
-          device_type: asStr(dto.device_type),
-          browser: asStr(dto.browser),
-          browser_version: asStr(dto.browser_version),
-          operating_system: asStr(dto.operating_system),
-          os_version: asStr(dto.os_version),
-          country: asStr(dto.country),
-          region: asStr(dto.region),
-          city: asStr(dto.city),
+          device_type: asStr(dto.device_type, 50),
+          browser: asStr(dto.browser, 100),
+          browser_version: asStr(dto.browser_version, 50),
+          operating_system: asStr(dto.operating_system, 100),
+          os_version: asStr(dto.os_version, 50),
+          country: asStr(dto.country, 100),
+          region: asStr(dto.region, 100),
+          city: asStr(dto.city, 100),
           latitude: asNum(dto.latitude) ? new Decimal(asNum(dto.latitude)!) : undefined,
           longitude: asNum(dto.longitude) ? new Decimal(asNum(dto.longitude)!) : undefined,
-          utm_source: asStr(dto.utm_source),
-          utm_medium: asStr(dto.utm_medium),
-          utm_campaign: asStr(dto.utm_campaign),
-          utm_term: asStr(dto.utm_term),
-          utm_content: asStr(dto.utm_content),
-          event_data: asStr(dto.event_data),
+          utm_source: asStr(dto.utm_source, 255),
+          utm_medium: asStr(dto.utm_medium, 255),
+          utm_campaign: asStr(dto.utm_campaign, 255),
+          utm_term: asStr(dto.utm_term, 255),
+          utm_content: asStr(dto.utm_content, 255),
+          event_data: asStr(dto.event_data, 10000),
           value: asNum(dto.value) ? new Decimal(asNum(dto.value)!) : undefined,
-          currency: asStr(dto.currency),
+          currency: asStr(dto.currency, 3) || 'AUD',
           duration: asNum(dto.duration),
           scroll_depth: asNum(dto.scroll_depth),
           time_on_page: asNum(dto.time_on_page),
