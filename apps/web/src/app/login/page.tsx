@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2, ShieldCheck, Fingerprint } from 'lucide-react';
+import { FcGoogle } from 'react-icons/fc';
+import { FaApple, FaGithub } from 'react-icons/fa';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { createPasskeyLoginOptions, verifyPasskeyLogin } from '@/lib/api';
 import { Logo } from '@/components/Logo';
@@ -302,26 +304,28 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { id: 'google', label: 'Google' },
-              { id: 'apple', label: 'Apple' },
-              { id: 'facebook', label: 'Facebook' },
-              { id: 'github', label: 'GitHub' },
+              { id: 'google', label: 'Google', icon: FcGoogle },
+              { id: 'apple', label: 'Apple', icon: FaApple },
+              { id: 'github', label: 'GitHub', icon: FaGithub },
             ].map((provider) => (
               <button
                 key={provider.id}
                 type="button"
                 disabled={!!oauthLoading}
                 onClick={() => handleOAuth(provider.id)}
-                className="h-11 nm-raised-sm rounded-xl flex items-center justify-center text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="h-11 nm-raised-sm rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 aria-label={`Sign in with ${provider.label}`}
                 title={provider.label}
               >
                 {oauthLoading === provider.id ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <span className="uppercase text-xs">{provider.label[0]}</span>
+                  <>
+                    <provider.icon className="h-5 w-5" />
+                    <span className="hidden sm:inline">{provider.label}</span>
+                  </>
                 )}
               </button>
             ))}
