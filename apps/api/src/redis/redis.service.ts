@@ -86,12 +86,42 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   constructor() {
     const redisUrl = process.env.REDIS_URL;
-    if (redisUrl) {
-      this.client = new Redis(redisUrl, {
-        lazyConnect: true,
-        retryStrategy: (times) => Math.min(times * 50, 2000),
-        maxRetriesPerRequest: 3,
-      });
+    const sentinelHosts = process.env.REDIS_SENTINELS;
+    const masterName = process.env.REDIS_MASTER_NAME || 'mymaster';
+    const commonOptions = {
+      lazyConnect: true,
+      retryStrategy: (times: number) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+    };
+
+    let password: string | undefined = process.env.REDIS_PASSWORD;
+    if (!password) {
+      try {
+        if (redisUrl) {
+          password = new URL(redisUrl.startsWith('redis://') ? redisUrl : `redis://${redisUrl}`).password;
+        }
+      } catch {
+        password = undefined;
+      }
+    }
+
+    if (sentinelHosts) {
+      const sentinels = sentinelHosts
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean)
+        .map((h) => {
+          const [host, port] = h.split(':');
+          return { host, port: Number(port) || 26379 };
+        });
+      this.client = new Redis({
+        sentinels,
+        name: masterName,
+        password,
+        ...commonOptions,
+      } as any);
+    } else if (redisUrl) {
+      this.client = new Redis(redisUrl, commonOptions);
     } else {
       this.client = new InMemoryRedis();
     }
