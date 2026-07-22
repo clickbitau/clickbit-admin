@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, BarChart3, Calendar, RefreshCw, Search, Trophy, TrendingUp, Users } from 'lucide-react';
+import { ArrowRight, BarChart3, Calendar, Info, RefreshCw, Search, Trophy, TrendingUp, Users } from 'lucide-react';
 import { PageShell } from '@/components/design-system/PageShell';
 import { StatCards } from '@/components/design-system/StatCards';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
@@ -61,8 +61,15 @@ export default function AdminHrKpiPage() {
 
   const scores = useMemo(() => data?.scores ?? [], [data?.scores]);
 
+  function hasTaskActivity(s: KpiScore) {
+    if (!s.metadata) return true;
+    const taskCount = Number((s.metadata as any).taskCount ?? 0);
+    const ticketCount = Number((s.metadata as any).ticketCount ?? 0);
+    return taskCount > 0 || ticketCount > 0;
+  }
+
   const sortedScores = useMemo(() => {
-    let rows = [...scores];
+    let rows = [...scores].filter(hasTaskActivity);
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase();
       rows = rows.filter((s) => (s.employee?.name || `Employee ${s.employee_id}`).toLowerCase().includes(q));
@@ -78,6 +85,45 @@ export default function AdminHrKpiPage() {
     });
     return rows;
   }, [scores, debouncedSearch, sortBy, sortOrder]);
+
+  function scoreInsights(s: KpiScore) {
+    const insights: string[] = [];
+    const m = s.metadata || {};
+    if (s.total_score != null && s.total_score < 60) insights.push('Overall performance is below expectations');
+    if (s.punctuality_score != null && s.punctuality_score < 70) {
+      const lateMinutes = Number((m as any).lateMinutes || 0);
+      const missingBreaks = Number((m as any).missingBreaks || 0);
+      if (lateMinutes > 0 || missingBreaks > 0) insights.push(`Punctuality impacted by ${lateMinutes} late minutes and ${missingBreaks} missing breaks`);
+      else insights.push('Punctuality is low (late clock-ins or absences)');
+    }
+    if (s.task_efficiency_score != null && s.task_efficiency_score < 70) {
+      const actual = Number((m as any).taskActualHours || 0);
+      const estimated = Number((m as any).taskEstimatedHours || 0);
+      if (estimated > 0 && actual > estimated) insights.push(`Tasks overran estimate by ${(actual - estimated).toFixed(1)}h (${actual.toFixed(1)}h actual vs ${estimated.toFixed(1)}h estimated)`);
+      else insights.push('Task efficiency is low (actual hours exceed or no baseline)');
+    }
+    if (s.task_timeliness_score != null && s.task_timeliness_score < 70) {
+      const avgDays = Number((m as any).averageDaysDelta || 0);
+      if (avgDays > 0) insights.push(`Tasks delivered an average of ${avgDays.toFixed(1)} days late`);
+      else insights.push('Task timeliness is low (deadlines missed)');
+    }
+    if (s.support_resolution_score != null && s.support_resolution_score < 70) {
+      const tickets = Number((m as any).ticketCount || 0);
+      insights.push(`Support resolution is slow (${tickets} ticket${tickets === 1 ? '' : 's'} in period)`);
+    }
+    if (s.leadership_score != null && s.leadership_score < 70) {
+      const phases = Number((m as any).managedPhasesCount || 0);
+      insights.push(phases > 0 ? `Leadership contribution is low (${phases} managed phases)` : 'No leadership/mentoring contribution recorded');
+    }
+    if (s.documentation_score != null && s.documentation_score < 70) {
+      const ratio = String((m as any).documentedItemsRatio || '0/0');
+      insights.push(`Documentation is low (${ratio} documented)`);
+    }
+    const taskCount = Number((m as any).taskCount || 0);
+    const ticketCount = Number((m as any).ticketCount || 0);
+    if (taskCount === 0 && ticketCount === 0) insights.push('No tasks or tickets recorded for this period');
+    return insights;
+  }
 
   const stats = useMemo(() => {
     const total = scores.length;
@@ -213,8 +259,21 @@ export default function AdminHrKpiPage() {
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="p-5">
+                <CardContent className="p-5 space-y-4">
                   <StatCards cards={detailCards} />
+                  {selected && scoreInsights(selected).length > 0 && (
+                    <div className="nm-raised p-4">
+                      <div className="flex items-center gap-2 text-sm font-semibold mb-2">
+                        <Info className="h-4 w-4 text-primary" />
+                        Why the score is low
+                      </div>
+                      <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                        {scoreInsights(selected).map((insight, i) => (
+                          <li key={i}>{insight}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : (

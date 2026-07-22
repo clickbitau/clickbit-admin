@@ -111,6 +111,38 @@ function getStatusColor(status: string) {
   }
 }
 
+function statusFillColor(status: string) {
+  switch (status) {
+    case 'todo':
+      return 'bg-slate-400';
+    case 'in_progress':
+      return 'bg-blue-500';
+    case 'review':
+      return 'bg-purple-500';
+    case 'completed':
+      return 'bg-emerald-500';
+    case 'blocked':
+      return 'bg-red-500';
+    default:
+      return 'bg-slate-400';
+  }
+}
+
+function priorityColor(priority?: string) {
+  switch (priority?.toLowerCase()) {
+    case 'urgent':
+      return 'bg-red-500';
+    case 'high':
+      return 'bg-orange-500';
+    case 'medium':
+      return 'bg-amber-500';
+    case 'low':
+      return 'bg-cyan-500';
+    default:
+      return 'bg-slate-400';
+  }
+}
+
 function microtaskProgress(microtasks: { is_completed?: boolean }[]) {
   if (!microtasks.length) return null;
   const done = microtasks.filter((m) => m.is_completed).length;
@@ -376,7 +408,13 @@ export default function ProjectTasksPage() {
   }
 
   function TaskCard({ task }: { task: ProjectTask }) {
-    const progress = microtaskProgress(task.microtasks ?? []);
+    const microProgress = microtaskProgress(task.microtasks ?? []);
+    const estimated = typeof task.estimated_hours === 'string' ? Number(task.estimated_hours) : task.estimated_hours;
+    const actual = typeof task.actual_hours === 'string' ? Number(task.actual_hours) : task.actual_hours;
+    const hoursProgress = estimated && estimated > 0 ? Math.min(100, Math.round(((actual || 0) / estimated) * 100)) : null;
+    const tags = Array.isArray(task.tags) ? task.tags.filter(Boolean) : [];
+    const overdue = isOverdue(task);
+    const slow = !overdue && isSlow(task);
     return (
       <div
         className={cn(
@@ -386,14 +424,88 @@ export default function ProjectTasksPage() {
         onClick={() => handleRowClick(task)}
       >
         <div className="flex items-start justify-between gap-2">
-          <h4 className="font-medium text-sm line-clamp-2">{task.title}</h4>
-          <PriorityBadge priority={task.priority} className="text-[10px] px-1.5 py-0.5 h-auto" />
+          <h4 className="font-semibold text-sm line-clamp-2">{task.title}</h4>
+          <span
+            className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${priorityColor(task.priority)}`}
+            title={`${task.priority || 'No'} priority`}
+          />
         </div>
-        {renderTaskMeta(task)}
-        <div className="mt-2 flex items-center justify-between">
+
+        {task.crmProject && (
+          <p className="text-xs text-muted-foreground mt-1 truncate">{task.crmProject.name}</p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
+          {task.due_date && (
+            <span className={cn('flex items-center gap-1', overdue && 'text-destructive font-medium')}>
+              <Calendar className="h-3 w-3" />
+              {daysUntil(task.due_date)}
+            </span>
+          )}
+          {overdue && (
+            <span className="px-1.5 py-0.5 rounded-md bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200 text-[10px] font-semibold">
+              Overdue
+            </span>
+          )}
+          {slow && (
+            <span className="px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200 text-[10px] font-semibold">
+              Slow
+            </span>
+          )}
+          {estimated != null && estimated > 0 && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {actual || 0}/{estimated}h
+            </span>
+          )}
+          {microProgress !== null && (
+            <span className="flex items-center gap-1">
+              <CheckSquare className="h-3 w-3" />
+              {microProgress}%
+            </span>
+          )}
+          {(task as any).is_recurring && (
+            <span className="flex items-center gap-1 text-blue-600" title="Recurring task">
+              <RefreshCw className="h-3 w-3" />
+            </span>
+          )}
+          {tags.length > 0 && (
+            <span className="flex items-center gap-1">
+              <Tags className="h-3 w-3" />
+              {tags.slice(0, 2).join(', ')}
+              {tags.length > 2 && ` +${tags.length - 2}`}
+            </span>
+          )}
+          {(task.comment_count ?? 0) > 0 && (
+            <span className="flex items-center gap-1">
+              <MessageSquare className="h-3 w-3" />
+              {task.comment_count}
+            </span>
+          )}
+          {(task.attachments?.length ?? 0) > 0 && (
+            <span className="flex items-center gap-1">
+              <Paperclip className="h-3 w-3" />
+              {task.attachments?.length}
+            </span>
+          )}
+        </div>
+
+        {hoursProgress !== null && (
+          <div className="mt-2">
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn('h-full transition-all', hoursProgress > 100 ? 'bg-red-500' : 'bg-primary')}
+                style={{ width: `${Math.min(100, hoursProgress)}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-1">{actual || 0} / {estimated}h logged</div>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-center justify-between">
           <StatusBadge status={task.status} className="text-[10px] px-1.5 py-0.5 h-auto" />
           {task.assignee ? (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate max-w-[120px]">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate max-w-[130px]">
               <UserAvatar user={task.assignee} />
               <span className="truncate">{task.assignee.first_name} {task.assignee.last_name}</span>
             </div>
@@ -401,50 +513,23 @@ export default function ProjectTasksPage() {
             <span className="text-xs text-muted-foreground">Unassigned</span>
           )}
         </div>
-        {progress !== null && (
-          <div className="mt-2">
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        )}
       </div>
     );
   }
-
-  const KANBAN_COLUMNS = [
-    { key: 'todo', label: 'To Do', color: 'border-l-gray-400', header: 'text-gray-700' },
-    { key: 'overdue', label: 'Overdue', color: 'border-l-red-500', header: 'text-red-700', isPseudo: true },
-    { key: 'slow', label: 'Slow', color: 'border-l-orange-500', header: 'text-orange-700', isPseudo: true },
-    { key: 'in_progress', label: 'In Progress', color: 'border-l-blue-500', header: 'text-blue-700' },
-    { key: 'review', label: 'Review', color: 'border-l-purple-500', header: 'text-purple-700' },
-    { key: 'completed', label: 'Completed', color: 'border-l-emerald-500', header: 'text-emerald-700' },
-    { key: 'late_completed', label: 'Late Completion', color: 'border-l-red-500', header: 'text-red-700', isPseudo: true },
-    { key: 'blocked', label: 'Blocked', color: 'border-l-red-500', header: 'text-red-800' },
-  ];
 
   function KanbanView() {
     return (
       <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
         <div className="flex gap-4 min-w-max pb-4">
-          {KANBAN_COLUMNS.map((col) => {
-            let columnTasks: ProjectTask[] = [];
-            if (col.key === 'overdue') {
-              columnTasks = tasks.filter((t) => t.status !== 'completed' && t.status !== 'blocked' && isOverdue(t));
-            } else if (col.key === 'slow') {
-              columnTasks = tasks.filter((t) => t.status !== 'completed' && t.status !== 'blocked' && isSlow(t) && !isOverdue(t));
-            } else if (col.key === 'late_completed') {
-              columnTasks = tasks.filter((t) => t.status === 'completed' && isSlow(t));
-            } else {
-              columnTasks = tasks.filter((t) => t.status === col.key && !isSlow(t) && !isOverdue(t));
-            }
+          {STATUSES.map((col) => {
+            const columnTasks = tasks.filter((t) => t.status === col.key);
             return (
               <div key={col.key} className="nm-raised-sm flex flex-col w-[280px] max-h-[65vh]">
                 <div className="p-3 border-b border-border/50 flex items-center justify-between">
-                  <h3 className={`font-semibold text-sm ${col.header}`}>{col.label}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${statusFillColor(col.key)}`} />
+                    <h3 className="font-semibold text-sm">{col.label}</h3>
+                  </div>
                   <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{columnTasks.length}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -452,7 +537,9 @@ export default function ProjectTasksPage() {
                     <TaskCard key={task.id} task={task} />
                   ))}
                   {columnTasks.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
+                    <div className="border border-dashed border-border/60 rounded-lg p-4 text-center text-xs text-muted-foreground">
+                      No {col.label.toLowerCase()} tasks
+                    </div>
                   )}
                 </div>
               </div>
