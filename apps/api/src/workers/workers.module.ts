@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CommunicationModule } from '../communication/communication.module';
 import { BlogSchedulerService } from './blog-scheduler.service';
 import { AnalyticsAlertsService } from './analytics-alerts.service';
 import { ReminderSchedulerService } from './reminder-scheduler.service';
@@ -14,6 +15,7 @@ import { WorkersController } from './workers.controller';
 import { WorkersService } from './workers.service';
 
 @Module({
+  imports: [CommunicationModule],
   controllers: [WorkersController],
   providers: [
     WorkersService,

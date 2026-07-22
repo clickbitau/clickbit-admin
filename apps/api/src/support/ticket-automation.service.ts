@@ -29,7 +29,7 @@ export class TicketAutomationService {
 
 
   getRepos() {
-    return buildLegacyDataEnvelope([]);
+    return buildLegacyDataEnvelope(['clickbitau/clickbit', 'clickbitau/clickbit-admin', 'clickbitau/click-deploy']);
   }
 
   async getCustomers() {

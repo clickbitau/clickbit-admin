@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildDataEnvelope, buildListEnvelope, buildMessageEnvelope, numberValue, stringValue } from './communication-utils';
 import { CacheService } from '../redis/cache.service';
+import { MailImapService } from './mail-imap.service';
 
 const EMAIL_PRESETS: Record<string, any> = {
   hostinger: { imap_host: 'imap.hostinger.com', imap_port: 993, imap_secure: true, smtp_host: 'smtp.hostinger.com', smtp_port: 465, smtp_secure: true },
@@ -16,6 +17,7 @@ const EMAIL_PRESETS: Record<string, any> = {
 export class MailService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly imap: MailImapService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -65,7 +67,7 @@ export class MailService {
         smtp_port: numberValue(dto.smtp_port, preset.smtp_port || 465),
         smtp_secure: dto.smtp_secure !== undefined ? dto.smtp_secure === true : (preset.smtp_secure !== undefined ? preset.smtp_secure : true),
         username,
-        password_encrypted: password,
+        password_encrypted: this.imap.encryptPassword(password),
       },
     });
 
@@ -89,7 +91,7 @@ export class MailService {
         smtp_port: dto.smtp_port !== undefined ? numberValue(dto.smtp_port) : undefined,
         smtp_secure: dto.smtp_secure !== undefined ? dto.smtp_secure === true : undefined,
         username: dto.username !== undefined ? stringValue(dto.username) : undefined,
-        password_encrypted: dto.password !== undefined ? stringValue(dto.password) : undefined,
+        password_encrypted: dto.password !== undefined ? this.imap.encryptPassword(stringValue(dto.password) || '') : undefined,
         signature_html: dto.signature_html !== undefined ? stringValue(dto.signature_html) : undefined,
         signature_text: dto.signature_text !== undefined ? stringValue(dto.signature_text) : undefined,
         aliases: dto.aliases !== undefined ? (dto.aliases as any) : undefined,
@@ -110,8 +112,10 @@ export class MailService {
     return buildMessageEnvelope('Account removed');
   }
 
-  testAccount(_user: Profile, _id: string) {
-    return Promise.resolve(buildMessageEnvelope('Connection test passed (stub)'));
+  async testAccount(user: Profile, id: string) {
+    const account = await this.findAccount(user, id);
+    const result = await this.imap.testAccount(account);
+    return buildDataEnvelope({ success: result.imap, ...result });
   }
 
   async listFolders(user: Profile, accountId: string) {
@@ -148,13 +152,45 @@ export class MailService {
 
   async getMessage(user: Profile, accountId: string, folderPath: string, uid: string) {
     return this.cached(this.cacheKey('message', user.id, accountId, folderPath, uid), async () => {
-    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
-    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    const account = await this.findAccount(user, accountId);
 
     const uidInt = parseInt(uid, 10);
     if (Number.isNaN(uidInt)) throw new BadRequestException({ success: false, message: 'Invalid uid' });
-    const message = await this.prisma.cached_emails.findFirst({ where: { account_id: accountId, folder_path: folderPath, uid: uidInt } });
-    if (!message) throw new NotFoundException({ success: false, message: 'Message not found' });
+    let message = await this.prisma.cached_emails.findFirst({ where: { account_id: accountId, folder_path: folderPath, uid: uidInt } });
+
+    if (!message || (!message.html_body && !message.text_body)) {
+      const fetched = await this.imap.getMessage(account, folderPath, uidInt);
+      const data: any = {
+        message_id: fetched.message_id,
+        subject: fetched.subject,
+        from_address: fetched.from_address,
+        from_name: fetched.from_name,
+        to_addresses: fetched.to_addresses,
+        cc_addresses: fetched.cc_addresses,
+        date: fetched.date,
+        preview: fetched.preview,
+        html_body: fetched.html_body,
+        text_body: fetched.text_body,
+        is_read: fetched.is_read,
+        is_starred: fetched.is_starred,
+        flags: fetched.flags,
+        attachments_meta: fetched.attachments_meta,
+        in_reply_to: fetched.in_reply_to,
+        references_header: fetched.references_header,
+        synced_at: new Date(),
+        updated_at: new Date(),
+      };
+      if (message) {
+        message = await this.prisma.cached_emails.update({ where: { id: message.id }, data });
+      } else {
+        data.account_id = accountId;
+        data.folder_path = folderPath;
+        data.uid = uidInt;
+        data.created_at = new Date();
+        message = await this.prisma.cached_emails.create({ data });
+      }
+    }
+
     return buildDataEnvelope(message);
     });
   }

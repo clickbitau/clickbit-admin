@@ -58,6 +58,9 @@ import {
   Tags,
   RefreshCw,
   Filter,
+  Eye,
+  EyeOff,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -118,38 +121,39 @@ export default function ProjectTasksPage() {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const isManager = user?.role === 'admin' || user?.role === 'manager';
+  const isEmployee = user?.role === 'employee';
 
   const isGlobalTasks = pathname === '/admin/tasks';
   const pageTitle = isGlobalTasks ? 'Tasks' : 'Project Tasks';
   const pageDescription = isGlobalTasks ? 'Manage and track every task across the business' : 'Manage and track tasks across all projects';
   const basePath = '/admin/crm/project-tasks';
 
-  const [view, setView] = useState<'list' | 'kanban'>('list');
+  const [view, setView] = useState<'list' | 'kanban'>('kanban');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
-  const [assigneeId, setAssigneeId] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState<number[]>([]);
   const [projectId, setProjectId] = useState('');
   const [subprojectId, setSubprojectId] = useState('');
-  const [viewScope, setViewScope] = useState<'all' | 'my' | 'unassigned'>('all');
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [viewScope, setViewScope] = useState<'all' | 'my' | 'unassigned'>(isEmployee ? 'my' : 'all');
+  const [hideCompleted, setHideCompleted] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const queryParams = useMemo(() => {
-    const params: Record<string, string | number | boolean> = { page, limit: 25 };
+    const params: Record<string, string | number | boolean> = { page, limit: view === 'kanban' ? 100 : 25 };
     if (debouncedSearch) params.search = debouncedSearch;
     if (status) params.status = status;
     if (priority) params.priority = priority;
-    if (assigneeId) params.assigned_to = assigneeId;
+    if (viewScope !== 'my' && selectedAssignees.length > 0) params.assigned_to = selectedAssignees.join(',');
     if (projectId) params.crm_project_id = projectId;
     if (subprojectId) params.subproject_id = subprojectId;
     if (viewScope !== 'all') params.view_scope = viewScope;
     if (hideCompleted) params.hide_completed = true;
     return params;
-  }, [page, debouncedSearch, status, priority, assigneeId, projectId, subprojectId, viewScope, hideCompleted]);
+  }, [page, debouncedSearch, status, priority, selectedAssignees, projectId, subprojectId, viewScope, hideCompleted, view]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', queryParams],
@@ -157,7 +161,7 @@ export default function ProjectTasksPage() {
     enabled: !!token,
   });
 
-  const { data: assignees, isLoading: loadingAssignees } = useQuery({
+  const { data: assignees } = useQuery({
     queryKey: ['assignees'],
     queryFn: () => fetchAssignees(token!),
     enabled: !!token,
@@ -181,6 +185,10 @@ export default function ProjectTasksPage() {
     setSubprojectId('');
     setPage(1);
   }, [projectId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [view, status, priority, viewScope, selectedAssignees, hideCompleted, debouncedSearch]);
 
   const tasks = data?.data ?? [];
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 };
@@ -221,6 +229,21 @@ export default function ProjectTasksPage() {
 
   function handleRowClick(task: ProjectTask) {
     router.push(`${basePath}/${task.id}`);
+  }
+
+  function toggleAssignee(id: number) {
+    setSelectedAssignees((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
+  }
+
+  function clearFilters() {
+    setSearch('');
+    setStatus('');
+    setPriority('');
+    setProjectId('');
+    setSubprojectId('');
+    setSelectedAssignees([]);
+    setViewScope(isEmployee ? 'my' : 'all');
+    setHideCompleted(true);
   }
 
   function isOverdue(task: ProjectTask) {
@@ -411,29 +434,9 @@ export default function ProjectTasksPage() {
       icon={FolderKanban}
       description={pageDescription}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center nm-raised-sm rounded-md p-0.5">
-            <Button
-              variant={view === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setView('list')}
-              className="h-8 rounded-sm"
-            >
-              <List className="h-4 w-4 mr-1" /> List
-            </Button>
-            <Button
-              variant={view === 'kanban' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setView('kanban')}
-              className="h-8 rounded-sm"
-            >
-              <LayoutGrid className="h-4 w-4 mr-1" /> Kanban
-            </Button>
-          </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" /> New Task
-          </Button>
-        </div>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-1 h-4 w-4" /> New Task
+        </Button>
       }
     >
       <div className="flex flex-wrap gap-2">
@@ -449,87 +452,140 @@ export default function ProjectTasksPage() {
         ))}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search tasks..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          />
-        </div>
-        <Button
-          variant={showFilters ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setShowFilters((v) => !v)}
-        >
-          <Filter className="mr-2 h-4 w-4" /> Filters
-        </Button>
-      </div>
+      <Card className="nm-raised p-3">
+        <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+          <div className="flex flex-wrap items-center gap-4">
+            {!isEmployee && (
+              <div className="flex items-center nm-raised-sm rounded-lg p-1">
+                {(['all', 'my', 'unassigned'] as const).map((scope) => (
+                  <Button
+                    key={scope}
+                    variant={viewScope === scope ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => { setViewScope(scope); setSelectedAssignees([]); setPage(1); }}
+                    className="rounded-md capitalize"
+                  >
+                    {scope === 'all' ? 'All Tasks' : scope === 'my' ? 'My Tasks' : 'Unassigned'}
+                  </Button>
+                ))}
+              </div>
+            )}
 
-      {showFilters && (
-        <Card className="nm-raised">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Select value={priority} onValueChange={(v) => { setPriority(v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All priorities</SelectItem>
-                  {PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={viewScope} onValueChange={(v) => { setViewScope(v as 'all' | 'my' | 'unassigned'); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="Scope" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All tasks</SelectItem>
-                  <SelectItem value="my">My tasks</SelectItem>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v); setPage(1); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingAssignees ? 'Loading...' : 'Assignee'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All assignees</SelectItem>
-                  {(assignees ?? []).map((u: User) => (
-                    <SelectItem key={u.id} value={String(u.id)}>{u.first_name} {u.last_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={projectId} onValueChange={(v) => { setProjectId(v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All projects</SelectItem>
-                  <SelectItem value="none">No project</SelectItem>
-                  {(projects?.projects ?? []).map((p: CrmProject) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId || projectId === 'none'}>
-                <SelectTrigger><SelectValue placeholder="Subproject" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All subprojects</SelectItem>
-                  {(subprojects?.subprojects ?? []).map((sp: CrmSubproject) => (
-                    <SelectItem key={sp.id} value={String(sp.id)}>{sp.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {viewScope !== 'my' && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center -space-x-2 overflow-x-auto max-w-[220px] sm:max-w-xs py-1">
+                  {(assignees ?? []).map((u: User) => {
+                    const selected = selectedAssignees.includes(Number(u.id));
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleAssignee(Number(u.id))}
+                        title={`${u.first_name || ''} ${u.last_name || ''}`.trim()}
+                        className={cn(
+                          'relative rounded-full border-2 transition-all hover:z-10 focus:z-10',
+                          selected ? 'border-primary ring-2 ring-primary/30 z-10' : 'border-transparent opacity-80 hover:opacity-100'
+                        )}
+                      >
+                        <UserAvatar user={u} className="h-8 w-8" />
+                        {selected && (
+                          <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground">
+                            <X className="h-2.5 w-2.5" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedAssignees.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedAssignees([])}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+            <div className="relative flex-1 xl:max-w-xs min-w-[200px]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search tasks..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+            <div className="flex items-center nm-raised-sm rounded-md p-0.5">
               <Button
-                variant={hideCompleted ? 'default' : 'outline'}
+                variant={view === 'list' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => { setHideCompleted((prev) => !prev); setPage(1); }}
-                className="w-full"
+                onClick={() => setView('list')}
+                className="h-8 rounded-sm"
               >
-                <CheckSquare className="mr-2 h-4 w-4" />
-                {hideCompleted ? 'Completed hidden' : 'Hide completed'}
+                <List className="h-4 w-4 mr-1" /> List
+              </Button>
+              <Button
+                variant={view === 'kanban' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setView('kanban')}
+                className="h-8 rounded-sm"
+              >
+                <LayoutGrid className="h-4 w-4 mr-1" /> Kanban
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <Button
+              variant={hideCompleted ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setHideCompleted((prev) => !prev); setPage(1); }}
+            >
+              {hideCompleted ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+              {hideCompleted ? 'Completed hidden' : 'Hide completed'}
+            </Button>
+            <Button
+              variant={showFilters ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowFilters((v) => !v)}
+            >
+              <Filter className="mr-1 h-4 w-4" /> Filters
+            </Button>
+          </div>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-4 mt-4 border-t">
+            <Select value={priority} onValueChange={(v) => { setPriority(v); setPage(1); }}>
+              <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All priorities</SelectItem>
+                {PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={projectId} onValueChange={(v) => { setProjectId(v); setPage(1); }}>
+              <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All projects</SelectItem>
+                <SelectItem value="none">No project</SelectItem>
+                {(projects?.projects ?? []).map((p: CrmProject) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={subprojectId} onValueChange={(v) => { setSubprojectId(v); setPage(1); }} disabled={!projectId || projectId === 'none'}>
+              <SelectTrigger><SelectValue placeholder="Subproject" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All subprojects</SelectItem>
+                {(subprojects?.subprojects ?? []).map((sp: CrmSubproject) => (
+                  <SelectItem key={sp.id} value={String(sp.id)}>{sp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={clearFilters} className="w-full">
+              <X className="mr-2 h-4 w-4" /> Reset filters
+            </Button>
+          </div>
+        )}
+      </Card>
 
       {view === 'kanban' ? (
         <KanbanView />
