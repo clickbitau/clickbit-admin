@@ -1579,8 +1579,16 @@ export async function deleteMailTemplate(token: string, id: string): Promise<Com
   return (await api.delete(`/api/mail/templates/${id}`, { headers: authHeaders(token) })).data;
 }
 
-export async function sendMail(token: string, accountId: string, data: { to_email: string; to_name?: string; subject: string; body_text?: string; body_html?: string; template?: string }) {
+export async function sendMail(token: string, accountId: string, data: { to_email: string; to_name?: string; subject: string; body_text?: string; body_html?: string; template?: string; in_reply_to?: string | null; references?: string | null }) {
   return (await api.post(`/api/mail/accounts/${accountId}/send`, data, { headers: authHeaders(token) })).data;
+}
+
+export async function markMailMessageRead(token: string, accountId: string, folderPath: string, uid: number, isRead = true): Promise<CommunicationLegacyDataResponse<CachedEmail>> {
+  return (await api.put(`/api/mail/accounts/${accountId}/folders/${encodeURIComponent(folderPath)}/messages/${uid}/read`, { is_read: isRead }, { headers: authHeaders(token) })).data;
+}
+
+export async function starMailMessage(token: string, accountId: string, folderPath: string, uid: number, starred: boolean): Promise<CommunicationLegacyDataResponse<CachedEmail>> {
+  return (await api.put(`/api/mail/accounts/${accountId}/folders/${encodeURIComponent(folderPath)}/messages/${uid}/star`, { starred }, { headers: authHeaders(token) })).data;
 }
 
 // ─── Content / Marketing ───────────────────────────────────────────────────

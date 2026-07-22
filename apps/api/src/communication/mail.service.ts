@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
 import { buildDataEnvelope, buildListEnvelope, buildMessageEnvelope, numberValue, stringValue } from './communication-utils';
@@ -203,21 +204,67 @@ export class MailService {
     const subject = stringValue(dto.subject);
     if (!toEmail || !subject) throw new BadRequestException({ success: false, message: 'to_email and subject are required' });
 
+    const fromName = account.display_name || account.email;
+    const from = `${fromName} <${account.email}>`;
+    const textBody = stringValue(dto.body_text) || '';
+    const htmlBody = stringValue(dto.body_html) || `<p>${textBody.replace(/\n/g, '<br>')}</p>`;
+
+    let status: 'pending' | 'sent' | 'failed' | 'bounced' | 'opened' = 'pending';
+    let messageId: string | undefined;
+    let error: string | undefined;
+
+    if (account.smtp_host) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: account.smtp_host,
+          port: Number(account.smtp_port) || 587,
+          secure: account.smtp_secure ?? false,
+          auth: {
+            user: account.username,
+            pass: this.imap.decryptPassword(account.password_encrypted || ''),
+          },
+          tls: { rejectUnauthorized: false },
+        });
+
+        const result = await transporter.sendMail({
+          from,
+          to: `${stringValue(dto.to_name) || toEmail} <${toEmail}>`,
+          subject,
+          text: textBody,
+          html: htmlBody,
+          inReplyTo: stringValue(dto.in_reply_to) || undefined,
+          references: stringValue(dto.references) || undefined,
+        });
+
+        status = 'sent';
+        messageId = result.messageId;
+      } catch (e: any) {
+        status = 'failed';
+        error = e.message || 'Failed to send email';
+      }
+    } else {
+      error = 'SMTP host is not configured for this account';
+    }
+
     const log = await this.prisma.email_logs.create({
       data: {
         to_email: toEmail,
         to_name: stringValue(dto.to_name) || null,
         from_email: account.email,
         subject,
-        status: 'pending',
+        status,
         triggered_by: user.id,
-        metadata: { body_text: stringValue(dto.body_text), body_html: stringValue(dto.body_html), template: stringValue(dto.template) } as any,
+        metadata: { body_text: textBody, body_html: htmlBody, template: stringValue(dto.template), message_id: messageId, error } as any,
         created_at: new Date(),
         updated_at: new Date(),
       },
     });
 
-    return buildMessageEnvelope('Email queued for sending', { email: log });
+    if (status === 'failed') {
+      throw new BadRequestException({ success: false, message: error || 'Failed to send email', data: { email: log } });
+    }
+
+    return buildMessageEnvelope(messageId ? 'Email sent' : 'Email queued for sending', { email: log });
   }
 
   async listTemplates(user: Profile) {

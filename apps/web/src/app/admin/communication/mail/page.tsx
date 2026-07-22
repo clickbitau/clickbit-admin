@@ -33,6 +33,8 @@ import {
   fetchMailFolders,
   fetchMailMessages,
   fetchMailMessage,
+  markMailMessageRead,
+  starMailMessage,
   fetchMailTemplates,
   createMailTemplate,
   deleteMailTemplate,
@@ -181,6 +183,16 @@ export default function AdminCommunicationMailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mail-templates'] }),
   });
 
+  const markRead = useMutation({
+    mutationFn: ({ uid, isRead }: { uid: number; isRead?: boolean }) => markMailMessageRead(token!, selectedAccount, selectedFolder, uid, isRead ?? true),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mail-messages', token, selectedAccount, selectedFolder] }); queryClient.invalidateQueries({ queryKey: ['mail-message', token, selectedAccount, selectedFolder] }); },
+  });
+
+  const starMessage = useMutation({
+    mutationFn: ({ uid, starred }: { uid: number; starred: boolean }) => starMailMessage(token!, selectedAccount, selectedFolder, uid, starred),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mail-messages', token, selectedAccount, selectedFolder] }); queryClient.invalidateQueries({ queryKey: ['mail-message', token, selectedAccount, selectedFolder] }); },
+  });
+
   const selectAccount = (id: string) => {
     setSelectedAccount(id);
     setSelectedFolder('INBOX');
@@ -197,15 +209,18 @@ export default function AdminCommunicationMailPage() {
   const selectMessage = (m: CachedEmail) => {
     setSelectedUid(String(m.uid));
     router.push(`/admin/communication/mail?account=${encodeURIComponent(selectedAccount)}&folder=${encodeURIComponent(selectedFolder)}&uid=${encodeURIComponent(m.uid)}`);
+    if (!m.is_read) {
+      markRead.mutate({ uid: m.uid });
+    }
   };
 
   const selectedMessage = messageDetail?.data as CachedEmail | undefined;
 
   return (
-    <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] -m-2 lg:-m-4 animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr_2fr] gap-0 rounded-2xl overflow-hidden nm-raised h-full">
+    <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] -m-2 lg:-m-4 animate-fade-in overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-[260px_minmax(280px,400px)_minmax(0,1fr)] gap-0 rounded-2xl overflow-hidden nm-raised h-full min-w-0">
         {/* Left sidebar: accounts, folders, templates */}
-        <div className="hidden md:flex flex-col border-r border-border/50 bg-background/50 min-h-0">
+        <div className="hidden md:flex flex-col border-r border-border/50 bg-background/50 min-h-0 min-w-0">
           <div className="p-3 border-b border-border/50">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-sm">Accounts</h2>
@@ -311,7 +326,7 @@ export default function AdminCommunicationMailPage() {
         </div>
 
         {/* Message list */}
-        <div className="flex flex-col min-h-0 border-r border-border/50 bg-background">
+        <div className="flex flex-col min-h-0 min-w-0 border-r border-border/50 bg-background">
           <div className="p-3 border-b border-border/50 flex flex-col gap-2 bg-muted/20">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold truncate">{selectedFolder || 'Messages'}</h2>
@@ -366,7 +381,7 @@ export default function AdminCommunicationMailPage() {
         </div>
 
         {/* Reading pane */}
-        <div className="flex flex-col min-h-0 bg-background">
+        <div className="flex flex-col min-h-0 min-w-0 bg-background">
           {loadingDetail && selectedUid ? (
             <div className="flex-1 p-6 space-y-3">
               <Skeleton className="h-6 w-1/2" />
@@ -382,18 +397,18 @@ export default function AdminCommunicationMailPage() {
                   <div className="text-xs text-muted-foreground">{selectedMessage.date ? new Date(selectedMessage.date).toLocaleString('en-AU') : ''}</div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button size="sm" variant="ghost" asChild><Link href={`/admin/communication/mail/compose?reply=${selectedUid}`}><Reply className="h-4 w-4" /></Link></Button>
-                  <Button size="sm" variant="ghost" asChild><Link href={`/admin/communication/mail/compose?forward=${selectedUid}`}><Forward className="h-4 w-4" /></Link></Button>
-                  <Button size="sm" variant="ghost" onClick={() => {}}><Star className={`h-4 w-4 ${selectedMessage.is_starred ? 'fill-yellow-500 text-yellow-500' : ''}`} /></Button>
+                  <Button size="sm" variant="ghost" asChild><Link href={`/admin/communication/mail/compose?account=${encodeURIComponent(selectedAccount)}&folder=${encodeURIComponent(selectedFolder)}&reply=${selectedUid}`}><Reply className="h-4 w-4" /></Link></Button>
+                  <Button size="sm" variant="ghost" asChild><Link href={`/admin/communication/mail/compose?account=${encodeURIComponent(selectedAccount)}&folder=${encodeURIComponent(selectedFolder)}&forward=${selectedUid}`}><Forward className="h-4 w-4" /></Link></Button>
+                  <Button size="sm" variant="ghost" onClick={() => selectedMessage.uid && starMessage.mutate({ uid: selectedMessage.uid, starred: !selectedMessage.is_starred })}><Star className={`h-4 w-4 ${selectedMessage.is_starred ? 'fill-yellow-500 text-yellow-500' : ''}`} /></Button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 min-w-0">
                 {selectedMessage.html_body ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: selectedMessage.html_body }} />
+                  <div className="prose prose-sm dark:prose-invert max-w-full w-full break-words [&_img]:max-w-full [&_table]:max-w-full [&_iframe]:max-w-full [&_pre]:whitespace-pre-wrap [&_pre]:break-words" dangerouslySetInnerHTML={{ __html: selectedMessage.html_body }} />
                 ) : selectedMessage.text_body ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{selectedMessage.text_body}</div>
+                  <div className="prose prose-sm dark:prose-invert max-w-full w-full whitespace-pre-wrap break-words">{selectedMessage.text_body}</div>
                 ) : selectedMessage.preview ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-muted-foreground">{selectedMessage.preview}</div>
+                  <div className="prose prose-sm dark:prose-invert max-w-full w-full whitespace-pre-wrap break-words text-muted-foreground">{selectedMessage.preview}</div>
                 ) : (
                   <div className="text-sm text-muted-foreground">No content.</div>
                 )}

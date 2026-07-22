@@ -110,6 +110,8 @@ export class SendMailDto {
   @IsOptional() @IsString() body_text?: string;
   @IsOptional() @IsString() body_html?: string;
   @IsOptional() @IsString() template?: string;
+  @IsOptional() @IsString() in_reply_to?: string;
+  @IsOptional() @IsString() references?: string;
 }
 
 export class MailTemplateDto {
