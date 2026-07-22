@@ -98,4 +98,71 @@ export class MailController {
   updateAliases(@Param('id') id: string, @Req() req: any, @Body() dto: any) {
     return this.mailService.updateAliases(req.user, id, dto as Record<string, unknown>);
   }
+
+  // Folders
+  @Post('accounts/:accountId/folders')
+  createFolder(@Param('accountId') accountId: string, @Body() dto: { name?: string }, @Req() req: any) {
+    return this.mailService.createFolder(req.user, accountId, dto.name || '');
+  }
+
+  @Put('accounts/:accountId/folders/:folderPath')
+  updateFolder(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.updateFolder(req.user, accountId, folderPath, dto);
+  }
+
+  @Delete('accounts/:accountId/folders/:folderPath')
+  deleteFolder(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Req() req: any) {
+    return this.mailService.deleteFolder(req.user, accountId, folderPath);
+  }
+
+  @Post('accounts/:accountId/folders/:folderPath/sync')
+  syncFolder(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Req() req: any) {
+    return this.mailService.syncFolder(req.user, accountId, folderPath);
+  }
+
+  // Messages
+  @Get('accounts/:accountId/folders/:folderPath/search')
+  searchMessages(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Query() query: Record<string, unknown>, @Req() req: any) {
+    return this.mailService.searchMessages(req.user, accountId, folderPath, query);
+  }
+
+  @Delete('accounts/:accountId/folders/:folderPath/messages/:uid')
+  deleteMessage(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Param('uid') uid: string, @Req() req: any) {
+    return this.mailService.deleteMessage(req.user, accountId, folderPath, uid);
+  }
+
+  @Post('accounts/:accountId/folders/:folderPath/messages/bulk-delete')
+  bulkDeleteMessages(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.bulkDeleteMessages(req.user, accountId, folderPath, dto);
+  }
+
+  @Put('accounts/:accountId/folders/:folderPath/messages/bulk-read')
+  bulkReadMessages(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.bulkReadMessages(req.user, accountId, folderPath, dto);
+  }
+
+  @Put('accounts/:accountId/folders/:folderPath/messages/:uid/move')
+  moveMessage(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Param('uid') uid: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.moveMessage(req.user, accountId, folderPath, uid, dto);
+  }
+
+  @Put('accounts/:accountId/folders/:folderPath/messages/:uid/read')
+  markRead(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Param('uid') uid: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.markRead(req.user, accountId, folderPath, uid, dto);
+  }
+
+  @Put('accounts/:accountId/folders/:folderPath/messages/:uid/star')
+  starMessage(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Param('uid') uid: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.starMessage(req.user, accountId, folderPath, uid, dto);
+  }
+
+  @Get('accounts/:accountId/folders/:folderPath/messages/:uid/attachments/:attachmentId')
+  getAttachment(@Param('accountId') accountId: string, @Param('folderPath') folderPath: string, @Param('uid') uid: string, @Param('attachmentId') attachmentId: string, @Req() req: any) {
+    return this.mailService.getAttachment(req.user, accountId, folderPath, uid, attachmentId);
+  }
+
+  @Post('accounts/:accountId/drafts')
+  createDraft(@Param('accountId') accountId: string, @Body() dto: any, @Req() req: any) {
+    return this.mailService.createDraft(req.user, accountId, dto);
+  }
 }

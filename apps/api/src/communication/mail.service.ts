@@ -275,4 +275,209 @@ export class MailService {
     await this.cache?.del(this.cacheKey('aliases', user.id, id));
     return buildDataEnvelope(updated.aliases || []);
   }
+
+  // -------------------------------------------------------------------------
+  // Folders
+  // -------------------------------------------------------------------------
+
+  async createFolder(user: Profile, accountId: string, folderPath: string) {
+    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
+    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    if (!folderPath) throw new BadRequestException({ success: false, message: 'folderPath is required' });
+    const name = folderPath.toUpperCase().startsWith('INBOX/') ? folderPath : folderPath.replace(/^\//, '');
+    await this.prisma.cached_emails.create({
+      data: {
+        account_id: accountId,
+        folder_path: name,
+        uid: await this.nextUid(accountId, name),
+        subject: '',
+        is_read: true,
+        from_address: account.email,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as any,
+    });
+    await this.invalidateCache();
+    return buildDataEnvelope({ path: name, name });
+  }
+
+  async updateFolder(user: Profile, accountId: string, folderPath: string, dto: Record<string, unknown>) {
+    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
+    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    const newName = stringValue(dto.name)?.replace(/^\//, '');
+    if (!newName) throw new BadRequestException({ success: false, message: 'name is required' });
+    if (folderPath.toUpperCase() === 'INBOX') throw new BadRequestException({ success: false, message: 'Cannot rename INBOX' });
+
+    await this.prisma.cached_emails.updateMany({
+      where: { account_id: accountId, folder_path: folderPath },
+      data: { folder_path: newName },
+    });
+    await this.invalidateCache();
+    return buildMessageEnvelope('Folder renamed');
+  }
+
+  async deleteFolder(user: Profile, accountId: string, folderPath: string) {
+    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
+    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    if (folderPath.toUpperCase() === 'INBOX' || folderPath.toUpperCase() === 'DRAFTS') {
+      throw new BadRequestException({ success: false, message: 'Cannot delete protected folder' });
+    }
+    await this.prisma.cached_emails.deleteMany({ where: { account_id: accountId, folder_path: folderPath } });
+    await this.invalidateCache();
+    return buildMessageEnvelope('Folder deleted');
+  }
+
+  async syncFolder(user: Profile, accountId: string, folderPath: string) {
+    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
+    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    await this.invalidateCache();
+    return buildMessageEnvelope(`Folder ${folderPath} sync requested`, { accountId, folderPath });
+  }
+
+  private async nextUid(accountId: string, folderPath: string): Promise<number> {
+    const last = await this.prisma.cached_emails.findFirst({
+      where: { account_id: accountId, folder_path: folderPath },
+      orderBy: { uid: 'desc' },
+      select: { uid: true },
+    });
+    return (last?.uid || 0) + 1;
+  }
+
+  // -------------------------------------------------------------------------
+  // Message actions
+  // -------------------------------------------------------------------------
+
+  async deleteMessage(user: Profile, accountId: string, folderPath: string, uid: string) {
+    const message = await this.findMessage(user, accountId, folderPath, uid);
+    await this.prisma.cached_emails.delete({ where: { id: message.id } });
+    await this.invalidateCache();
+    return buildMessageEnvelope('Message deleted');
+  }
+
+  async bulkDeleteMessages(user: Profile, accountId: string, folderPath: string, dto: Record<string, unknown>) {
+    await this.findAccount(user, accountId);
+    const uids = Array.isArray(dto.uids) ? (dto.uids as number[]) : [];
+    if (!uids.length) throw new BadRequestException({ success: false, message: 'uids are required' });
+    await this.prisma.cached_emails.deleteMany({ where: { account_id: accountId, folder_path: folderPath, uid: { in: uids } } });
+    await this.invalidateCache();
+    return buildMessageEnvelope('Messages deleted');
+  }
+
+  async bulkReadMessages(user: Profile, accountId: string, folderPath: string, dto: Record<string, unknown>) {
+    await this.findAccount(user, accountId);
+    const uids = Array.isArray(dto.uids) ? (dto.uids as number[]) : [];
+    const isRead = dto.is_read === true || dto.is_read === 'true' ? true : false;
+    await this.prisma.cached_emails.updateMany({
+      where: { account_id: accountId, folder_path: folderPath, uid: { in: uids } },
+      data: { is_read: isRead },
+    });
+    await this.invalidateCache();
+    return buildMessageEnvelope('Messages updated');
+  }
+
+  async moveMessage(user: Profile, accountId: string, folderPath: string, uid: string, dto: Record<string, unknown>) {
+    const message = await this.findMessage(user, accountId, folderPath, uid);
+    const target = stringValue(dto.folder);
+    if (!target) throw new BadRequestException({ success: false, message: 'folder is required' });
+    const newUid = await this.nextUid(accountId, target);
+    await this.prisma.cached_emails.update({
+      where: { id: message.id },
+      data: { folder_path: target, uid: newUid },
+    });
+    await this.invalidateCache();
+    return buildDataEnvelope({ ...message, folder_path: target, uid: newUid });
+  }
+
+  async starMessage(user: Profile, accountId: string, folderPath: string, uid: string, dto: Record<string, unknown>) {
+    const message = await this.findMessage(user, accountId, folderPath, uid);
+    const starred = dto.starred === true || dto.starred === 'true' ? true : false;
+    await this.prisma.cached_emails.update({ where: { id: message.id }, data: { is_starred: starred } });
+    await this.invalidateCache();
+    return buildDataEnvelope({ ...message, is_starred: starred });
+  }
+
+  async markRead(user: Profile, accountId: string, folderPath: string, uid: string, dto: Record<string, unknown>) {
+    const message = await this.findMessage(user, accountId, folderPath, uid);
+    const isRead = dto.is_read === true || dto.is_read === 'true' ? true : false;
+    await this.prisma.cached_emails.update({ where: { id: message.id }, data: { is_read: isRead } });
+    await this.invalidateCache();
+    return buildDataEnvelope({ ...message, is_read: isRead });
+  }
+
+  async searchMessages(user: Profile, accountId: string, folderPath: string, query: Record<string, unknown>) {
+    await this.findAccount(user, accountId);
+    const term = stringValue(query.q)?.toLowerCase();
+    const limit = numberValue(query.limit, 50);
+    const offset = numberValue(query.offset, 0);
+    const where: any = { account_id: accountId, folder_path: folderPath };
+    if (term) {
+      where.OR = [
+        { subject: { contains: term, mode: 'insensitive' } },
+        { from_address: { contains: term, mode: 'insensitive' } },
+        { from_name: { contains: term, mode: 'insensitive' } },
+        { preview: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    const [messages, count] = await Promise.all([
+      this.prisma.cached_emails.findMany({ where, orderBy: { date: 'desc' }, take: limit, skip: offset }),
+      this.prisma.cached_emails.count({ where }),
+    ]);
+    return buildListEnvelope(messages, count, limit, offset);
+  }
+
+  async getAttachment(user: Profile, accountId: string, folderPath: string, uid: string, attachmentId: string) {
+    const message = await this.findMessage(user, accountId, folderPath, uid);
+    const attachments = (message.attachments_meta as any[]) || [];
+    const attachment = attachments.find((a: any) => a.id === attachmentId || a.filename === attachmentId);
+    if (!attachment) throw new NotFoundException({ success: false, message: 'Attachment not found' });
+    return buildDataEnvelope(attachment);
+  }
+
+  async createDraft(user: Profile, accountId: string, dto: Record<string, unknown>) {
+    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
+    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    const to = stringValue(dto.to_email);
+    const subject = stringValue(dto.subject);
+    if (!to) throw new BadRequestException({ success: false, message: 'to_email is required' });
+
+    const folderPath = 'Drafts';
+    const draft = await this.prisma.cached_emails.create({
+      data: {
+        account_id: accountId,
+        folder_path: folderPath,
+        uid: await this.nextUid(accountId, folderPath),
+        message_id: randomUUID(),
+        subject,
+        from_address: account.email,
+        from_name: account.display_name || account.email,
+        to_addresses: dto.to_email ? [stringValue(dto.to_email)] : [],
+        cc_addresses: (dto.cc_emails as string[]) || [],
+        preview: stringValue(dto.body_text)?.slice(0, 200) || '',
+        html_body: stringValue(dto.body_html) || null,
+        text_body: stringValue(dto.body_text) || null,
+        is_read: true,
+        is_starred: false,
+        date: new Date(),
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as any,
+    });
+    await this.invalidateCache();
+    return buildDataEnvelope(draft);
+  }
+
+  private async findAccount(user: Profile, accountId: string) {
+    const account = await this.prisma.email_accounts.findFirst({ where: { id: accountId, profile_id: user.id } });
+    if (!account) throw new NotFoundException({ success: false, message: 'Account not found' });
+    return account;
+  }
+
+  private async findMessage(user: Profile, accountId: string, folderPath: string, uid: string) {
+    const account = await this.findAccount(user, accountId);
+    const uidInt = parseInt(uid, 10);
+    if (Number.isNaN(uidInt)) throw new BadRequestException({ success: false, message: 'Invalid uid' });
+    const message = await this.prisma.cached_emails.findFirst({ where: { account_id: accountId, folder_path: folderPath, uid: uidInt } });
+    if (!message) throw new NotFoundException({ success: false, message: 'Message not found' });
+    return message;
+  }
 }
