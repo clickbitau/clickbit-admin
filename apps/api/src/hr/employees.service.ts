@@ -304,37 +304,116 @@ export class EmployeesService {
       throw new NotFoundException({ success: false, message: 'Employee profile not found. Please contact HR to set up your profile.' });
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const upcomingShifts = await this.prisma.hr_shifts.findMany({
-      where: { employee_id: employee.id, shift_date: { gte: parseDateOnly(today) } },
-      orderBy: [{ shift_date: 'asc' }, { start_time: 'asc' }],
-      take: 5,
+    const PERTH_TZ = 'Australia/Perth';
+    const perthDateStr = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: PERTH_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const perthRange = (dateStr: string) => ({
+      start: new Date(`${dateStr}T00:00:00+08:00`),
+      end: new Date(`${dateStr}T23:59:59.999+08:00`),
     });
+    const minutesBetween = (a: Date, b: Date) => Math.floor((b.getTime() - a.getTime()) / 60000);
+    const durationMinutes = (entry: { clock_in_time: Date; clock_out_time?: Date | null; break_minutes?: number | null }) => {
+      const end = entry.clock_out_time || new Date();
+      return Math.max(0, minutesBetween(entry.clock_in_time, end) - (entry.break_minutes || 0));
+    };
+    const hoursFromEntries = (entries: { clock_in_time: Date; clock_out_time?: Date | null; break_minutes?: number | null; total_minutes?: number | null }[]) =>
+      entries.reduce((sum, e) => sum + (e.total_minutes ?? durationMinutes(e)), 0) / 60;
 
-    const timeOffRequests = await this.prisma.hr_time_off_requests.findMany({
-      where: { employee_id: employee.id, status: 'pending' },
-      orderBy: { submitted_at: 'desc' },
-      take: 5,
-    });
+    const today = perthDateStr();
+    const { start: todayStart, end: todayEnd } = perthRange(today);
+    const now = new Date();
+    const day = now.getUTCDay();
+    const diff = now.getUTCDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(now);
+    monday.setUTCDate(diff);
+    monday.setUTCHours(0, 0, 0, 0);
+    const [
+      upcomingShifts,
+      timeOffRequests,
+      activeEntry,
+      todayEntries,
+      weeklyEntries,
+      activeTaskCount,
+      countUp,
+      countPending,
+      announcements,
+    ] = await Promise.all([
+      this.prisma.hr_shifts.findMany({
+        where: { employee_id: employee.id, shift_date: { gte: parseDateOnly(today) } },
+        orderBy: [{ shift_date: 'asc' }, { start_time: 'asc' }],
+        take: 5,
+      }),
+      this.prisma.hr_time_off_requests.findMany({
+        where: { employee_id: employee.id, status: 'pending' },
+        orderBy: { submitted_at: 'desc' },
+        take: 5,
+      }),
+      this.prisma.hr_time_entries.findFirst({
+        where: { employee_id: employee.id, clock_out_time: null },
+        orderBy: { clock_in_time: 'desc' },
+      }),
+      this.prisma.hr_time_entries.findMany({
+        where: { employee_id: employee.id, clock_in_time: { gte: todayStart, lte: todayEnd } },
+      }),
+      this.prisma.hr_time_entries.findMany({
+        where: { employee_id: employee.id, clock_in_time: { gte: monday } },
+      }),
+      this.prisma.project_tasks.count({
+        where: { assigned_to: user.id, deleted_at: null, status: { not: 'completed' } },
+      }),
+      this.prisma.hr_shifts.count({
+        where: { employee_id: employee.id, shift_date: { gte: parseDateOnly(today) }, status: { notIn: ['cancelled'] } },
+      }),
+      this.prisma.hr_time_off_requests.count({
+        where: { employee_id: employee.id, status: 'pending' },
+      }),
+      this.prisma.hr_announcements.findMany({
+        where: {
+          status: 'published',
+          OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+        },
+        orderBy: [{ is_pinned: 'desc' as const }, { pin_order: 'asc' as const }, { publish_at: 'desc' as const }],
+        take: 5,
+        include: { profiles: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
+      }),
+    ]);
 
-    const activeEntry = await this.prisma.hr_time_entries.findFirst({
-      where: { employee_id: employee.id, clock_out_time: null },
-      orderBy: { clock_in_time: 'desc' },
-    });
+    const todayHours = hoursFromEntries(todayEntries);
+    const weeklyHours = hoursFromEntries(weeklyEntries);
+    const mappedAnnouncements = announcements.map((a: any) => ({ ...a, author: a.profiles, profiles: undefined }));
+    const mappedEmployee = mapEmployee(await this.findOneWithInclude(employee.id));
 
     return {
       success: true,
       data: {
-        ...mapEmployee(await this.findOneWithInclude(employee.id)),
+        ...mappedEmployee,
         shifts: upcomingShifts,
-        announcements: [],
+        announcements: mappedAnnouncements,
         timeOffRequests,
-        countUp: 0,
-        countPending: 0,
-        todayHours: 0,
-        weeklyHours: 0,
+        countUp,
+        countPending,
+        todayHours,
+        weeklyHours,
         activeEntry,
-        activeTaskCount: 0,
+        activeTaskCount,
+        activeTasks: activeTaskCount,
+        pendingLeave: countPending,
+        pendingTimeOff: countPending,
+        stats: {
+          isClockedIn: !!activeEntry,
+          hoursToday: todayHours,
+          hoursLogged: weeklyHours,
+          weeklyHours,
+          activeTasks: activeTaskCount,
+          activeTaskCount,
+          pendingLeave: countPending,
+          pendingTimeOff: countPending,
+          upcomingShifts: countUp,
+          countUp,
+          countPending,
+          annualLeaveBalance: parseNumber(mappedEmployee.annual_leave_balance),
+          sickLeaveBalance: parseNumber(mappedEmployee.sick_leave_balance),
+          personalLeaveBalance: parseNumber(mappedEmployee.personal_leave_balance),
+        },
       },
     };
     });
