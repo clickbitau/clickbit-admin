@@ -15,12 +15,63 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { fetchKpiEmployeeHistory, snapshotKpi } from '@/lib/api';
 import type { KpiScore } from '@/types/hr';
-import { ArrowLeft, BarChart3, Calendar, RefreshCw, Trophy, User } from 'lucide-react';
+import { ArrowLeft, BarChart3, Calendar, Info, RefreshCw, Trophy, User } from 'lucide-react';
 
 function scoreVariant(score: number) {
   if (score >= 80) return 'default';
   if (score >= 60) return 'secondary';
   return 'destructive';
+}
+
+function scoreInsights(s: KpiScore) {
+  const insights: string[] = [];
+  const m = s.metadata || {};
+  if (s.total_score != null && s.total_score < 60) insights.push('Overall performance is below expectations');
+  if (s.punctuality_score != null && s.punctuality_score < 70) {
+    const lateMinutes = Number((m as any).lateMinutes || 0);
+    const missingBreaks = Number((m as any).missingBreaks || 0);
+    if (lateMinutes > 0 || missingBreaks > 0) insights.push(`Punctuality impacted by ${lateMinutes} late minutes and ${missingBreaks} missing breaks`);
+    else insights.push('Punctuality is low (late clock-ins or absences)');
+  }
+  if (s.task_efficiency_score != null && s.task_efficiency_score < 70) {
+    const actual = Number((m as any).taskActualHours || 0);
+    const estimated = Number((m as any).taskEstimatedHours || 0);
+    if (estimated > 0 && actual > estimated) insights.push(`Tasks overran estimate by ${(actual - estimated).toFixed(1)}h (${actual.toFixed(1)}h actual vs ${estimated.toFixed(1)}h estimated)`);
+    else insights.push('Task efficiency is low (actual hours exceed or no baseline)');
+  }
+  if (s.task_timeliness_score != null && s.task_timeliness_score < 70) {
+    const avgDays = Number((m as any).averageDaysDelta || 0);
+    if (avgDays > 0) insights.push(`Tasks delivered an average of ${avgDays.toFixed(1)} days late`);
+    else insights.push('Task timeliness is low (deadlines missed)');
+  }
+  if (s.support_resolution_score != null && s.support_resolution_score < 70) {
+    const tickets = Number((m as any).ticketCount || 0);
+    insights.push(`Support resolution is slow (${tickets} ticket${tickets === 1 ? '' : 's'} in period)`);
+  }
+  if (s.leadership_score != null && s.leadership_score < 70) {
+    const phases = Number((m as any).managedPhasesCount || 0);
+    insights.push(phases > 0 ? `Leadership contribution is low (${phases} managed phases)` : 'No leadership/mentoring contribution recorded');
+  }
+  if (s.documentation_score != null && s.documentation_score < 70) {
+    const ratio = String((m as any).documentedItemsRatio || '0/0');
+    insights.push(`Documentation is low (${ratio} documented)`);
+  }
+  return insights;
+}
+
+function metadataSummary(s: KpiScore) {
+  const m = s.metadata || {};
+  const items = [
+    { label: 'Tasks', value: Number((m as any).taskCount || 0) },
+    { label: 'Tickets', value: Number((m as any).ticketCount || 0) },
+    { label: 'Task hours', value: `${Number((m as any).taskActualHours || 0).toFixed(1)} / ${Number((m as any).taskEstimatedHours || 0).toFixed(1)}` },
+    { label: 'Avg days delta', value: Number((m as any).averageDaysDelta || 0).toFixed(1) },
+    { label: 'Late minutes', value: Number((m as any).lateMinutes || 0) },
+    { label: 'Missing breaks', value: Number((m as any).missingBreaks || 0) },
+    { label: 'Documentation', value: String((m as any).documentedItemsRatio || '0/0') },
+    { label: 'Managed phases', value: Number((m as any).managedPhasesCount || 0) },
+  ];
+  return items;
 }
 
 export default function AdminKpiEmployeeDetailPage() {
@@ -140,9 +191,25 @@ export default function AdminKpiEmployeeDetailPage() {
 
           {latest?.metadata && (
             <Card className="nm-raised">
-              <CardHeader><CardTitle>Latest Metadata — {latest.period}</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Info className="h-4 w-4 text-primary" /> Latest Insights — {latest.period}</CardTitle></CardHeader>
               <CardContent>
-                <pre className="text-xs text-muted-foreground overflow-x-auto">{JSON.stringify(latest.metadata, null, 2)}</pre>
+                {scoreInsights(latest).length > 0 ? (
+                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 mb-4">
+                    {scoreInsights(latest).map((insight, i) => (
+                      <li key={i}>{insight}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground mb-4">No issues — all component scores are healthy.</p>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                  {metadataSummary(latest).map((item) => (
+                    <div key={item.label} className="nm-raised-sm p-2">
+                      <div className="text-xs text-muted-foreground">{item.label}</div>
+                      <div className="font-semibold">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}

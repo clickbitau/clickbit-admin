@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { SiteMonitoringCards } from '@/components/dashboard/SiteMonitoringCards';
-import { ActiveWebsiteCard } from '@/components/dashboard/ActiveWebsiteCard';
 import { TimeClockCard } from '@/components/dashboard/TimeClockCard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -178,35 +177,64 @@ function TabSwitcher({ active, onChange }: { active: string; onChange: (id: stri
   );
 }
 
-function MySitesCard() {
+function SiteIcon({ url }: { url: string }) {
+  const [error, setError] = useState(false);
+  if (error) {
+    return (
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+        <Globe className="h-4 w-4" />
+      </div>
+    );
+  }
+  return <img src={`${url}/favicon.ico`} alt="" className="w-8 h-8 rounded-lg object-contain" onError={() => setError(true)} />;
+}
+
+function MySitesAndTasksCard({ myTaskStats }: { myTaskStats?: DashboardStats['myTaskStats'] }) {
   const sites = [
     { label: 'ClickBit', url: process.env.NEXT_PUBLIC_CLICKBIT_SITE_URL || 'https://clickbit.com.au' },
     { label: 'Anchor', url: process.env.NEXT_PUBLIC_ANCHOR_SITE_URL || 'https://anchor.clickbit.com.au' },
-    { label: 'Dockbit', url: process.env.NEXT_PUBLIC_DOCKBIT_SITE_URL || 'https://dockbit.com.au' },
+    { label: 'Dockbit', url: process.env.NEXT_PUBLIC_DOCKBIT_SITE_URL || 'https://dockbit.clickbit.com.au' },
+    { label: 'Pass', url: process.env.NEXT_PUBLIC_PASS_SITE_URL || 'https://pass.clickbit.com.au' },
   ].filter((s) => s.url);
 
   return (
-    <div className="nm-raised p-4 sm:p-5">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 sm:mb-4">My ClickBit Sites</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {sites.map((site) => (
-          <a
-            key={site.label}
-            href={site.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 p-3 rounded-xl hover:brightness-[0.97] dark:hover:brightness-110 transition-all duration-200 group"
-          >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
-              <Globe className="w-4 h-4" />
-            </div>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
-              {site.label}
-            </span>
-            <ExternalLink className="w-3.5 h-3.5 text-gray-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-          </a>
-        ))}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 nm-raised p-4 sm:p-5">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 sm:mb-4">My ClickBit Sites</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {sites.map((site) => (
+            <a
+              key={site.label}
+              href={site.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 p-3 rounded-xl hover:brightness-[0.97] dark:hover:brightness-110 transition-all duration-200 group"
+            >
+              <SiteIcon url={site.url} />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
+                {site.label}
+              </span>
+              <ExternalLink className="w-3.5 h-3.5 text-gray-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            </a>
+          ))}
+        </div>
       </div>
+
+      {myTaskStats && myTaskStats.total > 0 && (
+        <div className="lg:col-span-1">
+          <StatCard
+            label="My Tasks"
+            value={myTaskStats.total}
+            icon={CheckSquare}
+            gradient="bg-gradient-to-br from-violet-50 to-violet-50/40 dark:from-violet-900/20 dark:to-violet-900/10"
+            iconBg="bg-violet-100 dark:bg-violet-900/30"
+            iconColor="text-violet-600 dark:text-violet-400"
+            valueColor="text-violet-700 dark:text-violet-300"
+            to="/admin/crm/project-tasks"
+            sub={myTaskStats.overdue > 0 ? `${myTaskStats.overdue} overdue` : `${myTaskStats.inProgress} in progress`}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -319,33 +347,6 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
 
   return (
     <div className="space-y-6">
-      {data.myTaskStats.total > 0 && (
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
-            My Work
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard
-              label="My Tasks"
-              value={data.myTaskStats.total}
-              icon={CheckSquare}
-              gradient="bg-gradient-to-br from-violet-50 to-violet-50/40 dark:from-violet-900/20 dark:to-violet-900/10"
-              iconBg="bg-violet-100 dark:bg-violet-900/30"
-              iconColor="text-violet-600 dark:text-violet-400"
-              valueColor="text-violet-700 dark:text-violet-300"
-              to="/admin/crm/project-tasks"
-              sub={
-                data.myTaskStats.overdue > 0
-                  ? `${data.myTaskStats.overdue} overdue`
-                  : `${data.myTaskStats.inProgress} in progress`
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      <ActiveWebsiteCard />
-
       <SiteMonitoringCards />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -1004,7 +1005,7 @@ export default function AdminDashboardPage() {
       actions={<TabSwitcher active={activeTab} onChange={setTab} />}
     >
       <div className="space-y-6">
-        <MySitesCard />
+        <MySitesAndTasksCard myTaskStats={stats?.myTaskStats} />
         {tabContent[activeTab] || tabContent.business}
       </div>
     </PageShell>
