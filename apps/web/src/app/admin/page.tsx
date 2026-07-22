@@ -56,6 +56,7 @@ import {
   CheckSquare,
   Sun,
   FileText,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Area,
@@ -173,6 +174,39 @@ function TabSwitcher({ active, onChange }: { active: string; onChange: (id: stri
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function MySitesCard() {
+  const sites = [
+    { label: 'ClickBit', url: process.env.NEXT_PUBLIC_CLICKBIT_SITE_URL || 'https://clickbit.com.au' },
+    { label: 'Anchor', url: process.env.NEXT_PUBLIC_ANCHOR_SITE_URL || 'https://anchor.clickbit.com.au' },
+    { label: 'Dockbit', url: process.env.NEXT_PUBLIC_DOCKBIT_SITE_URL || 'https://dockbit.com.au' },
+  ].filter((s) => s.url);
+
+  return (
+    <div className="nm-raised p-4 sm:p-5">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 sm:mb-4">My ClickBit Sites</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {sites.map((site) => (
+          <a
+            key={site.label}
+            href={site.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 p-3 rounded-xl hover:brightness-[0.97] dark:hover:brightness-110 transition-all duration-200 group"
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+              <Globe className="w-4 h-4" />
+            </div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
+              {site.label}
+            </span>
+            <ExternalLink className="w-3.5 h-3.5 text-gray-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -969,7 +1003,10 @@ export default function AdminDashboardPage() {
       icon={Sun}
       actions={<TabSwitcher active={activeTab} onChange={setTab} />}
     >
-      {tabContent[activeTab] || tabContent.business}
+      <div className="space-y-6">
+        <MySitesCard />
+        {tabContent[activeTab] || tabContent.business}
+      </div>
     </PageShell>
   );
 }

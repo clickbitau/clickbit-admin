@@ -190,8 +190,22 @@ export default function ProjectTasksPage() {
     setPage(1);
   }, [view, status, priority, viewScope, selectedAssignees, hideCompleted, debouncedSearch]);
 
-  const tasks = data?.data ?? [];
+  const tasks = useMemo(() => data?.data ?? [], [data?.data]);
   const pagination = data?.pagination ?? { currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 25 };
+
+  const assigneeIdsFromTasks = useMemo(() => {
+    const ids = new Set<number>();
+    tasks.forEach((t) => {
+      if (t.assigned_to) ids.add(Number(t.assigned_to));
+      if (t.assignee?.id) ids.add(Number(t.assignee.id));
+    });
+    return ids;
+  }, [tasks]);
+
+  const visibleAssignees = useMemo(() => {
+    const selectedSet = new Set(selectedAssignees);
+    return (assignees ?? []).filter((u) => assigneeIdsFromTasks.has(Number(u.id)) || selectedSet.has(Number(u.id)));
+  }, [assignees, assigneeIdsFromTasks, selectedAssignees]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<ProjectTask> }) => updateTask(token!, id, data),
@@ -474,7 +488,7 @@ export default function ProjectTasksPage() {
             {viewScope !== 'my' && (
               <div className="flex items-center gap-2">
                 <div className="flex items-center -space-x-2 overflow-x-auto max-w-[220px] sm:max-w-xs py-1">
-                  {(assignees ?? []).map((u: User) => {
+                  {visibleAssignees.map((u: User) => {
                     const selected = selectedAssignees.includes(Number(u.id));
                     return (
                       <button
