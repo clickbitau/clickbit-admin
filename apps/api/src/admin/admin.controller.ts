@@ -17,12 +17,23 @@ import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AdminService } from './admin.service';
+import { PublicContentService } from '../content/public-content.service';
 
 @Controller('admin')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
 @Roles('admin', 'manager')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly publicContentService?: PublicContentService,
+  ) {}
+
+  private content() {
+    if (!this.publicContentService) {
+      throw new Error('PublicContentService is not available in this controller');
+    }
+    return this.publicContentService;
+  }
 
   @Get('data')
   getData(@Req() req: RequestWithUser) {
@@ -470,5 +481,99 @@ export class AdminController {
   @Post('agent-requests/:id/dismiss')
   async dismissAgentRequest(@Param('id', ParseIntPipe) id: number) {
     return this.adminService.dismissAgentRequest(id);
+  }
+
+  // -------------------------------------------------------------------------
+  // Site content settings (legacy parity)
+  // -------------------------------------------------------------------------
+  @Get('site-identity')
+  async getSiteIdentity() {
+    return this.content().getContent('site-identity');
+  }
+
+  @Put('site-identity')
+  async updateSiteIdentity(@Body() body: any) {
+    return this.content().setContent('site-identity', body.siteIdentity || body);
+  }
+
+  @Get('contact-info')
+  async getContactInfo() {
+    return this.content().getContent('contact-info');
+  }
+
+  @Put('contact-info')
+  async updateContactInfo(@Body() body: any) {
+    return this.content().setContent('contact-info', body.contactInfo || body);
+  }
+
+  @Get('footer-content')
+  async getFooterContent() {
+    return this.content().getContent('footer-content');
+  }
+
+  @Put('footer-content')
+  async updateFooterContent(@Body() body: any) {
+    return this.content().setContent('footer-content', body.footerContent || body);
+  }
+
+  @Get('navigation')
+  async getNavigation() {
+    return this.content().getContent('navigation');
+  }
+
+  @Put('navigation')
+  async updateNavigation(@Body() body: any) {
+    return this.content().setContent('navigation', body.navigation || body);
+  }
+
+  @Get('faq')
+  async getFaq() {
+    return this.content().getContent('faq');
+  }
+
+  @Put('faq')
+  async updateFaq(@Body() body: any) {
+    return this.content().setContent('faq', body.faqItems || body.faq || body);
+  }
+
+  @Get('mission-points')
+  async getMissionPoints() {
+    return this.content().getContent('mission-points');
+  }
+
+  @Put('mission-points')
+  async updateMissionPoints(@Body() body: any) {
+    return this.content().setContent('mission-points', body.missionPoints || body);
+  }
+
+  @Get('marketing-integrations')
+  async getMarketingIntegrations() {
+    return this.content().getContent('marketing-integrations');
+  }
+
+  @Put('marketing-integrations')
+  async updateMarketingIntegrations(@Body() body: any) {
+    return this.content().setContent('marketing-integrations', body.marketingIntegrations || body);
+  }
+
+  @Get('process-phases')
+  async getProcessPhases() {
+    return this.content().getContent('process-phases');
+  }
+
+  @Put('process-phases')
+  async updateProcessPhases(@Body() body: any) {
+    return this.content().setContent('process-phases', body.processPhases || body);
+  }
+
+  // Billing settings
+  @Get('billing-settings')
+  async getBillingSettings() {
+    return this.adminService.getBillingSettings();
+  }
+
+  @Put('billing-settings')
+  async updateBillingSettings(@Body() body: any) {
+    return this.adminService.updateBillingSettings(body);
   }
 }

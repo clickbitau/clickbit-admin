@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -13,11 +13,13 @@ import {
 } from './dto';
 import { asJsonInput, buildLegacyList, buildPagination, mapProjectSupportPeriod, mapSubprojectSupportPeriod, safeDate } from './crm-utils';
 import { CacheService } from '../redis/cache.service';
+import { EmailService } from '../common/email.service';
 
 @Injectable()
 export class ProjectsService {
   constructor(
     private prisma: PrismaService,
+    private readonly emailService?: EmailService,
     private readonly cache?: CacheService,
   ) {}
 
@@ -35,14 +37,18 @@ export class ProjectsService {
     return this.cache?.getOrSet(key, factory, this.CACHE_TTL_SECONDS) ?? factory();
   }
 
-  async findAll(query: { status?: string; search?: string; company_id?: string | number; manager_id?: string | number; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) {
+  async findAll(query: { status?: string; search?: string; company_id?: string | number; contact_id?: string | number; manager_id?: string | number; page?: number; limit?: number; sortBy?: string; sortOrder?: string; sort?: string; order?: string }) {
     return this.cached(this.cacheKey('list', JSON.stringify(query)), async () => {
     const { status, search, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC' } = query;
     const companyId = query.company_id ? Number(query.company_id) : undefined;
+    const contactId = query.contact_id ? Number(query.contact_id) : undefined;
     const managerId = query.manager_id ? Number(query.manager_id) : undefined;
+    const finalSortBy = query.sort || sortBy;
+    const finalSortOrder = (query.order || sortOrder) as 'asc' | 'desc' | 'ASC' | 'DESC';
     const where: { [key: string]: unknown } = { deleted_at: null };
     if (status) where.status = status;
     if (companyId) where.company_id = companyId;
+    if (contactId) where.customer_id = contactId;
     if (managerId) where.manager_id = managerId;
     if (search) {
       (where as { AND: unknown[] }).AND = [
@@ -56,7 +62,7 @@ export class ProjectsService {
     }
 
     const orderBy: { [key: string]: 'asc' | 'desc' } = {
-      [sortBy || 'created_at']: sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc',
+      [finalSortBy || 'created_at']: finalSortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc',
     };
 
     const [projects, total, stats] = await Promise.all([
@@ -129,6 +135,10 @@ export class ProjectsService {
     await this.invalidateCache();
     await this.cache?.del(this.cacheKey('detail', id));
     return { message: 'Project deleted successfully' };
+  }
+
+  async findRelated(id: number) {
+    return this.getRelated(id);
   }
 
   async getRelated(id: number) {
@@ -383,11 +393,13 @@ export class ProjectsService {
     return { message: 'Meeting deleted successfully' };
   }
 
-  async updateStatus(id: number, status: string) {
+  async updateStatus(id: number, body: { status?: string; completion_percentage?: number }) {
     await this.ensureProjectExists(id);
 
-    const data: Record<string, unknown> = { status };
-    if (status === 'completed') data.completed_date = new Date();
+    const data: Record<string, unknown> = {};
+    if (body.status !== undefined) data.status = body.status;
+    if (body.completion_percentage !== undefined) data.progress_percentage = Number(body.completion_percentage);
+    if (body.status === 'completed') data.completed_date = new Date();
 
     await this.prisma.crm_projects.update({
       where: { id },
@@ -420,8 +432,125 @@ export class ProjectsService {
   }
 
   async sendSupportEmail(id: number, dto: SendSupportEmailDto) {
-    await this.ensureProjectExists(id);
-    return { message: 'Support email queued', subject: dto.subject, project_id: id };
+    const project = await this.ensureProjectExists(id);
+    let recipientEmail = dto.email;
+    let recipientName = dto.name || 'Valued Client';
+    if (!recipientEmail && project.customer_id) {
+      const contact = await this.prisma.contacts.findUnique({ where: { id: project.customer_id }, select: { email: true, name: true } });
+      if (contact?.email) {
+        recipientEmail = contact.email;
+        recipientName = contact.name || recipientName;
+      }
+    }
+    if (!recipientEmail) {
+      return { success: false, message: 'No recipient email found. Provide email in body.' };
+    }
+
+    const periodLabels: Record<string, string> = {
+      '3_months': '3 Months', '6_months': '6 Months', '1_year': '1 Year',
+      '2_years': '2 Years', '3_years': '3 Years', '5_years': '5 Years',
+      lifetime: 'Lifetime', custom: 'Custom',
+    };
+    const supportStatus = this.getSupportStatus(project as any);
+
+    if (!this.emailService) {
+      return { success: false, message: 'Email service not available' };
+    }
+
+    const result = await this.emailService.send({
+      to: recipientEmail,
+      subject: dto.subject || `Support Period Reminder - ${(project as any).name}`,
+      html: `
+        <div style="font-family: Sora, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
+          <h2 style="color: #1FBBD2;">Hi ${recipientName},</h2>
+          <p>This is a reminder about the support period for <strong>${(project as any).name}</strong>.</p>
+          <p><strong>Support period:</strong> ${periodLabels[(project as any).support_period_type] || (project as any).support_period_type || '—'}<br/>
+          <strong>Support end date:</strong> ${(project as any).support_end_date ? new Date((project as any).support_end_date).toLocaleDateString('en-AU') : '—'}<br/>
+          <strong>Status:</strong> ${supportStatus.status}<br/>
+          <strong>Days remaining:</strong> ${supportStatus.daysRemaining}<br/>
+          ${(project as any).support_price ? `<strong>Support price:</strong> ${(project as any).support_currency || 'AUD'} ${Number((project as any).support_price).toLocaleString('en-AU', { minimumFractionDigits: 2 })}<br/>` : ''}
+          </p>
+          ${dto.body ? `<p>${dto.body}</p>` : '<p>If you have any questions, please contact us.</p>'}
+        </div>
+      `,
+    });
+
+    if (!result.sent) {
+      return { success: false, message: result.error || 'Failed to send support email' };
+    }
+    return { success: true, message: 'Support expiry email sent successfully', sentTo: recipientEmail };
+  }
+
+  async sendSubprojectSupportEmail(id: number, subprojectId: number, dto: SendSupportEmailDto) {
+    const project = await this.ensureProjectExists(id);
+    const subproject = await this.prisma.crm_subprojects.findUnique({ where: { id: subprojectId } });
+    if (!subproject || subproject.parent_project_id !== id) {
+      throw new NotFoundException('Subproject not found');
+    }
+    if (!subproject.support_period_type) {
+      throw new BadRequestException('No support period configured for this subproject');
+    }
+
+    let recipientEmail = dto.email;
+    let recipientName = dto.name || 'Valued Client';
+    if (!recipientEmail && project.customer_id) {
+      const contact = await this.prisma.contacts.findUnique({ where: { id: project.customer_id }, select: { email: true, name: true } });
+      if (contact?.email) {
+        recipientEmail = contact.email;
+        recipientName = contact.name || recipientName;
+      }
+    }
+    if (!recipientEmail) {
+      throw new BadRequestException('No recipient email found. Provide an email address.');
+    }
+
+    const supportStatus = this.getSupportStatus(subproject);
+    const periodLabels: Record<string, string> = {
+      '3_months': '3 Months', '6_months': '6 Months', '1_year': '1 Year',
+      '2_years': '2 Years', '3_years': '3 Years', '5_years': '5 Years',
+      lifetime: 'Lifetime', custom: 'Custom',
+    };
+
+    if (!this.emailService) {
+      return { success: false, message: 'Email service not available' };
+    }
+
+    const result = await this.emailService.send({
+      to: recipientEmail,
+      subject: dto.subject || `Support Period Reminder - ${subproject.name}`,
+      html: `
+        <div style="font-family: Sora, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
+          <h2 style="color: #1FBBD2;">Hi ${recipientName},</h2>
+          <p>This is a reminder about the support period for <strong>${subproject.name}</strong> (subproject of ${project.name}).</p>
+          <p><strong>Support period:</strong> ${periodLabels[subproject.support_period_type as string] || subproject.support_period_type}<br/>
+          <strong>Support end date:</strong> ${subproject.support_end_date ? new Date(subproject.support_end_date).toLocaleDateString('en-AU') : '—'}<br/>
+          <strong>Status:</strong> ${supportStatus.status}<br/>
+          <strong>Days remaining:</strong> ${supportStatus.daysRemaining}<br/>
+          ${subproject.support_price ? `<strong>Support price:</strong> ${subproject.support_currency || 'AUD'} ${Number(subproject.support_price).toLocaleString('en-AU', { minimumFractionDigits: 2 })}<br/>` : ''}
+          </p>
+          ${dto.body ? `<p>${dto.body}</p>` : '<p>If you have any questions, please contact us.</p>'}
+        </div>
+      `,
+    });
+
+    if (!result.sent) {
+      return { success: false, message: result.error || 'Failed to send support email' };
+    }
+    return { success: true, message: 'Support expiry email sent successfully', sentTo: recipientEmail };
+  }
+
+  private getSupportStatus(record: { support_period_type: string | null; support_end_date: Date | string | null }) {
+    if (record.support_period_type === 'lifetime') {
+      return { status: 'active', daysRemaining: 9999 };
+    }
+    const end = record.support_end_date ? new Date(record.support_end_date) : null;
+    if (!end) {
+      return { status: 'unknown', daysRemaining: 0 };
+    }
+    const daysRemaining = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    if (daysRemaining < 0) return { status: 'expired', daysRemaining };
+    if (daysRemaining <= 30) return { status: 'expiring', daysRemaining };
+    return { status: 'active', daysRemaining };
   }
 
   async getSubproject(subprojectId: number) {

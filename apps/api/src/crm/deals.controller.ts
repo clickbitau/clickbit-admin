@@ -180,6 +180,7 @@ export class DealsController {
   }
 
   @Put(':id/create-project')
+  @Post(':id/create-project')
   async createProject(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateProjectFromDealDto,
@@ -187,7 +188,9 @@ export class DealsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.dealsService.createProjectFromDeal(id, dto, req.user.id);
+    const result = await this.dealsService.createProjectFromDeal(id, dto, req.user.id);
+    res.status(201);
+    return result;
   }
 
   @Put(':id/update-value')

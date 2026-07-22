@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from './common.dto';
 
 export const PROJECT_STATUSES = ['not_started', 'in_progress', 'on_hold', 'completed', 'cancelled'] as const;
@@ -119,6 +119,10 @@ export class UpdateProjectDto extends PartialType(CreateProjectDto) {}
 export class ProjectStatusDto {
   @IsIn(PROJECT_STATUSES)
   status!: typeof PROJECT_STATUSES[number];
+
+  @IsOptional()
+  @IsNumber()
+  completion_percentage?: number;
 }
 
 export class CreateProjectTaskDto {
@@ -199,9 +203,19 @@ export class ProjectDocumentUploadDto {
 }
 
 export class SendSupportEmailDto {
+  @IsOptional()
   @IsString()
-  subject!: string;
+  subject?: string;
 
+  @IsOptional()
   @IsString()
-  body!: string;
+  body?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
 }

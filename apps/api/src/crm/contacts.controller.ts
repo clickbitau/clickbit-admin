@@ -195,12 +195,24 @@ export class ContactsController {
   }
 
   @Post(':id/resend')
+  @Post(':id/portal-access/resend')
   async resendPortalEmail(
     @Param('id', ParseIntPipe) id: number,
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
     return this.contactsService.resendPortalEmail(id);
+  }
+
+  @Post(':id/companies')
+  async addCompany(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LinkContactCompanyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    res.status(201);
+    return this.contactsService.linkCompany(id, dto.company_id, dto);
   }
 
   @Post('portal-access/batch')

@@ -69,3 +69,40 @@ export class ReviewsAdminController {
     return this.reviewsService.remove(id);
   }
 }
+
+@Controller('reviews/admin')
+@UseGuards(SupabaseAuthGuard, RolesGuard)
+@Roles('admin', 'manager')
+export class ReviewsAdminLegacyController {
+  constructor(private readonly reviewsService: ReviewsService) {}
+
+  @Get()
+  findAll(@Query() query: ListContentQueryDto) {
+    return this.reviewsService.findAllAdmin(query as unknown as Record<string, unknown>);
+  }
+
+  @Get('stats')
+  stats() {
+    return this.reviewsService.stats();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.reviewsService.findOneAdmin(id);
+  }
+
+  @Put(':id/status')
+  updateStatus(@Param('id', ParseIntPipe) id: number, @Body() dto: ReviewStatusDto) {
+    return this.reviewsService.updateStatus(id, dto.status);
+  }
+
+  @Put(':id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReviewDto) {
+    return this.reviewsService.update(id, dto as unknown as Record<string, unknown>);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.reviewsService.remove(id);
+  }
+}

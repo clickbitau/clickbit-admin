@@ -7,7 +7,7 @@ import { PortfolioController } from './portfolio.controller';
 import { PortfolioService } from './portfolio.service';
 import { TeamController } from './team.controller';
 import { TeamService } from './team.service';
-import { ReviewsController, ReviewsAdminController } from './reviews.controller';
+import { ReviewsController, ReviewsAdminController, ReviewsAdminLegacyController } from './reviews.controller';
 import { ReviewsService } from './reviews.service';
 import { BlogController } from './blog.controller';
 import { BlogService } from './blog.service';
@@ -22,6 +22,7 @@ import { MarketingService } from './marketing.service';
     TeamController,
     ReviewsController,
     ReviewsAdminController,
+    ReviewsAdminLegacyController,
     BlogController,
     MarketingController,
   ],

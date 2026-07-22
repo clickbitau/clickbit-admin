@@ -92,6 +92,32 @@ export class PublicContentService {
     });
   }
 
+  async setContent(key: string, value: unknown) {
+    const dbKey = this.getSettingKey(key);
+    const settingValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const existing = await this.prisma.site_settings.findFirst({ where: { setting_key: dbKey } });
+    if (existing) {
+      await this.prisma.site_settings.update({
+        where: { id: existing.id },
+        data: { setting_value: settingValue, updated_at: new Date() },
+      });
+    } else {
+      await this.prisma.site_settings.create({
+        data: {
+          setting_key: dbKey,
+          setting_value: settingValue,
+          setting_type: 'content',
+          is_public: true,
+          auto_load: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      });
+    }
+    await this.cache?.delPrefix(this.cacheKey('content'));
+    return this.getContent(key);
+  }
+
   async search(user: Profile | null, query: Record<string, unknown>) {
     return this.cached(this.cacheKey('search', user?.id ?? 'anon', JSON.stringify(query)), async () => {
     const term = stringValue(query.q || query.query).toLowerCase();

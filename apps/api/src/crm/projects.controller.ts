@@ -270,7 +270,7 @@ export class ProjectsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     setNoCache(res);
-    return this.projectsService.updateStatus(id, dto.status);
+    return this.projectsService.updateStatus(id, { status: dto.status });
   }
 
   @Post(':id/recalculate-progress')
@@ -290,6 +290,17 @@ export class ProjectsController {
   ) {
     setNoCache(res);
     return this.projectsService.sendSupportEmail(id, dto);
+  }
+
+  @Post(':id/subprojects/:subprojectId/send-support-email')
+  async sendSubprojectSupportEmail(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subprojectId', ParseIntPipe) subprojectId: number,
+    @Body() dto: SendSupportEmailDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    setNoCache(res);
+    return this.projectsService.sendSubprojectSupportEmail(id, subprojectId, dto);
   }
 
   @Get(':id/subprojects/:subprojectId/documents')

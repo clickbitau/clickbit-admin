@@ -1200,4 +1200,128 @@ export class AdminService {
     await this.prisma.documents.delete({ where: { id: docId } });
     return { success: true, message: 'Document deleted' };
   }
+
+  // -------------------------------------------------------------------------
+  // Billing settings
+  // -------------------------------------------------------------------------
+  async getBillingSettings() {
+    const [stripe, bank, tax, company, googleMaps] = await Promise.all([
+      this.prisma.stripe_settings.findFirst(),
+      this.prisma.bank_accounts.findFirst({ where: { is_primary: true } }),
+      this.prisma.tax_settings.findFirst(),
+      this.prisma.company_info.findFirst(),
+      this.prisma.api_keys.findFirst({ where: { service_name: 'google_maps' } }),
+    ]);
+
+    const billingAddress = company
+      ? [company.address_line1, company.address_line2, company.city, company.state, company.postcode, company.country].filter(Boolean).join('\n')
+      : '';
+
+    return {
+      stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || stripe?.publishable_key || '',
+      stripePublishableKeyFromEnv: !!process.env.STRIPE_PUBLISHABLE_KEY,
+      stripeSecretKey: process.env.STRIPE_SECRET_KEY || stripe?.secret_key || '',
+      stripeSecretKeyFromEnv: !!process.env.STRIPE_SECRET_KEY,
+      stripeSecretKeyEncrypted: stripe?.secret_key_encrypted || false,
+      enableStripe: stripe?.enabled !== false,
+      taxRate: tax?.tax_rate ? Number(tax.tax_rate) : 10,
+      taxType: tax?.tax_type || 'gst_included',
+      taxName: tax?.tax_name || 'GST',
+      companyAbn: company?.abn || '',
+      billingAddress,
+      currencyCode: company?.currency_code || 'AUD',
+      paymentTerms: company?.payment_terms || 'Net 14',
+      bankAccountName: bank?.account_name || '',
+      bankBSB: bank?.bsb || '',
+      bankAccountNumber: bank?.account_number || '',
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || googleMaps?.api_key || '',
+      googleMapsApiKeyFromEnv: !!process.env.GOOGLE_MAPS_API_KEY,
+    };
+  }
+
+  async updateBillingSettings(body: any) {
+    const billingSettings = body.billingSettings || body;
+
+    const [stripe, tax, company, bank] = await Promise.all([
+      this.prisma.stripe_settings.findFirst(),
+      this.prisma.tax_settings.findFirst(),
+      this.prisma.company_info.findFirst(),
+      this.prisma.bank_accounts.findFirst({ where: { is_primary: true } }),
+    ]);
+
+    const stripeData: any = {
+      publishable_key: billingSettings.stripePublishableKey || (stripe?.publishable_key ?? ''),
+      secret_key: billingSettings.stripeSecretKey || (stripe?.secret_key ?? ''),
+      secret_key_encrypted: billingSettings.stripeSecretKeyEncrypted ?? stripe?.secret_key_encrypted ?? false,
+      enabled: billingSettings.enableStripe !== undefined ? billingSettings.enableStripe : (stripe?.enabled ?? true),
+      is_live_mode: (billingSettings.stripePublishableKey || stripe?.publishable_key || '').startsWith('pk_live'),
+      updated_at: new Date(),
+    };
+
+    if (stripe) {
+      await this.prisma.stripe_settings.update({ where: { id: stripe.id }, data: stripeData });
+    } else {
+      await this.prisma.stripe_settings.create({ data: { ...stripeData, created_at: new Date() } });
+    }
+
+    const taxData: any = {
+      tax_name: billingSettings.taxName ?? tax?.tax_name ?? 'GST',
+      tax_rate: new Decimal(Number(billingSettings.taxRate ?? tax?.tax_rate ?? 10)),
+      tax_type: billingSettings.taxType ?? tax?.tax_type ?? 'gst_included',
+      updated_at: new Date(),
+    };
+    if (tax) {
+      await this.prisma.tax_settings.update({ where: { id: tax.id }, data: taxData });
+    } else {
+      await this.prisma.tax_settings.create({ data: { ...taxData, enabled: true, created_at: new Date() } });
+    }
+
+    const companyData: any = {
+      abn: billingSettings.companyAbn ?? company?.abn ?? '',
+      address_line1: billingSettings.billingAddress?.split('\n')[0] ?? company?.address_line1 ?? '',
+      address_line2: billingSettings.billingAddress?.split('\n')[1] ?? company?.address_line2 ?? '',
+      city: billingSettings.billingAddress?.split('\n')[2] ?? company?.city ?? '',
+      state: billingSettings.billingAddress?.split('\n')[3] ?? company?.state ?? '',
+      postcode: billingSettings.billingAddress?.split('\n')[4] ?? company?.postcode ?? '',
+      country: billingSettings.billingAddress?.split('\n')[5] ?? company?.country ?? 'Australia',
+      currency_code: billingSettings.currencyCode ?? company?.currency_code ?? 'AUD',
+      payment_terms: billingSettings.paymentTerms ?? company?.payment_terms ?? 'Net 14',
+      updated_at: new Date(),
+    };
+    if (company) {
+      await this.prisma.company_info.update({ where: { id: company.id }, data: companyData });
+    } else {
+      await this.prisma.company_info.create({ data: { ...companyData, name: 'ClickBit', created_at: new Date() } });
+    }
+
+    if (billingSettings.bankAccountName !== undefined || billingSettings.bankBSB !== undefined || billingSettings.bankAccountNumber !== undefined) {
+      const bankData: any = {
+        account_name: billingSettings.bankAccountName ?? bank?.account_name ?? '',
+        bsb: billingSettings.bankBSB ?? bank?.bsb ?? '',
+        account_number: billingSettings.bankAccountNumber ?? bank?.account_number ?? '',
+        bank_name: bank?.bank_name ?? '',
+        is_primary: true,
+        enabled: true,
+        updated_at: new Date(),
+      };
+      if (bank) {
+        await this.prisma.bank_accounts.update({ where: { id: bank.id }, data: bankData });
+      } else {
+        await this.prisma.bank_accounts.create({ data: { ...bankData, created_at: new Date() } });
+      }
+    }
+
+    if (billingSettings.googleMapsApiKey !== undefined) {
+      const existing = await this.prisma.api_keys.findFirst({ where: { service_name: 'google_maps' } });
+      const keyData: any = { api_key: billingSettings.googleMapsApiKey, updated_at: new Date() };
+      if (existing) {
+        await this.prisma.api_keys.update({ where: { id: existing.id }, data: keyData });
+      } else {
+        await this.prisma.api_keys.create({ data: { ...keyData, service_name: 'google_maps', enabled: true, created_at: new Date() } });
+      }
+    }
+
+    await this.cache?.delPrefix(this.cacheKey());
+    return { success: true, message: 'Billing settings updated', data: this.getBillingSettings() };
+  }
 }
