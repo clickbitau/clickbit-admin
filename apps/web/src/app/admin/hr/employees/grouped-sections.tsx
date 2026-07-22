@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
 import { formatDate } from '@/lib/format';
 import type { Employee } from '@/types/hr';
+import { Eye, Pencil, Trash2 } from 'lucide-react';
 
 const typeColors: Record<string, string> = {
   full_time: 'bg-blue-500',
@@ -53,9 +55,12 @@ interface GroupedEmployeeSectionsProps {
   typeOptions: { value: string; label: string }[];
   isLoading?: boolean;
   onRowClick?: (employee: Employee) => void;
+  onView?: (employee: Employee) => void;
+  onDelete?: (employee: Employee) => void;
+  canManage?: boolean;
 }
 
-export function GroupedEmployeeSections({ employees, mode, typeOptions, isLoading, onRowClick }: GroupedEmployeeSectionsProps) {
+export function GroupedEmployeeSections({ employees, mode, typeOptions, isLoading, onRowClick, onView, onDelete, canManage }: GroupedEmployeeSectionsProps) {
   if (isLoading && employees.length === 0) {
     return <div className="text-sm text-muted-foreground py-8 text-center">Loading employees…</div>;
   }
@@ -107,6 +112,7 @@ export function GroupedEmployeeSections({ employees, mode, typeOptions, isLoadin
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Manager</th>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Leave</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
@@ -143,6 +149,16 @@ export function GroupedEmployeeSections({ employees, mode, typeOptions, isLoadin
                       <div className="text-xs space-y-0.5">
                         <p className={Number(employee.annual_leave_balance || 0) < 0 ? 'text-destructive' : ''}>A: {leaveBalance(employee.annual_leave_balance)}</p>
                         <p className={Number(employee.sick_leave_balance || 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}>S: {leaveBalance(employee.sick_leave_balance)}</p>
+                        <p className={Number(employee.personal_leave_balance || 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}>P: {leaveBalance(employee.personal_leave_balance)}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Button size="sm" variant="ghost" onClick={() => onView?.(employee)} title="View"><Eye className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => onView?.(employee)} title="Edit"><Pencil className="h-4 w-4" /></Button>
+                        {canManage && (
+                          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => onDelete?.(employee)} title="Delete"><Trash2 className="h-4 w-4" /></Button>
+                        )}
                       </div>
                     </td>
                   </tr>
