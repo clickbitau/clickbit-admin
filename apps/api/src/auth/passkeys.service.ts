@@ -17,18 +17,26 @@ import type {
 import type { Profile } from '@clickbit/shared';
 import { CacheService } from '../redis/cache.service';
 
-function rpConfig(config: ConfigService) {
+function getRegisterableDomain(hostname: string): string {
+  const parts = hostname.split('.');
+  if (parts.length <= 2 || !hostname.includes('.') || hostname === 'localhost') return hostname;
+  return parts.slice(-2).join('.');
+}
+
+function rpConfig(config: ConfigService, requestOrigin?: string) {
   const rpName = config.get<string>('WEBAUTHN_RP_NAME') || 'ClickBit';
-  const origin = (config.get<string>('WEBAUTHN_ORIGIN') || config.get<string>('FRONTEND_URL') || 'https://localhost').replace(/\/$/, '');
+  const defaultOrigin = (config.get<string>('WEBAUTHN_ORIGIN') || config.get<string>('FRONTEND_URL') || 'https://localhost').replace(/\/$/, '');
   let rpID = config.get<string>('WEBAUTHN_RP_ID') || '';
-  if (!rpID && origin) {
+  if (!rpID) {
+    const originToUse = requestOrigin || defaultOrigin;
     try {
-      rpID = new URL(origin).hostname;
+      rpID = getRegisterableDomain(new URL(originToUse).hostname);
     } catch {
       rpID = 'localhost';
     }
   }
   if (!rpID) rpID = 'localhost';
+  const origin = requestOrigin || defaultOrigin;
   return { rpName, rpID, origin };
 }
 
@@ -135,11 +143,11 @@ export class PasskeysService {
     return { accessToken, refreshToken: accessToken };
   }
 
-  async generateRegistrationOptions(user: Profile) {
+  async generateRegistrationOptions(user: Profile, requestOrigin?: string) {
     await this.invalidateCache();
 
     await this.ensureTables();
-    const { rpName, rpID } = rpConfig(this.config);
+    const { rpName, rpID } = rpConfig(this.config, requestOrigin);
     const existing = await this.prisma.passkeys.findMany({
       where: { user_id: user.id, deleted_at: null },
       select: { credential_id: true },
@@ -164,11 +172,11 @@ export class PasskeysService {
     return { success: true, data: options };
   }
 
-  async verifyRegistration(user: Profile, body: any) {
+  async verifyRegistration(user: Profile, body: any, requestOrigin?: string) {
     await this.invalidateCache();
 
     await this.ensureTables();
-    const { rpID, origin } = rpConfig(this.config);
+    const { rpID, origin } = rpConfig(this.config, requestOrigin);
     const record = await this.consumeChallenge(challengeOrThrow(body), 'registration');
     if (record.user_id !== user.id) throw new UnauthorizedException('Challenge does not belong to this user');
 
@@ -208,11 +216,11 @@ export class PasskeysService {
     return { success: true, message: 'Passkey registered', data: { id: passkey.id, credential_id: passkey.credential_id, friendly_name: passkey.friendly_name } };
   }
 
-  async generateLoginOptions() {
+  async generateLoginOptions(requestOrigin?: string) {
     await this.invalidateCache();
 
     await this.ensureTables();
-    const { rpID } = rpConfig(this.config);
+    const { rpID } = rpConfig(this.config, requestOrigin);
     const opts: GenerateAuthenticationOptionsOpts = {
       rpID,
       allowCredentials: [],
@@ -223,11 +231,11 @@ export class PasskeysService {
     return { success: true, data: options };
   }
 
-  async verifyLogin(body: any) {
+  async verifyLogin(body: any, requestOrigin?: string) {
     await this.invalidateCache();
 
     await this.ensureTables();
-    const { rpID, origin } = rpConfig(this.config);
+    const { rpID, origin } = rpConfig(this.config, requestOrigin);
     const record = await this.consumeChallenge(challengeOrThrow(body), 'login');
 
     const credentialId = body.id;
