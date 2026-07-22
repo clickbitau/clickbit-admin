@@ -383,7 +383,7 @@ export class AuthService {
 
     const { provider, provider_id } = dto;
     if (!provider || !provider_id) throw new BadRequestException('provider and provider_id are required');
-    const valid = ['google', 'facebook', 'apple', 'github'];
+    const valid = ['google', 'apple', 'github'];
     if (!valid.includes(provider)) throw new BadRequestException(`Invalid provider. Must be one of: ${valid.join(', ')}`);
 
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
