@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '@/components/design-system/StatusBadge';
-import { fetchCustomerTicket, replyCustomerTicket } from '@/lib/api';
+import { fetchMyTicket, replyToMyTicket } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { Headset, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,13 +26,13 @@ export default function EmployeeItSupportDetailPage() {
     queryKey: ['employee-it-ticket', token, id],
     queryFn: async () => {
       if (!token || !id) throw new Error('Missing');
-      return fetchCustomerTicket(token, id);
+      return fetchMyTicket(token, id);
     },
     enabled: !!token && !!id,
   });
 
   const replyMutation = useMutation({
-    mutationFn: () => replyCustomerTicket(token!, id, reply),
+    mutationFn: () => replyToMyTicket(token!, id, reply),
     onSuccess: () => {
       toast.success('Reply sent');
       setReply('');
@@ -41,7 +41,7 @@ export default function EmployeeItSupportDetailPage() {
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to send reply'),
   });
 
-  const ticket = data?.ticket ?? data ?? {};
+  const ticket = (data as any)?.ticket ?? data ?? {};
   const messages = ticket.ticket_messages || [];
 
   return (

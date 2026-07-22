@@ -68,7 +68,7 @@ function getDashboardPath(role?: string) {
   const r = (role || 'customer').toLowerCase();
   if (['admin', 'manager', 'employee'].includes(r)) return '/admin';
   if (r === 'agent') return '/agent/dashboard';
-  return '/customer/dashboard';
+  return '/login';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -162,6 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
               const trust = await checkTrust(result.accessToken, storedTrust);
               if (trust.data?.valid) {
+                if (result.user?.role === 'customer') {
+                  clearToken();
+                  router.replace('/login?customer=1');
+                  return result;
+                }
                 setToken(result.accessToken, result.refreshToken);
                 if (result.user) setUser(result.user);
                 router.replace(getDashboardPath(result.user?.role));
@@ -177,6 +182,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setMfaRefreshToken(result.refreshToken);
           return result;
         }
+        if (result.user?.role === 'customer') {
+          clearToken();
+          router.replace('/login?customer=1');
+          return result;
+        }
         setToken(result.accessToken, result.refreshToken);
         if (result.user) setUser(result.user);
         router.replace(getDashboardPath(result.user?.role));
@@ -189,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [router, setToken, clearMfa],
+    [router, setToken, clearMfa, clearToken],
   );
 
   const completeMfa = useCallback(
@@ -206,6 +216,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearMfa();
         const { data: me } = await axios.get('/api/auth/me', { headers: { Authorization: `Bearer ${data.access_token}` } });
         if (me?.data?.user) {
+          if (me.data.user.role === 'customer') {
+            clearToken();
+            router.replace('/login?customer=1');
+            return;
+          }
           setUser(me.data.user);
           if (rememberDevice) {
             try {
@@ -227,7 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [mfaToken, mfaRefreshToken, setToken, clearMfa, router],
+    [mfaToken, mfaRefreshToken, setToken, clearMfa, router, clearToken],
   );
 
   const cancelMfa = useCallback(() => {
