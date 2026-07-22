@@ -17,6 +17,15 @@ import type {
 import type { Profile } from '@clickbit/shared';
 import { CacheService } from '../redis/cache.service';
 
+function sharedRpId(hostname: string): string {
+  const normalized = hostname.replace(/^www\./, '');
+  // Allow one passkey to work across all *.clickbit.com.au subdomains.
+  if (normalized === 'clickbit.com.au' || normalized.endsWith('.clickbit.com.au')) {
+    return 'clickbit.com.au';
+  }
+  return normalized;
+}
+
 function rpConfig(config: ConfigService, requestOrigin?: string) {
   const rpName = config.get<string>('WEBAUTHN_RP_NAME') || 'ClickBit';
   const defaultOrigin = (config.get<string>('WEBAUTHN_ORIGIN') || config.get<string>('FRONTEND_URL') || 'https://localhost').replace(/\/$/, '');
@@ -24,7 +33,7 @@ function rpConfig(config: ConfigService, requestOrigin?: string) {
   if (!rpID) {
     const originToUse = requestOrigin || defaultOrigin;
     try {
-      rpID = new URL(originToUse).hostname.replace(/^www\./, '');
+      rpID = sharedRpId(new URL(originToUse).hostname);
     } catch {
       rpID = 'localhost';
     }
