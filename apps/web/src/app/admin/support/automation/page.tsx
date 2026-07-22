@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import {
   fetchCustomerRepositories,
   createCustomerRepository,
@@ -39,7 +40,6 @@ export default function AdminTicketAutomationPage() {
 
   const [repoForm, setRepoForm] = useState({ profile_id: '', repo_full_name: '', auto_fix_enabled: true, require_approval: true });
   const [quotaForm, setQuotaForm] = useState({ profile_id: '', free_limit: '5', period: 'monthly', price_cents: '5000', currency: 'AUD' });
-  const [editingRepo, setEditingRepo] = useState<CustomerRepository | null>(null);
 
   const { data: repos, isLoading: reposLoading, refetch: refetchRepos } = useQuery({
     queryKey: ['customer-repositories', token],
@@ -82,7 +82,7 @@ export default function AdminTicketAutomationPage() {
 
   const updateRepo = useMutation({
     mutationFn: (data: { id: number; body: Partial<CustomerRepository> }) => updateCustomerRepository(token!, data.id, data.body),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['customer-repositories', token] }); setEditingRepo(null); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customer-repositories', token] }),
   });
 
   const deleteRepo = useMutation({
@@ -118,9 +118,7 @@ export default function AdminTicketAutomationPage() {
       icon={TicketIcon}
       description="Link customers to repositories, set ticket quotas, and review flagged tickets."
       actions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => { refetchRepos(); refetchQuotas(); }}><RefreshCw className="h-4 w-4" /></Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => { refetchRepos(); refetchQuotas(); }}><RefreshCw className="h-4 w-4" /></Button>
       }
     >
       <Card className="nm-raised">
@@ -128,7 +126,7 @@ export default function AdminTicketAutomationPage() {
           <CardTitle className="flex items-center gap-2 text-lg"><Github className="h-5 w-5" /> Customer Repositories</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-end gap-3 p-4 nm-raised-sm rounded-xl">
             <Input
               placeholder="owner/repo"
               value={repoForm.repo_full_name}
@@ -187,22 +185,28 @@ export default function AdminTicketAutomationPage() {
                         </td>
                         <td className="pr-4 font-mono text-xs text-muted-foreground">{repo.repo_full_name}</td>
                         <td className="pr-4">
-                          <Button
-                            size="sm"
-                            variant={repo.auto_fix_enabled ? 'default' : 'outline'}
+                          <button
+                            type="button"
                             onClick={() => updateRepo.mutate({ id: repo.id, body: { auto_fix_enabled: !repo.auto_fix_enabled } })}
+                            className={cn(
+                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
+                              repo.auto_fix_enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
+                            )}
                           >
                             {repo.auto_fix_enabled ? 'On' : 'Off'}
-                          </Button>
+                          </button>
                         </td>
                         <td className="pr-4">
-                          <Button
-                            size="sm"
-                            variant={repo.require_approval ? 'default' : 'outline'}
+                          <button
+                            type="button"
                             onClick={() => updateRepo.mutate({ id: repo.id, body: { require_approval: !repo.require_approval } })}
+                            className={cn(
+                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
+                              repo.require_approval ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-muted text-muted-foreground'
+                            )}
                           >
                             {repo.require_approval ? 'Required' : 'Auto-merge'}
-                          </Button>
+                          </button>
                         </td>
                         <td className="text-right">
                           <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteRepo.mutate(repo.id)}><Trash2 className="h-4 w-4" /></Button>
@@ -218,10 +222,6 @@ export default function AdminTicketAutomationPage() {
           )}
         </CardContent>
       </Card>
-
-      {editingRepo && (
-        <EditRepoDialog repo={editingRepo} customers={customerOptions} onSave={(body) => updateRepo.mutate({ id: editingRepo.id, body })} onClose={() => setEditingRepo(null)} />
-      )}
 
       <Card className="nm-raised">
         <CardHeader>
@@ -249,12 +249,11 @@ export default function AdminTicketAutomationPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Extra ticket price (cents)</label>
-              <Input type="number" min={0} value={quotaForm.price_cents} onChange={(e) => setQuotaForm({ ...quotaForm, price_cents: e.target.value })} className="w-36" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Currency</label>
-              <Input value={quotaForm.currency} onChange={(e) => setQuotaForm({ ...quotaForm, currency: e.target.value })} className="w-24" />
+              <label className="text-xs text-muted-foreground">Extra ticket price</label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} value={quotaForm.price_cents} onChange={(e) => setQuotaForm({ ...quotaForm, price_cents: e.target.value })} className="w-36" />
+                <Input value={quotaForm.currency} onChange={(e) => setQuotaForm({ ...quotaForm, currency: e.target.value })} className="w-24" />
+              </div>
             </div>
             <Button onClick={() => createQuota.mutate()} disabled={!quotaForm.profile_id || createQuota.isPending}><Plus className="h-4 w-4 mr-1" /> Save</Button>
           </div>
@@ -292,7 +291,7 @@ export default function AdminTicketAutomationPage() {
                   <div className="min-w-0">
                     <div className="font-medium truncate">
                       <span className="font-mono text-xs text-muted-foreground mr-2">{t.ticket_number}</span>
-                      <Link href={`/admin/support/tickets/${t.id}`} className="hover:underline">{t.subject}</Link>
+                      <Link href={`/admin/support/${t.id}`} className="hover:underline">{t.subject}</Link>
                     </div>
                     <div className="text-xs text-muted-foreground capitalize mt-0.5">{t.category} · {t.priority}</div>
                   </div>
@@ -309,33 +308,6 @@ export default function AdminTicketAutomationPage() {
         </CardContent>
       </Card>
     </PageShell>
-  );
-}
-
-function EditRepoDialog({ repo, customers, onSave, onClose }: { repo: CustomerRepository; customers: { id: number; first_name: string; last_name: string; email: string }[]; onSave: (data: Partial<CustomerRepository>) => void; onClose: () => void }) {
-  const [form, setForm] = useState(repo);
-  return (
-    <Card className="nm-raised border-primary">
-      <CardHeader><CardTitle>Edit Repository</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        <Input value={form.repo_full_name} onChange={(e) => setForm({ ...form, repo_full_name: e.target.value })} />
-        <select value={form.profile_id ?? ''} onChange={(e) => setForm({ ...form, profile_id: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-          {customers.map((c) => <option key={c.id} value={c.id}>{customerLabel(c)}</option>)}
-        </select>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.auto_fix_enabled} onChange={(e) => setForm({ ...form, auto_fix_enabled: e.target.checked })} className="h-4 w-4 rounded border" /> Auto-fix
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.require_approval} onChange={(e) => setForm({ ...form, require_approval: e.target.checked })} className="h-4 w-4 rounded border" /> Require approval
-          </label>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => onSave(form)}><Save className="h-4 w-4 mr-1" /> Save</Button>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
