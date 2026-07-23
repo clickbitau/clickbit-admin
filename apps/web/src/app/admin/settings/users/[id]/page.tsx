@@ -62,20 +62,23 @@ export default function AdminUserDetailPage() {
     enabled: !!token && !!id,
   });
 
+  // Nest returns a flat profile; fetchUser normalizes to `{ user }`. Also accept a
+  // flat payload if an older client/cache still has one.
+  const userData = (data as { user?: Record<string, any> } | Record<string, any> | undefined)?.user
+    ?? (data && typeof data === 'object' && 'id' in data && 'email' in data ? (data as Record<string, any>) : undefined);
+  const isAdmin = currentUser?.role === 'admin';
+
   const { data: permissionsData } = useQuery({
     queryKey: ['user-permissions', token, id],
     queryFn: async () => { if (!token) throw new Error('No token'); return fetchUserPermissions(token, id); },
-    enabled: !!token && !!id && data?.user?.role === 'manager',
+    enabled: !!token && !!id && userData?.role === 'manager',
   });
 
   const { data: availablePermissionsData } = useQuery({
     queryKey: ['available-permissions', token],
     queryFn: async () => { if (!token) throw new Error('No token'); return fetchAvailablePermissions(token); },
-    enabled: !!token && data?.user?.role === 'manager',
+    enabled: !!token && userData?.role === 'manager',
   });
-
-  const userData = data?.user;
-  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     if (userData) setForm(userData);
