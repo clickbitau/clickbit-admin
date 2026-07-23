@@ -5,11 +5,6 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface Address {
-  name?: string;
-  address?: string;
-}
-
 interface ParsedMessage {
   uid: number;
   flags: string[];

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-unused-vars, @typescript-eslint/prefer-promise-reject-errors */
 // @ts-nocheck
 /**
  * PDF Generation Service - FINAL FIX

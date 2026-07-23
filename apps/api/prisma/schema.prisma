@@ -1937,14 +1937,17 @@ model email_accounts {
   profile_id         Int
   email              String          @db.VarChar(255)
   display_name       String?         @db.VarChar(100)
-  imap_host          String          @db.VarChar(255)
-  imap_port          Int             @default(993)
+  provider           String?         @default("imap") @db.VarChar(50)
+  resource_id        String?         @db.VarChar(255)
+  api_token_encrypted String?        @db.VarChar(1000)
+  imap_host          String?         @db.VarChar(255)
+  imap_port          Int?            @default(993)
   imap_secure        Boolean?        @default(true)
-  smtp_host          String          @db.VarChar(255)
-  smtp_port          Int             @default(465)
+  smtp_host          String?         @db.VarChar(255)
+  smtp_port          Int?            @default(465)
   smtp_secure        Boolean?        @default(true)
-  username           String          @db.VarChar(255)
-  password_encrypted String
+  username           String?         @db.VarChar(255)
+  password_encrypted String?
   is_active          Boolean?        @default(true)
   last_sync_at       DateTime?       @db.Timestamptz(6)
   last_error         String?
@@ -1953,9 +1956,12 @@ model email_accounts {
   signature_html     String?
   signature_text     String?
   aliases            Json?           @default("[]") @db.Json
+  shared_with_users  Json?           @default("[]") @db.Json
+  shared_with_roles  Json?           @default("[]") @db.Json
   cached_emails      cached_emails[]
   profiles           profiles        @relation(fields: [profile_id], references: [id], onDelete: Cascade)
 
+  @@index([provider], map: "email_accounts_provider")
   @@unique([profile_id, email], map: "email_accounts_profile_id_email")
   @@schema("public")
 }

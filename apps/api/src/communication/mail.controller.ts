@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, UseGuards 
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { MailService } from './mail.service';
-import { MailAccountDto, UpdateMailAccountDto, SendMailDto, MailTemplateDto } from './dto/communication.dto';
+import { MailAccountDto, UpdateMailAccountDto, SendMailDto, MailTemplateDto, DiscoverMailboxesDto } from './dto/communication.dto';
 
 @Controller('mail')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
@@ -37,6 +37,11 @@ export class MailController {
   @Post('accounts/:id/test')
   testAccount(@Param('id') id: string, @Req() req: any) {
     return this.mailService.testAccount(req.user, id);
+  }
+
+  @Post('accounts/discover')
+  discoverMailboxes(@Req() req: any, @Body() dto: DiscoverMailboxesDto) {
+    return this.mailService.discoverHostingerMailboxes(req.user, dto as unknown as Record<string, unknown>);
   }
 
   @Get('accounts/:accountId/folders')

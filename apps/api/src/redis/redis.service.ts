@@ -160,23 +160,23 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async get(key: string): Promise<string | null> {
-    return (this.client as any).get(key);
+    return await (this.client as any).get(key);
   }
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<any> {
     if (ttlSeconds && ttlSeconds > 0) {
-      return (this.client as any).set(key, value, 'EX', ttlSeconds);
+      return await (this.client as any).set(key, value, 'EX', ttlSeconds);
     }
-    return (this.client as any).set(key, value);
+    return await (this.client as any).set(key, value);
   }
 
   async del(...keys: string[]): Promise<number> {
     if (keys.length === 0) return 0;
-    return (this.client as any).del(...keys);
+    return await (this.client as any).del(...keys);
   }
 
   async keys(pattern: string): Promise<string[]> {
-    return (this.client as any).keys(pattern);
+    return await (this.client as any).keys(pattern);
   }
 
   async onModuleDestroy() {

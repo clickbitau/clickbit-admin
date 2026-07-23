@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContactsService } from './contacts.service';
-import { buildPagination, buildLegacyList } from './crm-utils';
 
 @Injectable()
 export class CrmService {

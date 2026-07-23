@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Profile } from '@clickbit/shared';
-import { asJson, buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
+import { buildMessageEnvelope, numberValue, parseJson, slugify, stringValue } from './content-utils';
 import { CacheService } from '../redis/cache.service';
 
 const MARKETING_TAG = 'marketing';

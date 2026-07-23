@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { UserCircle, Camera, Trash2, Lock, Bell, Link2, AlertTriangle, Building2, Globe, Save } from 'lucide-react';
+import { FcGoogle } from 'react-icons/fc';
+import { FaApple, FaGithub } from 'react-icons/fa';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PageShell } from '@/components/design-system/PageShell';
 import { PersonAvatar } from '@/components/design-system/PersonAvatar';
@@ -25,6 +27,7 @@ import {
   deleteCompanyLogo,
   updateProfileNotifications,
   fetchLinkedAccounts,
+  linkProvider,
   unlinkProvider,
   deleteAccount,
 } from '@/lib/api';
@@ -98,10 +101,21 @@ const NOTIFICATION_KEYS = [
 
 type LinkedAccount = { provider: string; linked_at: string };
 
+type ProviderConfig = { id: string; label: string; icon: React.ElementType };
+
+const PROVIDERS: ProviderConfig[] = [
+  { id: 'google', label: 'Google', icon: FcGoogle },
+  { id: 'apple', label: 'Apple', icon: FaApple },
+  { id: 'github', label: 'GitHub', icon: FaGithub },
+];
+
 export default function AdminSettingsProfilePage() {
-  const { token, logout } = useAuth();
+  const { token, logout, linkOAuth } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const oauthLink = searchParams.get('oauth_link');
+  const oauthProvider = searchParams.get('provider');
   const avatarRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
 
@@ -210,6 +224,21 @@ export default function AdminSettingsProfilePage() {
     onSuccess: () => { toast.success('Provider unlinked'); queryClient.invalidateQueries({ queryKey: ['linked-accounts', token] }); },
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to unlink'),
   });
+
+  const link = useMutation({
+    mutationFn: async (provider: string) => {
+      if (!token) throw new Error('Not authenticated');
+      return linkProvider(token, provider, token);
+    },
+    onSuccess: (res: any, provider: string) => { toast.success(res?.message || `${provider} linked`); queryClient.invalidateQueries({ queryKey: ['linked-accounts', token] }); router.replace('/admin/settings/profile'); },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to link provider'),
+  });
+
+  useEffect(() => {
+    if (oauthLink === '1' && oauthProvider && token) {
+      link.mutate(oauthProvider);
+    }
+  }, [oauthLink, oauthProvider, token, link]);
 
   const [pw, setPw] = useState({ current_password: '', new_password: '', confirm_password: '' });
 
@@ -373,23 +402,37 @@ export default function AdminSettingsProfilePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Link2 className="h-4 w-4" /> Linked accounts</CardTitle>
-              <CardDescription>Social login providers connected to your account.</CardDescription>
+              <CardDescription>Connect or disconnect social login providers.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {linkedAccounts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No linked social accounts.</p>
-              ) : (
-                linkedAccounts.map((a) => (
-                  <div key={a.provider} className="flex items-center justify-between rounded-lg border p-3">
+              {PROVIDERS.map((p) => {
+                const linked = linkedAccounts.find((a) => a.provider === p.id);
+                const Icon = p.icon;
+                return (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
                     <div className="flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium capitalize">{a.provider}</span>
-                      <span className="text-xs text-muted-foreground">Linked {formatDate(a.linked_at)}</span>
+                      <Icon className="h-4 w-4" />
+                      <span className="text-sm font-medium">{p.label}</span>
+                      {linked ? <span className="text-xs text-muted-foreground">Linked {formatDate(linked.linked_at)}</span> : <span className="text-xs text-muted-foreground">Not linked</span>}
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => unlink.mutate(a.provider)} disabled={unlink.isPending}>Unlink</Button>
+                    {linked ? (
+                      <Button variant="ghost" size="sm" onClick={() => unlink.mutate(p.id)} disabled={unlink.isPending}>Unlink</Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => linkOAuth(p.id)} disabled={link.isPending}>Link</Button>
+                    )}
                   </div>
-                ))
-              )}
+                );
+              })}
+              {linkedAccounts.filter((a) => !PROVIDERS.some((p) => p.id === a.provider)).map((a) => (
+                <div key={a.provider} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium capitalize">{a.provider}</span>
+                    <span className="text-xs text-muted-foreground">Linked {formatDate(a.linked_at)}</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => unlink.mutate(a.provider)} disabled={unlink.isPending}>Unlink</Button>
+                </div>
+              ))}
             </CardContent>
           </Card>
 

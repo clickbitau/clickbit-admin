@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Prisma } from '@prisma/client';
@@ -8,6 +8,7 @@ import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private adminClient: SupabaseClient | null = null;
   private publicClient: SupabaseClient | null = null;
 
@@ -388,13 +389,28 @@ export class AuthService {
     });
 }
 
-  async linkProvider(user: any, dto: { provider: string; provider_id: string; provider_email?: string }) {
+  async linkProvider(user: any, dto: { provider: string; provider_id?: string; provider_email?: string; access_token?: string }) {
     await this.invalidateCache();
 
-    const { provider, provider_id } = dto;
-    if (!provider || !provider_id) throw new BadRequestException('provider and provider_id are required');
+    const { provider, provider_id: explicitProviderId } = dto;
+    if (!provider) throw new BadRequestException('provider is required');
     const valid = ['google', 'apple', 'github'];
     if (!valid.includes(provider)) throw new BadRequestException(`Invalid provider. Must be one of: ${valid.join(', ')}`);
+
+    let providerId = explicitProviderId;
+    let providerEmail = dto.provider_email;
+
+    if (!providerId && dto.access_token) {
+      const publicClient = this.ensurePublic();
+      const { data: userData, error } = await (publicClient.auth as any).getUser(dto.access_token);
+      if (error || !userData?.user) throw new BadRequestException(error?.message || 'Invalid access token');
+      const identity = (userData.user.identities || []).find((i: any) => i.provider === provider);
+      if (!identity) throw new BadRequestException(`No ${provider} identity found for this user`);
+      providerId = identity.identity_data?.sub || identity.id || identity.user_id;
+      providerEmail = providerEmail || identity.identity_data?.email || userData.user.email || null;
+    }
+
+    if (!providerId) throw new BadRequestException('provider_id is required');
 
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile) throw new NotFoundException('Profile not found');
@@ -402,14 +418,14 @@ export class AuthService {
     const existing = await this.prisma.profiles.findFirst({
       where: {
         NOT: { id: user.id },
-        linked_providers: { path: ['$'], equals: [{ provider, provider_id }] },
+        linked_providers: { path: ['$'], equals: [{ provider, provider_id: providerId }] },
       },
     });
     if (existing) throw new BadRequestException(`This ${provider} account is already linked to another user`);
 
     const linked = Array.isArray(profile.linked_providers) ? (profile.linked_providers as any[]) : [];
     const idx = linked.findIndex((p) => p.provider === provider);
-    const entry = { provider, provider_id, provider_email: dto.provider_email || null, linked_at: new Date().toISOString() };
+    const entry = { provider, provider_id: providerId, provider_email: providerEmail || null, linked_at: new Date().toISOString() };
     if (idx >= 0) linked[idx] = entry;
     else linked.push(entry);
 
@@ -505,17 +521,28 @@ export class AuthService {
     await this.prisma.user_backup_codes.deleteMany({ where: { user_id: userId } });
 
     const codes: string[] = [];
-    const rows: { user_id: number; code_hash: string }[] = [];
+    const rows: { user_id: number; code_hash: string; created_at: Date; updated_at: Date }[] = [];
+    const now = new Date();
     while (codes.length < count) {
       const raw = randomBytes(6).toString('hex');
       const code = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
       const hash = this.hashBackupCode(code);
       if (rows.some((r) => r.code_hash === hash)) continue;
-      rows.push({ user_id: userId, code_hash: hash });
+      rows.push({ user_id: userId, code_hash: hash, created_at: now, updated_at: now });
       codes.push(code);
     }
 
-    await this.prisma.user_backup_codes.createMany({ data: rows, skipDuplicates: true });
+    // Insert one-by-one so missing/duplicate DB constraints do not crash the whole batch.
+    for (const row of rows) {
+      try {
+        await this.prisma.user_backup_codes.create({ data: row });
+      } catch (err: any) {
+        if (err?.code !== 'P2002') {
+          this.logger.error(`Failed to insert backup code: ${err?.message}`);
+          throw err;
+        }
+      }
+    }
     return { success: true, data: { codes, count: codes.length } };
   }
 
