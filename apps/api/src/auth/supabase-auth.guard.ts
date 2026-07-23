@@ -103,11 +103,11 @@ export class SupabaseAuthGuard implements CanActivate {
 
     const verification = this.verifySupabaseTokenQueued(token);
     SupabaseAuthGuard.tokenQueue.set(token, verification);
-    verification.finally(() => {
+    try {
+      return await verification;
+    } finally {
       SupabaseAuthGuard.tokenQueue.delete(token);
-    });
-
-    return verification;
+    }
   }
 
   private async verifySupabaseTokenQueued(token: string): Promise<Profile> {
