@@ -110,7 +110,14 @@ export class AdminService {
       this.prisma.profiles.count({ where: { ...NOT_DEMO, created_at: { gte: thirtyDaysAgo } } }),
       this.prisma.profiles.count({ where: { ...NOT_DEMO, created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } } }),
       this.prisma.companies.count({ where: { deleted_at: null, ...NOT_DEMO } }),
-      this.prisma.deals.count({ where: { ...notDemoCompany } }),
+      this.prisma.deals.count({
+        where: {
+          AND: [
+            { OR: [{ company_id: null }, { companies: { is_demo: false } }] },
+            { OR: [{ contact_id: null }, { contacts: { is_demo: false } }] },
+          ],
+        },
+      }),
       this.prisma.crm_projects.count({ where: { deleted_at: null, ...NOT_DEMO } }),
       this.prisma.tickets.count({ where: { ...NOT_DEMO } }),
       this.prisma.invoices.count({ where: { deleted_at: null, ...NOT_DEMO, ...notDemoCompany } }),

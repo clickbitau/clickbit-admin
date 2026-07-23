@@ -170,9 +170,4 @@ export class GetCompaniesQueryDto {
   @IsOptional()
   @IsString()
   mode?: string;
-
-  /** When "true", include companies flagged is_demo (excluded from production lists/stats by default). */
-  @IsOptional()
-  @IsString()
-  include_demo?: string;
 }

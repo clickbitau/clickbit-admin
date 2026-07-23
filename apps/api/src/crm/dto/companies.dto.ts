@@ -42,11 +42,6 @@ export class GetCompaniesQueryDto extends PaginationQueryDto {
   @IsString()
   mode?: string;
 
-  /** When "true", include companies flagged is_demo (excluded from production lists/stats by default). */
-  @IsOptional()
-  @IsString()
-  include_demo?: string;
-
   @IsOptional()
   @IsIn(ALLOWED_COMPANY_SORT)
   sortBy?: typeof ALLOWED_COMPANY_SORT[number] = 'updated_at';

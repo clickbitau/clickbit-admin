@@ -99,7 +99,7 @@ export class ProjectsService {
         profiles_crm_projects_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
       },
     });
-    if (!project) throw new NotFoundException('Project not found');
+    if (!project || project.is_demo) throw new NotFoundException('Project not found');
     const mapped = this.mapProject(project);
     mapped.financials = await this.projectFinancials(id);
     return { project: mapped };

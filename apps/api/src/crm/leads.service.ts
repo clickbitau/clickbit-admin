@@ -58,7 +58,7 @@ export class LeadsService {
       order = 'DESC',
     } = query;
 
-    const where: { [key: string]: unknown } = {};
+    const where: { [key: string]: unknown } = { is_demo: false };
     if (pipeline_id) where.pipeline_id = pipeline_id;
     if (stage_id) where.stage_id = stage_id;
     if (status && status !== 'all') where.status = status;
@@ -96,7 +96,7 @@ export class LeadsService {
   async findOne(id: number) {
     return this.cached(this.cacheKey('detail', id), async () => {
     const lead = await this.prisma.crm_leads.findUnique({ where: { id } });
-    if (!lead) throw new NotFoundException('Lead not found');
+    if (!lead || lead.is_demo) throw new NotFoundException('Lead not found');
     return { lead: await this.enrichLead(lead) };
     });
   }
@@ -394,12 +394,20 @@ export class LeadsService {
     const stageIds = pipeline.crm_pipeline_stages.map((s) => s.id);
 
     const allLeads = await this.prisma.crm_leads.findMany({
-      where: { stage_id: { in: stageIds } },
+      where: { stage_id: { in: stageIds }, is_demo: false },
       orderBy: [{ position: 'asc' }, { created_at: 'desc' }],
     });
 
     const allDeals = await this.prisma.deals.findMany({
-      where: { stage_id: { in: stageIds }, pipeline_id: pipelineId, deleted_at: null },
+      where: {
+        stage_id: { in: stageIds },
+        pipeline_id: pipelineId,
+        deleted_at: null,
+        AND: [
+          { OR: [{ company_id: null }, { companies: { is_demo: false } }] },
+          { OR: [{ contact_id: null }, { contacts: { is_demo: false } }] },
+        ],
+      },
       orderBy: [{ position: 'asc' }, { created_at: 'desc' }],
     });
 

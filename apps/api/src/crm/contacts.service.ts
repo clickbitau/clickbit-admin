@@ -97,7 +97,7 @@ export class ContactsService {
   async findOne(id: number) {
     return this.cached(this.cacheKey('detail', id), async () => {
     const contact = await this.prisma.contacts.findUnique({ where: { id } });
-    if (!contact) throw new NotFoundException('Contact not found');
+    if (!contact || contact.is_demo || contact.deleted_at) throw new NotFoundException('Contact not found');
     return { data: await this.enrichContact(contact) };
     });
   }

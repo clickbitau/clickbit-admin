@@ -20,7 +20,7 @@ export class AdminContactsController {
     setNoCache(res);
     const page = Number(query.page || 1);
     const limit = Number(query.limit || 20);
-    const where: { [key: string]: unknown } = { deleted_at: null };
+    const where: { [key: string]: unknown } = { deleted_at: null, is_demo: false };
 
     if (query.lifecycle_stage) where.lifecycle_stage = query.lifecycle_stage;
     if (query.status) where.lead_status = query.status;
@@ -95,6 +95,7 @@ export class AdminContactsController {
     const agents = await this.prisma.contacts.findMany({
       where: {
         deleted_at: null,
+        is_demo: false,
         OR: [{ lifecycle_stage: 'agent' }, { contact_type: { contains: 'agent' } }],
       },
       include: {

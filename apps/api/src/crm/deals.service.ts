@@ -65,7 +65,13 @@ export class DealsService {
       sortOrder = 'DESC',
     } = query;
 
-    const where: { [key: string]: unknown } = { deleted_at: null };
+    const where: { [key: string]: unknown } = {
+      deleted_at: null,
+      AND: [
+        { OR: [{ company_id: null }, { companies: { is_demo: false } }] },
+        { OR: [{ contact_id: null }, { contacts: { is_demo: false } }] },
+      ],
+    };
     if (pipeline_id) where.pipeline_id = pipeline_id;
     if (stage_id) where.stage_id = stage_id;
     if (status) where.status = status;
@@ -111,12 +117,15 @@ export class DealsService {
       include: {
         crm_pipeline_stages: true,
         crm_pipelines: true,
-        contacts: { select: { id: true, name: true, email: true, phone: true } },
-        companies: { select: { id: true, name: true, logo_url: true } },
+        contacts: { select: { id: true, name: true, email: true, phone: true, is_demo: true } },
+        companies: { select: { id: true, name: true, logo_url: true, is_demo: true } },
         crm_deal_contacts: { include: { contacts: { select: { id: true, name: true, email: true } } } },
       },
     });
     if (!deal) throw new NotFoundException('Deal not found');
+    if (deal.companies?.is_demo || deal.contacts?.is_demo) {
+      throw new NotFoundException('Deal not found');
+    }
     const owner = deal.owner_id
       ? await this.prisma.profiles.findUnique({ where: { id: deal.owner_id }, select: { id: true, first_name: true, last_name: true, avatar: true } })
       : null;

@@ -383,12 +383,9 @@ export class InvoicesService {
     const sortOrder = ((query.sort_order as string) || 'DESC').toUpperCase() === 'ASC' ? 'asc' : 'desc';
 
     const where: Prisma.invoicesWhereInput = { deleted_at: null, is_demo: false };
-    const andFilters: Prisma.invoicesWhereInput[] = [];
-    if (String(query.include_demo).toLowerCase() !== 'true') {
-      andFilters.push({
-        OR: [{ company_id: null }, { companies: { is_demo: false } }],
-      });
-    }
+    const andFilters: Prisma.invoicesWhereInput[] = [
+      { OR: [{ company_id: null }, { companies: { is_demo: false } }] },
+    ];
 
     const status = query.status as string | undefined;
     if (status) {
