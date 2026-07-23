@@ -20,7 +20,7 @@ export class AdminContactsController {
     setNoCache(res);
     const page = Number(query.page || 1);
     const limit = Number(query.limit || 20);
-    const where: { [key: string]: unknown } = { deleted_at: null };
+    const where: { [key: string]: unknown } = { deleted_at: null, is_demo: false };
 
     if (query.lifecycle_stage) where.lifecycle_stage = query.lifecycle_stage;
     if (query.status) where.lead_status = query.status;
@@ -65,19 +65,19 @@ export class AdminContactsController {
   async customerStats(@Res({ passthrough: true }) res: Response) {
     setNoCache(res);
     const total = await this.prisma.contacts.count({
-      where: { deleted_at: null, lifecycle_stage: 'customer' },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer' },
     });
     const activeCustomers = await this.prisma.contacts.count({
-      where: { deleted_at: null, lifecycle_stage: 'customer', lead_status: 'active' },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer', lead_status: 'active' },
     });
     const revenue = await this.prisma.contacts.aggregate({
-      where: { deleted_at: null, lifecycle_stage: 'customer' },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer' },
       _sum: { total_revenue: true },
     });
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const newThisMonth = await this.prisma.contacts.count({
-      where: { deleted_at: null, lifecycle_stage: 'customer', created_at: { gte: startOfMonth } },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer', created_at: { gte: startOfMonth } },
     });
     const totalRevenue = Number(revenue._sum.total_revenue || 0);
     return {
@@ -95,6 +95,7 @@ export class AdminContactsController {
     const agents = await this.prisma.contacts.findMany({
       where: {
         deleted_at: null,
+        is_demo: false,
         OR: [{ lifecycle_stage: 'agent' }, { contact_type: { contains: 'agent' } }],
       },
       include: {
@@ -108,13 +109,13 @@ export class AdminContactsController {
     const [companies, contacts] = await Promise.all([
       agentIds.length
         ? this.prisma.companies.findMany({
-            where: { agent_id: { in: agentIds }, deleted_at: null },
+            where: { agent_id: { in: agentIds }, deleted_at: null, is_demo: false },
             select: { agent_id: true, id: true, name: true, total_revenue: true, lifecycle_stage: true },
           })
         : Promise.resolve([] as any[]),
       agentIds.length
         ? this.prisma.contacts.findMany({
-            where: { agent_id: { in: agentIds }, deleted_at: null },
+            where: { agent_id: { in: agentIds }, deleted_at: null, is_demo: false },
             select: { agent_id: true, id: true, total_revenue: true },
           })
         : Promise.resolve([] as any[]),

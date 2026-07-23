@@ -382,22 +382,25 @@ export class InvoicesService {
     const sortBy = (query.sort_by as string) || 'created_at';
     const sortOrder = ((query.sort_order as string) || 'DESC').toUpperCase() === 'ASC' ? 'asc' : 'desc';
 
-    const where: Prisma.invoicesWhereInput = { deleted_at: null };
+    const where: Prisma.invoicesWhereInput = { deleted_at: null, is_demo: false };
+    const andFilters: Prisma.invoicesWhereInput[] = [
+      { OR: [{ company_id: null }, { companies: { is_demo: false } }] },
+    ];
 
     const status = query.status as string | undefined;
     if (status) {
       if (status === 'overdue') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        where.AND = [
-          { status: { in: ['sent', 'viewed', 'partial'] } },
-          {
-            OR: [
-              { valid_until: { lt: today } },
-              { due_date: { lt: today } },
-            ],
-          },
-        ];
+        andFilters.push({
+          status: { in: ['sent', 'viewed', 'partial'] },
+        });
+        andFilters.push({
+          OR: [
+            { valid_until: { lt: today } },
+            { due_date: { lt: today } },
+          ],
+        });
       } else if (status.includes(',')) {
         where.status = { in: status.split(',') };
       } else {
@@ -410,19 +413,23 @@ export class InvoicesService {
 
     if (query.customer) {
       const customerId = Number(query.customer);
-      where.OR = [{ source_id: customerId }, { contact_id: customerId }];
+      andFilters.push({ OR: [{ source_id: customerId }, { contact_id: customerId }] });
     }
 
     const search = (query.search as string)?.trim();
     if (search) {
-      where.OR = [
-        { client_name: { contains: search, mode: 'insensitive' } },
-        { client_email: { contains: search, mode: 'insensitive' } },
-        { client_company: { contains: search, mode: 'insensitive' } },
-        { title: { contains: search, mode: 'insensitive' } },
-        { package_code: { contains: search, mode: 'insensitive' } },
-      ];
+      andFilters.push({
+        OR: [
+          { client_name: { contains: search, mode: 'insensitive' } },
+          { client_email: { contains: search, mode: 'insensitive' } },
+          { client_company: { contains: search, mode: 'insensitive' } },
+          { title: { contains: search, mode: 'insensitive' } },
+          { package_code: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
+
+    if (andFilters.length) where.AND = andFilters;
 
     const fieldMap: Record<string, string> = { invoice_number: 'package_code', total: 'total_amount' };
     let orderBy: Prisma.invoicesOrderByWithRelationInput | Prisma.invoicesOrderByWithRelationInput[] = {};

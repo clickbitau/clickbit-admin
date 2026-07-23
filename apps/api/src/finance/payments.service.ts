@@ -137,6 +137,7 @@ export class PaymentsService {
       const invoiceIds: number[] = [];
       const matchingInvoices = await this.prisma.invoices.findMany({
         where: {
+          is_demo: false,
           OR: [
             { package_code: { contains: search, mode: 'insensitive' } },
             { client_name: { contains: search, mode: 'insensitive' } },

@@ -136,7 +136,7 @@ export class UsersService {
     const sortBy = stringValue(query.sortBy, 'name');
     const sortOrder = stringValue(query.sortOrder, 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
 
-    const where: any = { deleted_at: null };
+    const where: any = { deleted_at: null, is_demo: false };
     if (user.role === 'manager') where.role = 'customer';
     else if (query.roles) where.role = { in: stringValue(query.roles).split(',') };
     if (status) where.status = status;
@@ -158,7 +158,7 @@ export class UsersService {
 
   async findTeam() {
     return this.cached(this.cacheKey('team'), async () => this.prisma.profiles.findMany({
-      where: { role: { in: ['admin', 'manager'] }, status: 'active', deleted_at: null },
+      where: { role: { in: ['admin', 'manager'] }, status: 'active', deleted_at: null, is_demo: false },
       select: { id: true, first_name: true, last_name: true, email: true, role: true, avatar: true },
       orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
     }));
@@ -167,7 +167,7 @@ export class UsersService {
   async findManagers() {
     return this.cached(this.cacheKey('managers'), async () => {
     const managers = await this.prisma.profiles.findMany({
-      where: { role: 'manager', deleted_at: null },
+      where: { role: 'manager', deleted_at: null, is_demo: false },
       select: { id: true, first_name: true, last_name: true, email: true, status: true, permissions: true, created_at: true, last_login: true },
       orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
     });
@@ -178,7 +178,7 @@ export class UsersService {
   async findById(id: number, actor: Profile) {
     return this.cached(this.cacheKey('detail', actor.id, id), async () => {
     const user = await this.prisma.profiles.findUnique({ where: { id } });
-    if (!user || user.deleted_at) throw new NotFoundException({ message: 'Profile not found' });
+    if (!user || user.deleted_at || user.is_demo) throw new NotFoundException({ message: 'Profile not found' });
     if (actor.role === 'manager' && user.role !== 'customer') throw new ForbiddenException({ message: 'Managers can only view customer accounts.' });
     return user;
     });

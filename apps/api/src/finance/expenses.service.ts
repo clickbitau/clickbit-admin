@@ -181,7 +181,7 @@ export class ExpensesService {
     const allowedSortFields = new Set(['expense_date', 'category', 'vendor_name', 'status', 'total_amount', 'amount', 'expense_number', 'created_at']);
     const orderByField = allowedSortFields.has(sortBy) ? sortBy : 'expense_date';
 
-    const where: Prisma.expensesWhereInput = {};
+    const where: Prisma.expensesWhereInput = { is_demo: false };
 
     if (!this.isAdminOrManager(user)) {
       where.created_by = user.id;
@@ -233,7 +233,7 @@ export class ExpensesService {
   async findPendingApproval() {
     return this.cached(this.cacheKey('pending'), async () => {
     const rows = await this.expenses.findMany({
-      where: { status: 'pending' },
+      where: { status: 'pending', is_demo: false },
       include: expenseInclude,
       orderBy: { expense_date: 'desc' },
     });
@@ -243,7 +243,7 @@ export class ExpensesService {
 
   async findReimbursable(employeeId?: number) {
     return this.cached(this.cacheKey('reimbursable', employeeId ?? 'all'), async () => {
-    const where: Prisma.expensesWhereInput = { is_reimbursable: true, status: 'approved' };
+    const where: Prisma.expensesWhereInput = { is_reimbursable: true, status: 'approved', is_demo: false };
     if (employeeId) where.employee_id = employeeId;
     const rows = await this.expenses.findMany({ where, include: expenseInclude, orderBy: { expense_date: 'desc' } });
     return buildLegacyDataEnvelope(rows.map(mapExpense));

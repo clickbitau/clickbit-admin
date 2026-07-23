@@ -576,7 +576,7 @@ export class TicketsService {
     const sortBy = stringValue(query.sortBy || 'created_at');
     const sortOrder = stringValue(query.sortOrder || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-    const where: Prisma.ticketsWhereInput = {};
+    const where: Prisma.ticketsWhereInput = { is_demo: false };
     const status = query.status ? stringValue(query.status) : undefined;
     if (status && status !== 'all') {
       if (status === 'open_all') {
@@ -779,7 +779,7 @@ export class TicketsService {
   }
 
   async exportCsv(query: Record<string, unknown>) {
-    const where: Prisma.ticketsWhereInput = {};
+    const where: Prisma.ticketsWhereInput = { is_demo: false };
     if (query.status && query.status !== 'all') (where as any).status = stringValue(query.status);
     if (query.priority && query.priority !== 'all') (where as any).priority = stringValue(query.priority);
     if (query.category && query.category !== 'all') (where as any).category = stringValue(query.category);

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { NOT_DEMO, notDemoCompany, notDemoPaymentLinks } from '../common/demo-filter';
 
 function toDec(value: unknown): Decimal | null {
   if (value === null || value === undefined || value === '') return null;
@@ -96,23 +97,30 @@ export class AdminService {
       recentContacts,
       topBlogPosts,
     ] = await Promise.all([
-      this.prisma.contacts.count({ where: { deleted_at: null } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO } }),
       this.prisma.contacts.count({
-        where: { deleted_at: null, lifecycle_stage: { notIn: ['customer', 'evangelist'] } },
+        where: { deleted_at: null, ...NOT_DEMO, lifecycle_stage: { notIn: ['customer', 'evangelist'] } },
       }),
-      this.prisma.contacts.count({ where: { deleted_at: null, created_at: { gte: sevenDaysAgo } } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, created_at: { gte: thirtyDaysAgo } } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, created_at: { gte: sevenDaysAgo } } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, created_at: { gte: thirtyDaysAgo } } }),
       this.prisma.contacts.count({
-        where: { deleted_at: null, created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } },
+        where: { deleted_at: null, ...NOT_DEMO, created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } },
       }),
-      this.prisma.profiles.count(),
-      this.prisma.profiles.count({ where: { created_at: { gte: thirtyDaysAgo } } }),
-      this.prisma.profiles.count({ where: { created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } } }),
-      this.prisma.companies.count({ where: { deleted_at: null } }),
-      this.prisma.deals.count(),
-      this.prisma.crm_projects.count({ where: { deleted_at: null } }),
-      this.prisma.tickets.count(),
-      this.prisma.invoices.count({ where: { deleted_at: null } }),
+      this.prisma.profiles.count({ where: { ...NOT_DEMO } }),
+      this.prisma.profiles.count({ where: { ...NOT_DEMO, created_at: { gte: thirtyDaysAgo } } }),
+      this.prisma.profiles.count({ where: { ...NOT_DEMO, created_at: { gte: lastMonthStart, lt: thirtyDaysAgo } } }),
+      this.prisma.companies.count({ where: { deleted_at: null, ...NOT_DEMO } }),
+      this.prisma.deals.count({
+        where: {
+          AND: [
+            { OR: [{ company_id: null }, { companies: { is_demo: false } }] },
+            { OR: [{ contact_id: null }, { contacts: { is_demo: false } }] },
+          ],
+        },
+      }),
+      this.prisma.crm_projects.count({ where: { deleted_at: null, ...NOT_DEMO } }),
+      this.prisma.tickets.count({ where: { ...NOT_DEMO } }),
+      this.prisma.invoices.count({ where: { deleted_at: null, ...NOT_DEMO, ...notDemoCompany } }),
       this.prisma.orders.count(),
       this.prisma.services.count(),
       this.prisma.portfolio_items.count(),
@@ -125,6 +133,8 @@ export class AdminService {
         where: {
           status: { in: ['completed', 'partially_refunded', 'refunded'] },
           deleted_at: null,
+          ...NOT_DEMO,
+          ...notDemoPaymentLinks,
         },
       }),
       this.prisma.payments.aggregate({
@@ -132,6 +142,8 @@ export class AdminService {
         where: {
           status: { in: ['completed', 'partially_refunded', 'refunded'] },
           deleted_at: null,
+          ...NOT_DEMO,
+          ...notDemoPaymentLinks,
           OR: [{ payment_date: { gte: thirtyDaysAgo } }, { payment_date: null, created_at: { gte: thirtyDaysAgo } }],
         },
       }),
@@ -140,10 +152,12 @@ export class AdminService {
         where: {
           status: { in: ['pending', 'partial', 'sent', 'overdue'] },
           deleted_at: null,
+          ...NOT_DEMO,
+          ...notDemoCompany,
         },
       }),
       this.prisma.contacts.findMany({
-        where: { deleted_at: null },
+        where: { deleted_at: null, ...NOT_DEMO },
         orderBy: { created_at: 'desc' },
         take: 5,
         select: { id: true, name: true, email: true, contact_type: true, created_at: true },
@@ -699,6 +713,19 @@ export class AdminService {
 
     const paymentStatuses = ['completed', 'partially_refunded', 'refunded'];
     const expenseStatuses = ['approved', 'paid'] as const;
+    const productionPaymentWhere = {
+      status: { in: paymentStatuses },
+      deleted_at: null,
+      ...NOT_DEMO,
+      ...notDemoPaymentLinks,
+    };
+    const productionExpenseWhere = { status: { in: expenseStatuses as any }, ...NOT_DEMO };
+    const productionOutstandingWhere = {
+      status: { in: ['pending', 'partial', 'sent', 'overdue'] },
+      deleted_at: null,
+      ...NOT_DEMO,
+      ...notDemoCompany,
+    };
 
     const [
       paymentTotalAgg,
@@ -712,13 +739,12 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.payments.aggregate({
         _sum: { amount: true, refunded_amount: true },
-        where: { status: { in: paymentStatuses }, deleted_at: null },
+        where: productionPaymentWhere,
       }),
       this.prisma.payments.aggregate({
         _sum: { amount: true, refunded_amount: true },
         where: {
-          status: { in: paymentStatuses },
-          deleted_at: null,
+          ...productionPaymentWhere,
           OR: [{ payment_date: { gte: startDate } }, { payment_date: null, created_at: { gte: startDate } }],
         },
       }),
@@ -726,8 +752,7 @@ export class AdminService {
         ? this.prisma.payments.aggregate({
             _sum: { amount: true, refunded_amount: true },
             where: {
-              status: { in: paymentStatuses },
-              deleted_at: null,
+              ...productionPaymentWhere,
               OR: [
                 { payment_date: { gte: prevStartDate, lt: startDate } },
                 { payment_date: null, created_at: { gte: prevStartDate, lt: startDate } },
@@ -737,25 +762,25 @@ export class AdminService {
         : Promise.resolve(null),
       this.prisma.expenses.aggregate({
         _sum: { total_amount: true },
-        where: { status: { in: expenseStatuses as any } },
+        where: productionExpenseWhere,
       }),
       this.prisma.expenses.aggregate({
         _sum: { total_amount: true },
-        where: { status: { in: expenseStatuses as any }, expense_date: { gte: startDate } },
+        where: { ...productionExpenseWhere, expense_date: { gte: startDate } },
       }),
       prevStartDate
         ? this.prisma.expenses.aggregate({
             _sum: { total_amount: true },
-            where: { status: { in: expenseStatuses as any }, expense_date: { gte: prevStartDate, lt: startDate } },
+            where: { ...productionExpenseWhere, expense_date: { gte: prevStartDate, lt: startDate } },
           })
         : Promise.resolve(null),
       this.prisma.invoices.aggregate({
         _sum: { total_amount: true, amount_paid: true },
-        where: { status: { in: ['pending', 'partial', 'sent', 'overdue'] }, deleted_at: null },
+        where: productionOutstandingWhere,
       }),
       this.prisma.expenses.groupBy({
         by: ['category'],
-        where: { status: { in: expenseStatuses as any } },
+        where: productionExpenseWhere,
         _sum: { total_amount: true },
       }),
     ]);
@@ -782,15 +807,14 @@ export class AdminService {
     const [paymentTrendRows, expenseTrendRows, recentOrders, recentExpenses, recentPayments] = await Promise.all([
       this.prisma.payments.findMany({
         where: {
-          status: { in: paymentStatuses },
-          deleted_at: null,
+          ...productionPaymentWhere,
           OR: [{ payment_date: { gte: chartStartDate } }, { payment_date: null, created_at: { gte: chartStartDate } }],
         },
         select: { amount: true, refunded_amount: true, payment_date: true, created_at: true },
         orderBy: { payment_date: 'asc' },
       }),
       this.prisma.expenses.findMany({
-        where: { status: { in: expenseStatuses as any }, expense_date: { gte: chartStartDate } },
+        where: { ...productionExpenseWhere, expense_date: { gte: chartStartDate } },
         select: { total_amount: true, expense_date: true },
         orderBy: { expense_date: 'asc' },
       }),
@@ -810,6 +834,7 @@ export class AdminService {
         },
       }),
       this.prisma.expenses.findMany({
+        where: productionExpenseWhere,
         orderBy: { expense_date: 'desc' },
         take: 10,
         select: {
@@ -824,7 +849,7 @@ export class AdminService {
         },
       }),
       this.prisma.payments.findMany({
-        where: { deleted_at: null, status: 'completed' },
+        where: { ...productionPaymentWhere, status: 'completed' },
         orderBy: { created_at: 'desc' },
         take: 10,
         select: {
@@ -1040,21 +1065,24 @@ export class AdminService {
 
   async contactStats() {
     const [total, newCount, contacted, qualified, customer] = await Promise.all([
-      this.prisma.contacts.count({ where: { deleted_at: null } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, status: 'new' } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, status: 'contacted' } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, lifecycle_stage: 'qualified' } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, lifecycle_stage: 'customer' } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, status: 'new' } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, status: 'contacted' } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, lifecycle_stage: 'qualified' } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, lifecycle_stage: 'customer' } }),
     ]);
     return { success: true, data: { total, new: newCount, contacted, qualified, customer } };
   }
 
   async customerStats() {
     const [total, active, churned, revenue] = await Promise.all([
-      this.prisma.contacts.count({ where: { deleted_at: null, lifecycle_stage: 'customer' } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, lifecycle_stage: 'customer', status: 'active' } }),
-      this.prisma.contacts.count({ where: { deleted_at: null, lifecycle_stage: 'customer', status: 'churned' } }),
-      this.prisma.invoices.aggregate({ where: { status: 'paid' }, _sum: { total_amount: true } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, lifecycle_stage: 'customer' } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, lifecycle_stage: 'customer', status: 'active' } }),
+      this.prisma.contacts.count({ where: { deleted_at: null, ...NOT_DEMO, lifecycle_stage: 'customer', status: 'churned' } }),
+      this.prisma.invoices.aggregate({
+        where: { status: 'paid', ...NOT_DEMO, ...notDemoCompany },
+        _sum: { total_amount: true },
+      }),
     ]);
     return { success: true, data: { total, active, churned, revenue: revenue._sum?.total_amount ?? 0 } };
   }

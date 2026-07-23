@@ -45,7 +45,7 @@ export class ProjectsService {
     const managerId = query.manager_id ? Number(query.manager_id) : undefined;
     const finalSortBy = query.sort || sortBy;
     const finalSortOrder = (query.order || sortOrder) as 'asc' | 'desc' | 'ASC' | 'DESC';
-    const where: { [key: string]: unknown } = { deleted_at: null };
+    const where: { [key: string]: unknown } = { deleted_at: null, is_demo: false };
     if (status) where.status = status;
     if (companyId) where.company_id = companyId;
     if (contactId) where.customer_id = contactId;
@@ -99,7 +99,7 @@ export class ProjectsService {
         profiles_crm_projects_created_byToprofiles: { select: { id: true, first_name: true, last_name: true } },
       },
     });
-    if (!project) throw new NotFoundException('Project not found');
+    if (!project || project.is_demo) throw new NotFoundException('Project not found');
     const mapped = this.mapProject(project);
     mapped.financials = await this.projectFinancials(id);
     return { project: mapped };

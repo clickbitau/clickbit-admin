@@ -78,6 +78,7 @@ export class CompaniesService {
     const conditions: string[] = [
       'c.is_active = true',
       'c.deleted_at IS NULL',
+      'c.is_demo = false',
     ];
     const params: (string | number)[] = [];
     let paramIndex = 1;
@@ -510,7 +511,7 @@ export class CompaniesService {
     const company = (await this.prisma.companies.findUnique({
       where: { id },
     })) as unknown as Record<string, unknown>;
-    if (!company) throw new NotFoundException('Company not found');
+    if (!company || company.is_demo) throw new NotFoundException('Company not found');
 
     const ownerId = company.owner_id as number | null;
     const owner = ownerId
