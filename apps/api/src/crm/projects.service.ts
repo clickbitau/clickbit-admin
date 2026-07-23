@@ -451,7 +451,7 @@ export class ProjectsService {
       '2_years': '2 Years', '3_years': '3 Years', '5_years': '5 Years',
       lifetime: 'Lifetime', custom: 'Custom',
     };
-    const supportStatus = this.getSupportStatus(project as any);
+    const supportStatus = this.getSupportStatus(project);
 
     if (!this.emailService) {
       return { success: false, message: 'Email service not available' };

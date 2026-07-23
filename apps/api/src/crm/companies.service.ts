@@ -675,11 +675,11 @@ export class CompaniesService {
     }
 
     const linkableContacts = contacts.filter((c) => c.company_id == null);
-    const contactByEmail = new Map(linkableContacts.filter((c) => c.email).map((c) => [c.email!, c]));
+    const contactByEmail = new Map(linkableContacts.filter((c) => c.email).map((c) => [c.email, c]));
     const contactLinkInputs = users
       .filter((u) => u.email && contactByEmail.has(u.email))
       .map((u) => {
-        const contact = contactByEmail.get(u.email!)!;
+        const contact = contactByEmail.get(u.email)!;
         return { contact_id: contact.id, company_id: companyId, is_primary: true, job_title: u.job_title || null };
       });
 

@@ -99,6 +99,16 @@ export class AuthService {
     return { success: true, message: 'Registration successful! Please check your email to verify your account.' };
   }
 
+  getPublicConfig() {
+    return {
+      success: true,
+      data: {
+        supabaseUrl: this.config.get<string>('SUPABASE_URL') || null,
+        supabaseAnonKey: this.config.get<string>('SUPABASE_ANON_KEY') || null,
+      },
+    };
+  }
+
   async login(dto: { email: string; password: string }) {
     await this.invalidateCache();
 

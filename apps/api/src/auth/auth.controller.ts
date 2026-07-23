@@ -34,6 +34,9 @@ export class AuthController {
     @Optional() private readonly passkeysService?: PasskeysService,
   ) {}
 
+  @Get('config')
+  config() { return this.authService.getPublicConfig(); }
+
   @Post('register')
   async register(@Body() body: RegisterDto) { return this.authService.register(body || {}); }
 

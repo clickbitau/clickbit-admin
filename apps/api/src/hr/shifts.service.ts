@@ -181,14 +181,14 @@ export class ShiftsService {
         start_datetime,
         end_datetime,
         scheduled_break_minutes: dto.scheduled_break_minutes ?? 30,
-        shift_type: (dto.shift_type || 'regular') as any,
+        shift_type: (dto.shift_type || 'regular'),
         location: dto.location,
         color: dto.color || '#3B82F6',
         notes: dto.notes,
         created_by: user.id,
       };
     });
-    const created = await this.prisma.hr_shifts.createManyAndReturn({ data: data as any });
+    const created = await this.prisma.hr_shifts.createManyAndReturn({ data: data });
     await Promise.all(created.map((shift) => this.audit('create', 'hr_shift', shift.id, user, null, { ...shift }, req)));
     await this.invalidateCache();
     return { success: true, message: `${created.length} shift(s) created`, data: created };

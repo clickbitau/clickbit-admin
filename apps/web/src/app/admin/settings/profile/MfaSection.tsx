@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseClient } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { fetchMfaFactors, generateBackupCodes, listBackupCodes } from '@/lib/api';
 
@@ -32,10 +32,12 @@ export function MfaSection() {
   const [revealCodes, setRevealCodes] = useState<Record<number, boolean>>({});
 
   async function ensureSession() {
-    if (!supabase || !token || !refreshToken) throw new Error('Session not available');
-    const { error } = await supabase.auth.setSession({ access_token: token, refresh_token: refreshToken });
+    if (!token || !refreshToken) throw new Error('Session not available');
+    const client = await getSupabaseClient();
+    if (!client) throw new Error('Supabase client not configured');
+    const { error } = await client.auth.setSession({ access_token: token, refresh_token: refreshToken });
     if (error) throw new Error(error.message);
-    return supabase;
+    return client;
   }
 
   const factorsQuery = useQuery({

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from './supabase';
+import { getSupabaseClient } from './supabase';
 
 interface UseRealtimeRefreshOptions {
   enabled?: boolean;
@@ -33,33 +33,42 @@ export function useRealtimeRefresh(
 
   useEffect(() => {
     if (!enabled || tables.length === 0 || queryKey.length === 0) return;
-    if (!supabase) return;
     if (shouldSkipRealtime()) return;
 
-    const channel = supabase.channel('crm-realtime');
+    let channel: any;
+    let client: any;
+    let mounted = true;
 
-    tables.forEach((table) => {
-      channel.on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table },
-        () => {
-          if (debounceRef.current) clearTimeout(debounceRef.current);
-          debounceRef.current = setTimeout(() => {
-            queryClient.invalidateQueries({ queryKey });
-          }, debounceMs);
-        },
-      );
-    });
+    getSupabaseClient().then((supabase) => {
+      if (!mounted || !supabase) return;
+      client = supabase;
 
-    channel.subscribe((status) => {
-      if (status === 'CHANNEL_ERROR') {
-        console.warn('Realtime subscription error for tables:', tables);
-      }
+      channel = client.channel('crm-realtime');
+
+      tables.forEach((table) => {
+        channel.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table },
+          () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey });
+            }, debounceMs);
+          },
+        );
+      });
+
+      channel.subscribe((status: any) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('Realtime subscription error for tables:', tables);
+        }
+      });
     });
 
     return () => {
+      mounted = false;
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      supabase?.removeChannel(channel);
+      if (channel && client) client.removeChannel(channel);
     };
   }, [enabled, tables, queryKey, debounceMs, queryClient]);
 }

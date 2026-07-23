@@ -477,7 +477,7 @@ export class PortalsService {
       const outstanding = total - paid;
 
       const orderStatusMap = (orderStatusCounts as any[]).reduce<Record<string, number>>((acc, s) => {
-        acc[s.status as string] = (s._count as any)?.id ?? 0;
+        acc[s.status as string] = (s._count)?.id ?? 0;
         return acc;
       }, {});
       const pendingOrders = orderStatusMap['pending'] || 0;
@@ -527,7 +527,7 @@ export class PortalsService {
             totalPaid: paid,
             pendingPayments: outstanding,
           },
-          recentOrders: (recentOrders as any[]).map((o) => ({ ...o, total_amount: toNum0(o.total_amount) })),
+          recentOrders: (recentOrders).map((o) => ({ ...o, total_amount: toNum0(o.total_amount) })),
           recentTickets,
         },
       };
@@ -974,7 +974,7 @@ export class PortalsService {
   async setDefaultPaymentMethod(user: UserLike, paymentMethodId: string) {
     const { customerId } = await this.getOwnedPaymentMethod(user, paymentMethodId);
     await this.stripe!.customers.update(customerId, {
-      invoice_settings: { default_payment_method: paymentMethodId } as any,
+      invoice_settings: { default_payment_method: paymentMethodId },
     });
     return { success: true, defaultPaymentMethodId: paymentMethodId };
   }
@@ -1284,7 +1284,7 @@ export class PortalsService {
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
     const year = query.year ? Number(query.year) : undefined;
     const where: Prisma.hr_time_off_requestsWhereInput = { employee_id: employee.id };
-    if (query.status) where.status = query.status as any;
+    if (query.status) where.status = query.status;
     if (year) {
       where.start_date = { gte: new Date(`${year}-01-01`), lt: new Date(`${year + 1}-01-01`) };
     }
