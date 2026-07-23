@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchMailAccounts,
+  discoverHostingerMailboxes,
   createMailAccount,
   deleteMailAccount,
   fetchMailFolders,
@@ -43,7 +44,8 @@ import type { CachedEmail, EmailTemplate, MailAccount, MailFolder } from '@/type
 import { toast } from 'sonner';
 
 const PRESETS = [
-  { label: 'Hostinger', value: 'hostinger' },
+  { label: 'Hostinger IMAP', value: 'hostinger' },
+  { label: 'Hostinger REST API', value: 'hostinger_rest' },
   { label: 'Gmail', value: 'gmail' },
   { label: 'Outlook', value: 'outlook' },
   { label: 'Yahoo', value: 'yahoo' },
@@ -90,7 +92,9 @@ export default function AdminCommunicationMailPage() {
   const [selectedFolder, setSelectedFolder] = useState<string>(folderQuery);
   const [selectedUid, setSelectedUid] = useState<string>(uidQuery);
   const [showAddAccount, setShowAddAccount] = useState(false);
-  const [accountForm, setAccountForm] = useState({ email: '', username: '', password: '', display_name: '', preset: '' });
+  const [accountForm, setAccountForm] = useState({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '' });
+  const [discoveredMailboxes, setDiscoveredMailboxes] = useState<{ resourceId: string; address: string }[]>([]);
+  const isHostingerRest = accountForm.preset === 'hostinger_rest';
   const [accountSearch, setAccountSearch] = useState('');
   const [messageSearch, setMessageSearch] = useState('');
   const [templateSearch, setTemplateSearch] = useState('');
@@ -163,9 +167,22 @@ export default function AdminCommunicationMailPage() {
     return rows.filter((t) => (t.name || '').toLowerCase().includes(q) || (t.subject || '').toLowerCase().includes(q));
   }, [templates, templateSearch]);
 
+  const discoverMailboxes = useMutation({
+    mutationFn: () => discoverHostingerMailboxes(token!, accountForm.api_token),
+    onSuccess: (res) => { setDiscoveredMailboxes(res.data || []); if (res.data?.length === 1) setAccountForm((f) => ({ ...f, email: res.data[0].address, resource_id: res.data[0].resourceId })); },
+  });
+
   const addAccount = useMutation({
-    mutationFn: () => createMailAccount(token!, { ...accountForm, preset: accountForm.preset || undefined } as unknown as Partial<MailAccount>),
-    onSuccess: () => { toast.success('Account added'); queryClient.invalidateQueries({ queryKey: ['mail-accounts'] }); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '' }); setShowAddAccount(false); },
+    mutationFn: () => createMailAccount(token!, {
+      ...accountForm,
+      provider: isHostingerRest ? 'hostinger_rest' : 'imap',
+      preset: accountForm.preset || undefined,
+      api_token: accountForm.api_token || undefined,
+      resource_id: accountForm.resource_id || undefined,
+      username: isHostingerRest ? undefined : (accountForm.username || undefined),
+      password: isHostingerRest ? undefined : (accountForm.password || undefined),
+    } as unknown as Partial<MailAccount>),
+    onSuccess: () => { toast.success('Account added'); queryClient.invalidateQueries({ queryKey: ['mail-accounts'] }); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '' }); setDiscoveredMailboxes([]); setShowAddAccount(false); },
   });
 
   const removeAccount = useMutation({
@@ -228,16 +245,33 @@ export default function AdminCommunicationMailPage() {
             </div>
             {showAddAccount && (
               <div className="space-y-2 nm-inset-sm rounded-xl p-3 mb-2">
-                <Input placeholder="Email" value={accountForm.email} onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value, username: e.target.value })} className="h-8 text-sm" />
-                <Input type="password" placeholder="Password" value={accountForm.password} onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })} className="h-8 text-sm" />
+                <Input placeholder="Email" value={accountForm.email} onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value, username: isHostingerRest ? accountForm.username : e.target.value })} className="h-8 text-sm" />
                 <Input placeholder="Display name" value={accountForm.display_name} onChange={(e) => setAccountForm({ ...accountForm, display_name: e.target.value })} className="h-8 text-sm" />
-                <select value={accountForm.preset} onChange={(e) => setAccountForm({ ...accountForm, preset: e.target.value })} className="h-8 text-sm rounded-md border bg-background px-2">
+                <select value={accountForm.preset} onChange={(e) => { setAccountForm({ ...accountForm, preset: e.target.value, api_token: '', resource_id: '', username: '', password: '' }); setDiscoveredMailboxes([]); }} className="h-8 text-sm rounded-md border bg-background px-2">
                   <option value="">Preset</option>
                   {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
+                {isHostingerRest ? (
+                  <>
+                    <Input placeholder="Hostinger API token" value={accountForm.api_token} onChange={(e) => setAccountForm({ ...accountForm, api_token: e.target.value })} className="h-8 text-sm" />
+                    <Button size="sm" variant="outline" className="h-7 w-full" onClick={() => accountForm.api_token && discoverMailboxes.mutate()} disabled={discoverMailboxes.isPending || !accountForm.api_token}>
+                      {discoverMailboxes.isPending ? 'Discovering...' : 'Discover mailboxes'}
+                    </Button>
+                    {discoveredMailboxes.length > 0 && (
+                      <select value={accountForm.resource_id} onChange={(e) => { const m = discoveredMailboxes.find((x) => x.resourceId === e.target.value); setAccountForm({ ...accountForm, resource_id: e.target.value, email: m?.address || accountForm.email }); }} className="h-8 text-sm rounded-md border bg-background px-2 w-full">
+                        <option value="">Select mailbox</option>
+                        {discoveredMailboxes.map((m) => <option key={m.resourceId} value={m.resourceId}>{m.address}</option>)}
+                      </select>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Input type="password" placeholder="Password" value={accountForm.password} onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })} className="h-8 text-sm" />
+                  </>
+                )}
                 <div className="flex gap-2">
-                  <Button size="sm" className="h-7" onClick={() => accountForm.email && accountForm.password && addAccount.mutate()} disabled={addAccount.isPending}>Add</Button>
-                  <Button size="sm" variant="ghost" className="h-7" onClick={() => setShowAddAccount(false)}>Cancel</Button>
+                  <Button size="sm" className="h-7" onClick={() => addAccount.mutate()} disabled={addAccount.isPending || !accountForm.email || (!isHostingerRest && !accountForm.password) || (isHostingerRest && !accountForm.api_token)}>Add</Button>
+                  <Button size="sm" variant="ghost" className="h-7" onClick={() => { setShowAddAccount(false); setDiscoveredMailboxes([]); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '' }); }}>Cancel</Button>
                 </div>
               </div>
             )}

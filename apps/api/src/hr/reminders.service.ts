@@ -180,7 +180,7 @@ export class RemindersService {
     return buildLegacyMessageEnvelope('Reminder marked as complete', mapReminder(updated));
   }
 
-  async sendEmail(id: number, user: Profile) {
+  async sendEmail(id: number, _user: Profile) {
     const reminder = await this.prisma.hr_reminders.findUnique({
       where: { id },
       include: reminderInclude,

@@ -397,7 +397,7 @@ export class HrContractsService {
 
   private toDateStr(value: unknown): string | null {
     if (!value) return null;
-    const d = value instanceof Date ? value : new Date(String(value));
+    const d = value instanceof Date ? value : new Date(value as string | number);
     return Number.isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
   }
 

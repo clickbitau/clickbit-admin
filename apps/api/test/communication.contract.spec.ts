@@ -125,7 +125,7 @@ describe('Communication legacy contract tests', () => {
     it('POST /api/mail/accounts returns { success, data }', async () => {
       const service = { createAccount: jest.fn().mockResolvedValue({ success: true, data: { id: 'abc' } }) } as any;
       const controller = new MailController(service);
-      const result = await controller.createAccount(req, { email: 'a@b.com', username: 'a@b.com', password: 'x' } as any);
+      const result = await controller.createAccount(req, { email: 'a@b.com', username: 'a@b.com', password: 'x' });
       expect(service.createAccount).toHaveBeenCalledWith(req.user, expect.anything());
       expect(result).toEqual(expect.objectContaining({ success: true }));
     });

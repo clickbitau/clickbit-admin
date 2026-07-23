@@ -1539,11 +1539,15 @@ export async function fetchMailAccounts(token: string): Promise<CommunicationLeg
   return (await api.get('/api/mail/accounts', { headers: authHeaders(token) })).data;
 }
 
-export async function createMailAccount(token: string, data: Partial<MailAccount>): Promise<CommunicationLegacyDataResponse<MailAccount>> {
+export async function discoverHostingerMailboxes(token: string, apiToken: string): Promise<CommunicationLegacyDataResponse<{ resourceId: string; address: string }[]>> {
+  return (await api.post('/api/mail/accounts/discover', { api_token: apiToken }, { headers: authHeaders(token) })).data;
+}
+
+export async function createMailAccount(token: string, data: Partial<MailAccount> & Record<string, unknown>): Promise<CommunicationLegacyDataResponse<MailAccount>> {
   return (await api.post('/api/mail/accounts', data, { headers: authHeaders(token) })).data;
 }
 
-export async function updateMailAccount(token: string, id: string, data: Partial<MailAccount>): Promise<CommunicationLegacyDataResponse<MailAccount>> {
+export async function updateMailAccount(token: string, id: string, data: Partial<MailAccount> & Record<string, unknown>): Promise<CommunicationLegacyDataResponse<MailAccount>> {
   return (await api.put(`/api/mail/accounts/${id}`, data, { headers: authHeaders(token) })).data;
 }
 

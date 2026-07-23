@@ -73,23 +73,35 @@ export class SearchMessagesDto {
   @IsOptional() @Type(() => Number) @IsInt() direct_message_id?: number;
 }
 
+export class DiscoverMailboxesDto {
+  @IsString() api_token!: string;
+}
+
 export class MailAccountDto {
   @IsString() email!: string;
   @IsOptional() @IsString() display_name?: string;
-  @IsString() imap_host!: string;
+  @IsOptional() @IsString() provider?: string;
+  @IsOptional() @IsString() resource_id?: string;
+  @IsOptional() @IsString() api_token?: string;
+  @IsOptional() @IsString() imap_host?: string;
   @IsOptional() @Type(() => Number) @IsInt() imap_port?: number;
   @IsOptional() @IsBoolean() imap_secure?: boolean;
-  @IsString() smtp_host!: string;
+  @IsOptional() @IsString() smtp_host?: string;
   @IsOptional() @Type(() => Number) @IsInt() smtp_port?: number;
   @IsOptional() @IsBoolean() smtp_secure?: boolean;
-  @IsString() username!: string;
-  @IsString() password!: string;
+  @IsOptional() @IsString() username?: string;
+  @IsOptional() @IsString() password?: string;
   @IsOptional() @IsString() preset?: string;
+  @IsOptional() shared_with_users?: unknown[];
+  @IsOptional() shared_with_roles?: unknown[];
 }
 
 export class UpdateMailAccountDto {
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() display_name?: string;
+  @IsOptional() @IsString() provider?: string;
+  @IsOptional() @IsString() resource_id?: string;
+  @IsOptional() @IsString() api_token?: string;
   @IsOptional() @IsString() imap_host?: string;
   @IsOptional() @Type(() => Number) @IsInt() imap_port?: number;
   @IsOptional() @IsBoolean() imap_secure?: boolean;
@@ -101,6 +113,8 @@ export class UpdateMailAccountDto {
   @IsOptional() @IsString() signature_html?: string;
   @IsOptional() @IsString() signature_text?: string;
   @IsOptional() aliases?: unknown[];
+  @IsOptional() shared_with_users?: unknown[];
+  @IsOptional() shared_with_roles?: unknown[];
 }
 
 export class SendMailDto {

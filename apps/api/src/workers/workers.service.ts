@@ -49,12 +49,9 @@ export class WorkersService {
 
 
   async getStatus() {
-    return this.cached(this.cacheKey('getStatus'), async () => {
-
+    return this.cached(this.cacheKey('getStatus'), () => {
       const enabled = this.config.get<string>('RUN_SCHEDULERS') === 'true';
-      return { enabled, cronJobs: Object.keys(this.schedulerRegistry.getCronJobs()) };
-
-
+      return Promise.resolve({ enabled, cronJobs: Object.keys(this.schedulerRegistry.getCronJobs()) });
     });
 }
 

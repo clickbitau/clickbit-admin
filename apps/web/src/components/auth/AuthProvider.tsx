@@ -49,6 +49,7 @@ interface AuthContextValue {
   forgotPassword: (email: string) => Promise<{ message: string }>;
   sendMagicLink: (email: string) => Promise<{ message: string }>;
   oauthSignIn: (provider: string) => Promise<void>;
+  linkOAuth: (provider: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -356,6 +357,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = data.url;
   }, []);
 
+  const linkOAuth = useCallback(async (provider: string) => {
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase client not configured');
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const auth = supabase.auth as any;
+    const { data, error } = await auth.linkIdentity({
+      provider: provider as any,
+      options: { redirectTo: `${origin}/admin/settings/profile?oauth_link=1&provider=${encodeURIComponent(provider)}` },
+    } as any);
+    if (error || !data?.url) throw new Error(error?.message || 'OAuth link failed');
+    window.location.href = data.url;
+  }, []);
+
   const value: AuthContextValue = {
     token,
     refreshToken,
@@ -375,6 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     forgotPassword,
     sendMagicLink,
     oauthSignIn,
+    linkOAuth,
     clearError,
   };
 

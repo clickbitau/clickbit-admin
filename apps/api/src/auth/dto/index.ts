@@ -91,12 +91,17 @@ export class LinkProviderDto {
   @IsString()
   provider: string;
 
+  @IsOptional()
   @IsString()
-  provider_id: string;
+  provider_id?: string;
 
   @IsOptional()
   @IsString()
   provider_email?: string;
+
+  @IsOptional()
+  @IsString()
+  access_token?: string;
 }
 
 export class SocialLoginDto {
