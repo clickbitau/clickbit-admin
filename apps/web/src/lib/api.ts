@@ -1828,7 +1828,12 @@ export async function fetchUsers(token: string, params?: Record<string, string |
 }
 
 export async function fetchUser(token: string, id: string | number): Promise<{ user: any; roles?: string[]; permissions?: string[] }> {
-  return (await api.get(`/api/users/${id}`, { headers: authHeaders(token) })).data;
+  const data = (await api.get(`/api/users/${id}`, { headers: authHeaders(token) })).data;
+  // API returns the profile object directly; tolerate a legacy `{ user }` wrapper.
+  if (data && typeof data === 'object' && 'user' in data && data.user) {
+    return data;
+  }
+  return { user: data };
 }
 
 export async function createUser(token: string, data: Record<string, unknown>) {
