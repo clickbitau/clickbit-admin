@@ -63,6 +63,7 @@ interface RegisterData {
 const TOKEN_KEY = 'clickbit:access_token';
 const REFRESH_KEY = 'clickbit:refresh_token';
 const TRUST_TOKEN_KEY = 'clickbit:trust_token';
+const MFA_STATE_KEY = 'clickbit:mfa_state';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -110,9 +111,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRefreshTokenState(storedRefresh);
     if (storedToken) {
       fetchUser(storedToken);
-    } else {
-      setLoading(false);
+      return;
     }
+    try {
+      const mfaState = sessionStorage.getItem(MFA_STATE_KEY);
+      if (mfaState) {
+        const parsed = JSON.parse(mfaState);
+        if (parsed?.mfaRequired && parsed?.mfaToken) {
+          setMfaRequired(true);
+          setMfaFactors(parsed.mfaFactors || []);
+          setMfaToken(parsed.mfaToken);
+          setMfaRefreshToken(parsed.mfaRefreshToken || null);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setLoading(false);
   }, [fetchUser]);
 
   useEffect(() => {
@@ -130,6 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMfaFactors([]);
     setMfaToken(null);
     setMfaRefreshToken(null);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem(MFA_STATE_KEY);
+      } catch {
+        // ignore
+      }
+    }
   }, []);
 
   const clearToken = useCallback(() => {
@@ -174,7 +198,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setMfaRequired(true);
           setMfaFactors(result.factors || []);
           setMfaToken(result.accessToken);
-          setMfaRefreshToken(result.refreshToken);
+          setMfaRefreshToken(result.refreshToken || null);
+          try {
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem(
+                MFA_STATE_KEY,
+                JSON.stringify({
+                  mfaRequired: true,
+                  mfaFactors: result.factors || [],
+                  mfaToken: result.accessToken,
+                  mfaRefreshToken: result.refreshToken || null,
+                }),
+              );
+            }
+          } catch {
+            // ignore
+          }
           return result;
         }
         if (result.user?.role === 'customer') {
@@ -199,13 +238,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeMfa = useCallback(
     async (factorId: string, code: string, rememberDevice = false) => {
-      if (!mfaToken || !mfaRefreshToken) throw new Error('MFA session not available');
+      if (!mfaToken) throw new Error('MFA session not available');
       const supabase = await getSupabaseClient();
       if (!supabase) throw new Error('Supabase client not configured');
       setLoading(true);
       setError(null);
       try {
-        const { error: sessionError } = await supabase.auth.setSession({ access_token: mfaToken, refresh_token: mfaRefreshToken });
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: mfaToken,
+          refresh_token: mfaRefreshToken || 'mfa-no-refresh',
+        });
         if (sessionError) throw new Error(sessionError.message);
         const { data, error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
         if (verifyError || !data?.access_token) throw new Error(verifyError?.message || 'Invalid MFA code');
@@ -244,12 +286,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeBackupCode = useCallback(
     async (code: string, rememberDevice = false) => {
-      if (!mfaToken || !mfaRefreshToken) throw new Error('MFA session not available');
+      if (!mfaToken) throw new Error('MFA session not available');
       setLoading(true);
       setError(null);
       try {
-        await verifyBackupCode(mfaToken, code, mfaRefreshToken);
-        setToken(mfaToken, mfaRefreshToken);
+        await verifyBackupCode(mfaToken, code);
+        setToken(mfaToken, mfaRefreshToken || undefined);
         clearMfa();
         const { data: me } = await axios.get('/api/auth/me', { headers: { Authorization: `Bearer ${mfaToken}` } });
         if (me?.data?.user) {
