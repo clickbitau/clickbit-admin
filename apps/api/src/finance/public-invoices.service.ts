@@ -163,8 +163,16 @@ export class PublicInvoicesService {
       where: { deleted_at: null, package_code: { equals: trimmed, mode: 'insensitive' } },
       include: invoiceInclude,
     });
-    if (!invoice) throw new NotFoundException('Invoice not found');
-    return invoice;
+    if (invoice) return invoice;
+    const id = Number(trimmed);
+    if (!Number.isNaN(id)) {
+      const byId = await this.prisma.invoices.findFirst({
+        where: { id, deleted_at: null },
+        include: invoiceInclude,
+      });
+      if (byId) return byId;
+    }
+    throw new NotFoundException('Invoice not found');
   }
 
   private validateToken(invoice: any, token?: string) {

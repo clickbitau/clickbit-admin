@@ -62,21 +62,22 @@ export class PortalsService {
 
   private async resolveCustomer(user: UserLike) {
     const profile = await this.prisma.profiles.findUnique({ where: { id: user.id } });
-    const email = user.email?.toLowerCase();
-    const emailContacts = email
-      ? await this.prisma.contacts.findMany({
-          where: { email: { equals: email, mode: 'insensitive' }, deleted_at: null },
-          orderBy: { id: 'asc' },
-        })
-      : [];
-    const profileContact = profile?.contact_id
-      ? await this.prisma.contacts.findUnique({ where: { id: profile.contact_id } })
-      : null;
-    const contacts = [...emailContacts];
-    if (profileContact && !contacts.some((c) => c.id === profileContact.id)) contacts.push(profileContact);
-    const contactIds = cleanIds([...new Set(contacts.map((c) => c.id).filter(Boolean))]);
+    const [profileContact, userContacts] = await Promise.all([
+      profile?.contact_id ? this.prisma.contacts.findUnique({ where: { id: profile.contact_id } }) : Promise.resolve(null),
+      this.prisma.contacts.findMany({
+        where: { user_id: user.id, deleted_at: null },
+        orderBy: { id: 'asc' },
+      }),
+    ]);
+    const contactsMap = new Map<number, any>();
+    for (const c of userContacts) contactsMap.set(c.id, c);
+    if (profileContact && !contactsMap.has(profileContact.id)) contactsMap.set(profileContact.id, profileContact);
+    const contacts = Array.from(contactsMap.values());
+    const contactIds = cleanIds(contacts.map((c) => c.id));
     const companyIds = cleanIds([...new Set([profile?.company_id, ...contacts.map((c) => c.company_id)].filter(Boolean))]);
-    return { profile, contacts, contactIds, companyIds, emails: contacts.map((c) => c.email).filter(Boolean) };
+    const emails = contacts.map((c) => c.email).filter(Boolean) as string[];
+    if (!emails.length && user.email) emails.push(user.email);
+    return { profile, contacts, contactIds, companyIds, emails };
   }
 
   private async resolveAgent(user: UserLike) {
@@ -106,8 +107,16 @@ export class PortalsService {
   }
 
   private invoiceScope(contactIds: number[], companyIds: number[]): any {
-    const ors: any[] = [{ source_id: { in: contactIds }, source_type: 'contact' }];
-    if (companyIds.length) ors.push({ company_id: { in: companyIds } });
+    const ors: any[] = [];
+    if (contactIds.length) {
+      ors.push({ contact_id: { in: contactIds } });
+      ors.push({ source_id: { in: contactIds }, source_type: { in: ['contact', null] } });
+    }
+    if (companyIds.length) {
+      ors.push({ company_id: { in: companyIds } });
+      ors.push({ source_id: { in: companyIds }, source_type: 'company' });
+    }
+    if (ors.length === 0) return { id: -1, deleted_at: null, document_type: 'invoice' } as any;
     return { OR: ors, deleted_at: null, document_type: 'invoice' } as any;
   }
 
@@ -115,6 +124,7 @@ export class PortalsService {
     const ors: any[] = [];
     if (contactIds.length) ors.push({ customer_id: { in: contactIds } });
     if (companyIds.length) ors.push({ company_id: { in: companyIds } });
+    if (ors.length === 0) return { id: -1, deleted_at: null, customer_visible: true } as any;
     return { OR: ors, deleted_at: null, customer_visible: true } as any;
   }
 
@@ -122,6 +132,7 @@ export class PortalsService {
     const ors: any[] = [];
     if (emails.length) ors.push({ contact_email: { in: emails } });
     if (userIds.length) ors.push({ user_id: { in: userIds } });
+    if (ors.length === 0) return { id: -1, deleted_at: null } as any;
     return { OR: ors, deleted_at: null } as any;
   }
 
@@ -131,7 +142,7 @@ export class PortalsService {
   async agentDashboard(user: UserLike) {
     return this.cached(this.cacheKey('agentDashboard', user.id), async () => {
 
-      const { agentContact, clients, contactIds, companyIds } = await this.resolveAgent(user);
+      const { agentContact, clients, contactIds, companyIds, clientUserIds } = await this.resolveAgent(user);
       const invoiceWhere = this.invoiceScope(contactIds, companyIds);
       const projectWhere = this.projectScope(contactIds, companyIds);
 
@@ -142,7 +153,7 @@ export class PortalsService {
           select: { total_amount: true, amount_paid: true },
         }),
         this.prisma.crm_projects.count({ where: projectWhere }),
-        this.prisma.tickets.count({ where: this.ticketScopeByEmails(clients.map((c) => c.email).filter(Boolean), contactIds) }),
+        this.prisma.tickets.count({ where: this.ticketScopeByEmails(clients.map((c) => c.email).filter(Boolean), clientUserIds) }),
         this.prisma.companies.count({ where: { id: { in: companyIds }, deleted_at: null } }),
       ]);
 
@@ -330,11 +341,11 @@ export class PortalsService {
   }
 
   async agentTickets(user: UserLike, query: any) {
-    const { clients, contactIds, companyIds: _companyIds } = await this.resolveAgent(user);
+    const { clients, clientUserIds, companyIds: _companyIds } = await this.resolveAgent(user);
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
     const emails = clients.map((c) => c.email).filter(Boolean);
-    const where = this.ticketScopeByEmails(emails, contactIds);
+    const where = this.ticketScopeByEmails(emails, clientUserIds);
     const [rows, total] = await Promise.all([
       this.prisma.tickets.findMany({ where, orderBy: { created_at: 'desc' }, take: limit, skip: (page - 1) * limit }),
       this.prisma.tickets.count({ where }),
@@ -367,9 +378,9 @@ export class PortalsService {
   async agentTicketDetail(user: UserLike, id: number) {
     return this.cached(this.cacheKey('agentTicketDetail', user.id, id), async () => {
 
-      const { clients, contactIds } = await this.resolveAgent(user);
+      const { clients, clientUserIds } = await this.resolveAgent(user);
       const emails = clients.map((c) => c.email).filter(Boolean);
-      const where = this.ticketScopeByEmails(emails, contactIds);
+      const where = this.ticketScopeByEmails(emails, clientUserIds);
       const ticket = await this.prisma.tickets.findFirst({
         where: { id, ...where },
         include: { ticket_messages: true },
@@ -384,9 +395,9 @@ export class PortalsService {
   async agentTicketReply(user: UserLike, id: number, body: any) {
     await this.invalidateCache();
 
-    const { clients, contactIds } = await this.resolveAgent(user);
+    const { clients, clientUserIds } = await this.resolveAgent(user);
     const emails = clients.map((c) => c.email).filter(Boolean);
-    const where = this.ticketScopeByEmails(emails, contactIds);
+    const where = this.ticketScopeByEmails(emails, clientUserIds);
     const ticket = await this.prisma.tickets.findFirst({ where: { id, ...where } });
     if (!ticket) throw new NotFoundException('Ticket not found');
     const message = await this.prisma.ticket_messages.create({
@@ -404,9 +415,9 @@ export class PortalsService {
   async agentTicketQuota(user: UserLike) {
     return this.cached(this.cacheKey('agentTicketQuota', user.id), async () => {
 
-      const { clients, contactIds } = await this.resolveAgent(user);
+      const { clients, clientUserIds } = await this.resolveAgent(user);
       const emails = clients.map((c) => c.email).filter(Boolean);
-      const where = this.ticketScopeByEmails(emails, contactIds);
+      const where = this.ticketScopeByEmails(emails, clientUserIds);
       const count = await this.prisma.tickets.count({ where });
       return { success: true, data: { used: count, limit: 100, remaining: Math.max(0, 100 - count) } };
 
@@ -425,7 +436,7 @@ export class PortalsService {
       const invoiceWhere = this.invoiceScope(contactIds, companyIds);
       const projectWhere = this.projectScope(contactIds, companyIds);
       const ticketWhere = this.ticketScopeByEmails(emails, [user.id]);
-      const orderWhere: any = { deleted_at: null, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] };
+      const orderWhere: any = { OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] };
       const [
         invoiceStats, invoiceCount, projectCount, taskCount, documentCount, paymentCount, orderCount, ticketCount,
         paidInvoiceCount, activeProjectCount, openTicketCount, resolvedTicketCount, orderStatusCounts,
@@ -569,7 +580,7 @@ export class PortalsService {
     const { contactIds, companyIds } = await this.resolveCustomer(user);
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25)));
-    const where: any = { deleted_at: null, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] };
+    const where: any = { OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] };
     const [rows, total] = await Promise.all([
       this.prisma.orders.findMany({ where, include: { order_items: true }, orderBy: { created_at: 'desc' }, take: limit, skip: (page - 1) * limit }),
       this.prisma.orders.count({ where }),
@@ -582,7 +593,7 @@ export class PortalsService {
 
       const { contactIds, companyIds } = await this.resolveCustomer(user);
       const order = await this.prisma.orders.findFirst({
-        where: { id, deleted_at: null, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] } as any,
+        where: { id, OR: [{ user_id: user.id }, { contact_id: { in: contactIds } }, { company_id: { in: companyIds } }] } as any,
         include: { order_items: true },
       });
       if (!order) throw new NotFoundException('Order not found');
@@ -686,7 +697,8 @@ export class PortalsService {
 
     const invoice = await this.customerInvoiceDetail(user, id);
     const token = await this.ensureInvoiceToken(invoice.data);
-    return this.publicInvoices.createCheckoutSession(invoice.data.package_code, body, token);
+    const code = invoice.data.package_code || String(invoice.data.id);
+    return this.publicInvoices.createCheckoutSession(code, body, token);
   }
 
   async customerVerifyPayment(user: UserLike, id: number, body: any) {
@@ -695,7 +707,8 @@ export class PortalsService {
     const invoice = await this.customerInvoiceDetail(user, id);
     const sessionId = body?.session_id || body?.sessionId;
     if (!sessionId) throw new BadRequestException('session_id is required');
-    const result = await this.publicInvoices.confirmPayment(invoice.data.package_code, sessionId, invoice.data.token || undefined);
+    const code = invoice.data.package_code || String(invoice.data.id);
+    const result = await this.publicInvoices.confirmPayment(code, sessionId, invoice.data.token || undefined);
     return { success: result.success, data: result.package };
   }
 

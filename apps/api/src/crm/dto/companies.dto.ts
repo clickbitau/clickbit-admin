@@ -1,6 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { IsBoolean, IsInt, IsOptional, IsString, IsIn, Min, IsEmail } from 'class-validator';
+import { normalizeCompanySize } from '../crm-utils';
 import { PaginationQueryDto } from './common.dto';
 
 export const ALLOWED_COMPANY_SORT = [
@@ -64,9 +65,14 @@ export class CreateCompanyDto {
 
   @IsOptional()
   @IsString()
+  website?: string;
+
+  @IsOptional()
+  @IsString()
   industry?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeCompanySize(value))
   @IsIn(COMPANY_SIZES)
   company_size?: typeof COMPANY_SIZES[number];
 

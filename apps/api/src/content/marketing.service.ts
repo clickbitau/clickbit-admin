@@ -80,7 +80,8 @@ export class MarketingService {
     const title = stringValue(dto.title);
     const slug = stringValue(dto.slug) || slugify(title);
     const tags = parseJson(dto.tags, []);
-    if (!tags.includes(MARKETING_TAG)) tags.push(MARKETING_TAG);
+    if (Array.isArray(tags) && !tags.includes(MARKETING_TAG)) tags.push(MARKETING_TAG);
+    const categories = dto.type ? [stringValue(dto.type)] : [];
     const post = await this.prisma.blog_posts.create({
       data: {
         title,
@@ -90,8 +91,8 @@ export class MarketingService {
         featured_image: stringValue(dto.image_url) || null,
         status: stringValue(dto.status, 'draft') as any,
         published_at: stringValue(dto.status) === 'published' ? new Date() : null,
-        categories: asJson(dto.type ? [stringValue(dto.type)] : [], []),
-        tags: asJson(tags, []),
+        categories: JSON.stringify(categories),
+        tags: JSON.stringify(Array.isArray(tags) ? tags : []),
         author_id: user.id,
         created_at: new Date(),
         updated_at: new Date(),
@@ -117,8 +118,11 @@ export class MarketingService {
       data.status = stringValue(dto.status);
       if (data.status === 'published' && post.status !== 'published' && !data.published_at) data.published_at = new Date();
     }
-    if (dto.type !== undefined) data.categories = asJson([stringValue(dto.type)], []);
-    if (dto.tags !== undefined) data.tags = asJson(dto.tags, []);
+    if (dto.type !== undefined) data.categories = JSON.stringify([stringValue(dto.type)]);
+    if (dto.tags !== undefined) {
+      const tags = parseJson(dto.tags, []);
+      data.tags = JSON.stringify(Array.isArray(tags) ? tags : []);
+    }
     data.updated_at = new Date();
     const updated = await this.prisma.blog_posts.update({ where: { id }, data });
     await this.invalidateCache();
