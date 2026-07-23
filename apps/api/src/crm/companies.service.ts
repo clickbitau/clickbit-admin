@@ -580,11 +580,12 @@ export class CompaniesService {
   }
 
   async create(userId: number, dto: CreateCompanyDto) {
+    const domain = dto.domain || (dto.website ? this.extractDomain(dto.website) : undefined);
     const data: Prisma.companiesUncheckedCreateInput = {
       name: dto.name,
       contact_person: dto.contact_person,
       email: dto.email,
-      domain: dto.domain,
+      domain,
       industry: dto.industry,
       company_size: mapCompanySize(dto.company_size),
       phone: dto.phone,
@@ -610,10 +611,34 @@ export class CompaniesService {
     const company = await this.prisma.companies.create({ data });
 
     // Auto-link matching users and contacts
-    await this.autoLinkUsersAndContacts(company.id, dto.name, dto.domain);
+    await this.autoLinkUsersAndContacts(company.id, dto.name, domain);
     await this.invalidateCache();
 
     return this.findOne(company.id);
+  }
+
+  private extractDomain(website?: string): string | undefined {
+    if (!website) return undefined;
+    try {
+      const withProtocol = website.startsWith('http') ? website : `https://${website}`;
+      const url = new URL(withProtocol);
+      return url.hostname.replace(/^www\./, '');
+    } catch {
+      return undefined;
+    }
+  }
+
+  private isGenericDomain(domain?: string): boolean {
+    if (!domain) return true;
+    const generic = new Set([
+      'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.com.au', 'hotmail.com', 'outlook.com', 'outlook.com.au',
+      'live.com', 'live.com.au', 'msn.com', 'aol.com', 'icloud.com', 'me.com', 'mac.com', 'qq.com', '163.com',
+      '126.com', 'sina.com', 'protonmail.com', 'proton.me', 'tutanota.com', 'yandex.com', 'mail.ru', 'gmx.com',
+      'gmx.net', 'zoho.com', 'fastmail.com', 'hey.com', 'skynet.be', 'btinternet.com', 'wanadoo.fr', 'orange.fr',
+      'free.fr', 'neuf.fr', 'bigpond.com', 'optusnet.com.au', 'iinet.net.au', 'telstra.com', 'tpg.com.au',
+      'internode.on.net', 'westnet.com.au', 'adam.com.au', 'dodo.com.au', 'exemail.com.au', 'mailbox.or.at',
+    ]);
+    return generic.has(domain.toLowerCase());
   }
 
   private async autoLinkUsersAndContacts(
@@ -623,22 +648,21 @@ export class CompaniesService {
   ) {
     if (!name && !domain) return;
 
-    const nameOrDomainFilter = [
-      ...(name ? [{ company: name }] : []),
-      ...(domain ? [{ email: { contains: `@${domain}` } }] : []),
-    ];
-    if (nameOrDomainFilter.length === 0) return;
-
-    const orFilter = { OR: nameOrDomainFilter } as any;
+    const orFilters: any[] = [];
+    if (name) orFilters.push({ company: name, company_id: null });
+    if (domain && !this.isGenericDomain(domain)) {
+      orFilters.push({ email: { endsWith: `@${domain}` }, company_id: null });
+    }
+    if (orFilters.length === 0) return;
 
     const [users, contacts] = await Promise.all([
       this.prisma.profiles.findMany({
-        where: { role: 'customer', ...orFilter },
+        where: { role: 'customer', company_id: null, OR: [{ company: name }, ...(domain && !this.isGenericDomain(domain) ? [{ email: { endsWith: `@${domain}` } }] : [])] },
         select: { id: true, email: true, company_id: true, job_title: true },
       }),
       this.prisma.contacts.findMany({
-        where: orFilter,
-        select: { id: true, email: true, user_id: true, job_title: true },
+        where: { OR: orFilters },
+        select: { id: true, email: true, user_id: true, job_title: true, company_id: true },
       }),
     ]);
 
@@ -650,7 +674,8 @@ export class CompaniesService {
       });
     }
 
-    const contactByEmail = new Map(contacts.filter((c) => c.email).map((c) => [c.email!, c]));
+    const linkableContacts = contacts.filter((c) => c.company_id == null);
+    const contactByEmail = new Map(linkableContacts.filter((c) => c.email).map((c) => [c.email!, c]));
     const contactLinkInputs = users
       .filter((u) => u.email && contactByEmail.has(u.email))
       .map((u) => {
@@ -658,7 +683,7 @@ export class CompaniesService {
         return { contact_id: contact.id, company_id: companyId, is_primary: true, job_title: u.job_title || null };
       });
 
-    const contactUserIds = contacts.map((c) => c.user_id).filter((id): id is number => id != null);
+    const contactUserIds = linkableContacts.map((c) => c.user_id).filter((id): id is number => id != null);
     if (contactUserIds.length > 0) {
       await this.prisma.profiles.updateMany({
         where: { id: { in: contactUserIds }, company_id: null },
@@ -668,7 +693,7 @@ export class CompaniesService {
 
     const userContactIds = new Set(contactLinkInputs.map((c) => c.contact_id));
     contactLinkInputs.push(
-      ...contacts
+      ...linkableContacts
         .filter((c) => !userContactIds.has(c.id))
         .map((c) => ({ contact_id: c.id, company_id: companyId, is_primary: false, job_title: c.job_title || null })),
     );
@@ -686,7 +711,9 @@ export class CompaniesService {
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.contact_person !== undefined) data.contact_person = dto.contact_person;
     if (dto.email !== undefined) data.email = dto.email;
-    if (dto.domain !== undefined) data.domain = dto.domain;
+    if (dto.domain !== undefined || dto.website !== undefined) {
+      data.domain = dto.domain || (dto.website ? this.extractDomain(dto.website) : undefined);
+    }
     if (dto.industry !== undefined) data.industry = dto.industry;
     if (dto.company_size !== undefined)
       data.company_size = mapCompanySize(dto.company_size);

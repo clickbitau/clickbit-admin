@@ -70,6 +70,9 @@ function mapTicket(ticket: Record<string, unknown>): Record<string, unknown> {
     t.child_tickets = t.other_tickets;
     delete t.other_tickets;
   }
+  if (t.last_activity_at !== undefined) {
+    t.last_reply_at = t.last_activity_at;
+  }
   return t;
 }
 
@@ -316,17 +319,19 @@ export class TicketsService {
     const limit = Math.max(1, Number(query.limit) || 20);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ticketsWhereInput = {
-      OR: [{ user_id: user.id }, { contact_email: user.email }],
-    };
-    if (query.status && query.status !== 'all') {
-      (where as any).status = query.status;
-    }
+    const scope: Prisma.ticketsWhereInput[] = [{ user_id: user.id }, { contact_email: user.email }];
+    const search: Prisma.ticketsWhereInput[] = [];
     if (query.search) {
-      (where as any).OR = [
+      search.push(
         { ticket_number: { contains: query.search, mode: 'insensitive' } },
         { subject: { contains: query.search, mode: 'insensitive' } },
-      ];
+      );
+    }
+    const ands: Prisma.ticketsWhereInput[] = [{ OR: scope }];
+    if (search.length) ands.push({ OR: search });
+    const where: any = ands.length === 1 ? ands[0]! : { AND: ands };
+    if (query.status && query.status !== 'all') {
+      where.status = query.status;
     }
 
     const [count, rows] = await Promise.all([

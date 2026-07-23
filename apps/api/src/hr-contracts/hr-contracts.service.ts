@@ -36,6 +36,7 @@ function normalizeContract(c: any) {
     employee: emp
       ? {
           ...emp,
+          user: empProfile ? { ...empProfile, name: `${empProfile.first_name || ''} ${empProfile.last_name || ''}`.trim() } : undefined,
           name: empProfile ? `${empProfile.first_name || ''} ${empProfile.last_name || ''}`.trim() : `Employee ${emp.id}`,
           email: empProfile?.email,
         }
@@ -43,6 +44,7 @@ function normalizeContract(c: any) {
     manager: mgr
       ? {
           ...mgr,
+          user: mgrProfile ? { ...mgrProfile, name: `${mgrProfile.first_name || ''} ${mgrProfile.last_name || ''}`.trim() } : undefined,
           name: mgrProfile ? `${mgrProfile.first_name || ''} ${mgrProfile.last_name || ''}`.trim() : `Manager ${mgr.id}`,
           email: mgrProfile?.email,
         }
@@ -50,6 +52,7 @@ function normalizeContract(c: any) {
     creator: c.profiles
       ? { ...c.profiles, name: `${c.profiles.first_name || ''} ${c.profiles.last_name || ''}`.trim() }
       : undefined,
+    document_url: `/hr/contracts/${c.id}/pdf`,
   };
 }
 

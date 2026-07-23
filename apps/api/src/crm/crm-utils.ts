@@ -54,9 +54,23 @@ export function asJsonInput(value: unknown): Prisma.InputJsonValue | undefined {
   return value as Prisma.InputJsonValue;
 }
 
+export function normalizeCompanySize(value?: string): string | undefined {
+  if (!value || typeof value !== 'string') return undefined;
+  const normalized = value.toLowerCase().replace(/\s/g, '').replace(/employees?/g, '');
+  if (normalized.includes('1-10') || normalized.includes('1to10') || normalized.includes('1–10')) return '1-10';
+  if (normalized.includes('11-50') || normalized.includes('11to50') || normalized.includes('11–50')) return '11-50';
+  if (normalized.includes('51-200') || normalized.includes('51to200') || normalized.includes('51–200')) return '51-200';
+  if (normalized.includes('201-500') || normalized.includes('201to500') || normalized.includes('201–500')) return '201-500';
+  if (normalized.includes('501-1000') || normalized.includes('501to1000') || normalized.includes('501–1000')) return '501-1000';
+  if (normalized.includes('1000+') || normalized.includes('1000plus') || normalized.includes('>1000')) return '1000+';
+  return undefined;
+}
+
 export function mapCompanySize(
   value?: string,
 ): enum_crm_companies_company_size | undefined {
+  const canonical = normalizeCompanySize(value);
+  if (!canonical) return undefined;
   const map: Record<string, enum_crm_companies_company_size> = {
     '1-10': enum_crm_companies_company_size.size_1_10,
     '11-50': enum_crm_companies_company_size.size_11_50,
@@ -65,7 +79,7 @@ export function mapCompanySize(
     '501-1000': enum_crm_companies_company_size.size_501_1000,
     '1000+': enum_crm_companies_company_size.size_1000_plus,
   };
-  return value ? map[value] : undefined;
+  return map[canonical];
 }
 
 export function mapProjectSupportPeriod(

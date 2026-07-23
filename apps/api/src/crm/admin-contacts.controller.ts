@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Query, Body, ParseIntPipe, UseGuards, Res } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Query, Body, ParseIntPipe, UseGuards, Res, BadRequestException, NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
@@ -105,22 +105,45 @@ export class AdminContactsController {
     });
 
     const agentIds = agents.map((a) => a.id);
-    const [companies] = await Promise.all([
+    const [companies, contacts] = await Promise.all([
       agentIds.length
         ? this.prisma.companies.findMany({
             where: { agent_id: { in: agentIds }, deleted_at: null },
             select: { agent_id: true, id: true, name: true, total_revenue: true, lifecycle_stage: true },
           })
         : Promise.resolve([] as any[]),
+      agentIds.length
+        ? this.prisma.contacts.findMany({
+            where: { agent_id: { in: agentIds }, deleted_at: null },
+            select: { agent_id: true, id: true, total_revenue: true },
+          })
+        : Promise.resolve([] as any[]),
     ]);
 
-    const statsByAgent = new Map<number, { client_count: number; client_revenue: number }>();
+    const companyStatsByAgent = new Map<number, { client_count: number; client_revenue: number }>();
     for (const company of companies) {
       if (!company.agent_id) continue;
-      const existing = statsByAgent.get(company.agent_id) || { client_count: 0, client_revenue: 0 };
+      const existing = companyStatsByAgent.get(company.agent_id) || { client_count: 0, client_revenue: 0 };
       existing.client_count += 1;
       existing.client_revenue += Number(company.total_revenue || 0);
-      statsByAgent.set(company.agent_id, existing);
+      companyStatsByAgent.set(company.agent_id, existing);
+    }
+
+    const contactStatsByAgent = new Map<number, { client_count: number; client_revenue: number }>();
+    for (const contact of contacts) {
+      if (!contact.agent_id) continue;
+      const existing = contactStatsByAgent.get(contact.agent_id) || { client_count: 0, client_revenue: 0 };
+      existing.client_count += 1;
+      existing.client_revenue += Number(contact.total_revenue || 0);
+      contactStatsByAgent.set(contact.agent_id, existing);
+    }
+
+    const statsByAgent = new Map<number, { client_count: number; client_revenue: number }>();
+    for (const id of agentIds) {
+      const contactStats = contactStatsByAgent.get(id) || { client_count: 0, client_revenue: 0 };
+      const companyStats = companyStatsByAgent.get(id) || { client_count: 0, client_revenue: 0 };
+      const useContacts = contactStats.client_count > 0 && contactStats.client_revenue > 0;
+      statsByAgent.set(id, useContacts ? contactStats : companyStats);
     }
 
     return {
@@ -144,6 +167,92 @@ export class AdminContactsController {
         };
       }),
     };
+  }
+
+  @Get(':id')
+  async findOne(@Param('id', ParseIntPipe) id: number, @Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    const contact = await this.prisma.contacts.findUnique({
+      where: { id, deleted_at: null },
+      include: {
+        companies_contacts_company_idTocompanies: { select: { id: true, name: true, logo_url: true } },
+        profiles: { select: { id: true, first_name: true, last_name: true, email: true } },
+      },
+    });
+    if (!contact) throw new NotFoundException('Contact not found');
+    return { success: true, data: this.mapContact(contact) };
+  }
+
+  @Post()
+  async create(@Body() body: any, @Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    if (!body.name && !body.first_name && !body.last_name) {
+      throw new BadRequestException('Name is required');
+    }
+    const name = body.name || `${body.first_name || ''} ${body.last_name || ''}`.trim();
+    const contact = await this.prisma.contacts.create({
+      data: {
+        name,
+        email: body.email || null,
+        phone: body.phone || null,
+        job_title: body.job_title || null,
+        company: body.company || null,
+        company_id: body.company_id ? Number(body.company_id) : null,
+        lifecycle_stage: body.lifecycle_stage || 'lead',
+        contact_type: body.contact_type || body.type || 'lead',
+        lead_status: body.lead_status || 'new',
+        source: body.source || 'admin',
+        commission_type: body.commission_type || 'none',
+        commission_rate: body.commission_rate !== undefined ? Number(body.commission_rate) : 0,
+        location: body.location || null,
+        notes: body.notes || body.message || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as any,
+    });
+    return { success: true, data: this.mapContact(contact) };
+  }
+
+  @Put(':id')
+  async update(@Param('id', ParseIntPipe) id: number, @Body() body: any, @Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    const existing = await this.prisma.contacts.findUnique({ where: { id, deleted_at: null } });
+    if (!existing) throw new NotFoundException('Contact not found');
+
+    const name = body.name !== undefined
+      ? body.name
+      : (body.first_name !== undefined || body.last_name !== undefined
+          ? `${body.first_name || ''} ${body.last_name || ''}`.trim() || existing.name
+          : existing.name);
+
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (body.email !== undefined) data.email = body.email;
+    if (body.phone !== undefined) data.phone = body.phone;
+    if (body.job_title !== undefined) data.job_title = body.job_title;
+    if (body.company !== undefined) data.company = body.company;
+    if (body.company_id !== undefined) data.company_id = body.company_id ? Number(body.company_id) : null;
+    if (body.lifecycle_stage !== undefined) data.lifecycle_stage = body.lifecycle_stage;
+    if (body.contact_type !== undefined) data.contact_type = body.contact_type;
+    if (body.lead_status !== undefined) data.lead_status = body.lead_status;
+    if (body.source !== undefined) data.source = body.source;
+    if (body.commission_type !== undefined) data.commission_type = body.commission_type;
+    if (body.commission_rate !== undefined) data.commission_rate = Number(body.commission_rate);
+    if (body.location !== undefined) data.location = body.location;
+    if (body.notes !== undefined) data.notes = body.notes;
+    data.updated_at = new Date();
+
+    const contact = await this.prisma.contacts.update({ where: { id }, data });
+    return { success: true, data: this.mapContact(contact) };
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number, @Res({ passthrough: true }) res: Response) {
+    setNoCache(res);
+    const existing = await this.prisma.contacts.findUnique({ where: { id, deleted_at: null } });
+    if (!existing) throw new NotFoundException('Contact not found');
+    await this.prisma.contacts.update({ where: { id }, data: { deleted_at: new Date() } });
+    return { success: true, message: 'Contact deleted' };
   }
 
   @Get(':id/clients')
