@@ -45,7 +45,7 @@ export class ProjectsService {
     const managerId = query.manager_id ? Number(query.manager_id) : undefined;
     const finalSortBy = query.sort || sortBy;
     const finalSortOrder = (query.order || sortOrder) as 'asc' | 'desc' | 'ASC' | 'DESC';
-    const where: { [key: string]: unknown } = { deleted_at: null };
+    const where: { [key: string]: unknown } = { deleted_at: null, is_demo: false };
     if (status) where.status = status;
     if (companyId) where.company_id = companyId;
     if (contactId) where.customer_id = contactId;

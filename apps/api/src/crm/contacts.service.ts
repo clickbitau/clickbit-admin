@@ -61,7 +61,7 @@ export class ContactsService {
       sortOrder = 'DESC',
     } = query;
 
-    const where: { [key: string]: unknown } = {};
+    const where: { [key: string]: unknown } = { is_demo: false, deleted_at: null };
     if (lifecycle_stage) where.lifecycle_stage = lifecycle_stage;
     if (status) where.status = status;
     if (owner_id) where.owner_id = owner_id;
@@ -394,7 +394,8 @@ export class ContactsService {
   async getStats(ownerId?: number) {
     const cacheKey = this.cacheKey('stats', ownerId ?? 'all');
     return this.cached(cacheKey, async () => {
-    const baseWhere = ownerId ? { owner_id: ownerId } : {};
+    const baseWhere: Record<string, unknown> = { is_demo: false, deleted_at: null };
+    if (ownerId) baseWhere.owner_id = ownerId;
 
     const [total, customerCount, leadCount, mqlCount, sqlCount, subscriberCount] = await Promise.all([
       this.prisma.contacts.count({ where: baseWhere }),
@@ -409,7 +410,7 @@ export class ContactsService {
       `
       SELECT AVG(lead_score)::numeric AS avg
       FROM contacts
-      WHERE ${ownerId ? 'owner_id = $1' : '1=1'} AND deleted_at IS NULL
+      WHERE ${ownerId ? 'owner_id = $1 AND' : ''} deleted_at IS NULL AND is_demo = false
       `,
       ...(ownerId ? [ownerId] : []),
     );

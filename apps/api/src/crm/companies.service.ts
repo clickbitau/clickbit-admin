@@ -65,6 +65,7 @@ export class CompaniesService {
       sortOrder = 'DESC',
       includeStats,
       mode,
+      include_demo,
     } = query;
 
     const allowedSorts = new Set<string>(ALLOWED_COMPANY_SORT);
@@ -79,6 +80,9 @@ export class CompaniesService {
       'c.is_active = true',
       'c.deleted_at IS NULL',
     ];
+    if (String(include_demo).toLowerCase() !== 'true') {
+      conditions.push('c.is_demo = false');
+    }
     const params: (string | number)[] = [];
     let paramIndex = 1;
 

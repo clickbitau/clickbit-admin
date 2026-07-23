@@ -65,19 +65,19 @@ export class AdminContactsController {
   async customerStats(@Res({ passthrough: true }) res: Response) {
     setNoCache(res);
     const total = await this.prisma.contacts.count({
-      where: { deleted_at: null, lifecycle_stage: 'customer' },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer' },
     });
     const activeCustomers = await this.prisma.contacts.count({
-      where: { deleted_at: null, lifecycle_stage: 'customer', lead_status: 'active' },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer', lead_status: 'active' },
     });
     const revenue = await this.prisma.contacts.aggregate({
-      where: { deleted_at: null, lifecycle_stage: 'customer' },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer' },
       _sum: { total_revenue: true },
     });
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const newThisMonth = await this.prisma.contacts.count({
-      where: { deleted_at: null, lifecycle_stage: 'customer', created_at: { gte: startOfMonth } },
+      where: { deleted_at: null, is_demo: false, lifecycle_stage: 'customer', created_at: { gte: startOfMonth } },
     });
     const totalRevenue = Number(revenue._sum.total_revenue || 0);
     return {
@@ -108,13 +108,13 @@ export class AdminContactsController {
     const [companies, contacts] = await Promise.all([
       agentIds.length
         ? this.prisma.companies.findMany({
-            where: { agent_id: { in: agentIds }, deleted_at: null },
+            where: { agent_id: { in: agentIds }, deleted_at: null, is_demo: false },
             select: { agent_id: true, id: true, name: true, total_revenue: true, lifecycle_stage: true },
           })
         : Promise.resolve([] as any[]),
       agentIds.length
         ? this.prisma.contacts.findMany({
-            where: { agent_id: { in: agentIds }, deleted_at: null },
+            where: { agent_id: { in: agentIds }, deleted_at: null, is_demo: false },
             select: { agent_id: true, id: true, total_revenue: true },
           })
         : Promise.resolve([] as any[]),
