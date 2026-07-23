@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseClient } from '@/lib/supabase';
 import { checkTrust, trustDevice, verifyBackupCode } from '@/lib/api';
 import { getSharedToken, getSharedRefreshToken, setSharedTokens, clearSharedTokens } from '@/lib/cookie';
 
@@ -199,7 +199,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeMfa = useCallback(
     async (factorId: string, code: string, rememberDevice = false) => {
-      if (!mfaToken || !mfaRefreshToken || !supabase) throw new Error('MFA session not available');
+      if (!mfaToken || !mfaRefreshToken) throw new Error('MFA session not available');
+      const supabase = await getSupabaseClient();
+      if (!supabase) throw new Error('Supabase client not configured');
       setLoading(true);
       setError(null);
       try {
@@ -343,6 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const oauthSignIn = useCallback(async (provider: string) => {
+    const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase client not configured');
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const { data, error } = await supabase.auth.signInWithOAuth({

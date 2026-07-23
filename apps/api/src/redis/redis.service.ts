@@ -119,7 +119,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         name: masterName,
         password,
         ...commonOptions,
-      } as any);
+      });
     } else if (redisUrl) {
       this.client = new Redis(redisUrl, commonOptions);
     } else {

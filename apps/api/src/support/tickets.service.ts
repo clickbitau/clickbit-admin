@@ -329,7 +329,7 @@ export class TicketsService {
     }
     const ands: Prisma.ticketsWhereInput[] = [{ OR: scope }];
     if (search.length) ands.push({ OR: search });
-    const where: any = ands.length === 1 ? ands[0]! : { AND: ands };
+    const where: any = ands.length === 1 ? ands[0] : { AND: ands };
     if (query.status && query.status !== 'all') {
       where.status = query.status;
     }
