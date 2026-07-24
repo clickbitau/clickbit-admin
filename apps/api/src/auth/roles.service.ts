@@ -1,85 +1,135 @@
 import { Injectable } from '@nestjs/common';
-import { Profile } from '@clickbit/shared';
+import { PrismaService } from '../prisma/prisma.service';
 import {
+  AVAILABLE_PERMISSIONS,
+  DEFAULT_MANAGER_PERMISSIONS,
   ROLE_PERMISSIONS,
-  ROLE_TOKENS,
-  TASK_STAFF_TEMPLATE_KEYS,
+  type PermissionGroup,
 } from './roles.config';
 
-function normalizeRole(role: unknown): string {
-  if (typeof role === 'string') return role.trim().toLowerCase();
-  if (typeof role === 'number') return String(role).trim().toLowerCase();
-  return '';
+function allCatalogKeys(): string[] {
+  return Object.values(AVAILABLE_PERMISSIONS).flatMap((g) => g.map((p) => p.key));
 }
 
-function normalizeCustomPermissions(raw: unknown): string[] | null {
-  if (raw == null) return null;
-  if (Array.isArray(raw)) return raw.length > 0 ? raw : null;
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        Array.isArray(parsed.permissions) &&
-        parsed.permissions.length > 0
-      ) {
-        return parsed.permissions;
-      }
-    } catch {
-      /* ignore */
-    }
-    return null;
-  }
-  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
-    const inner =
-      (raw as { permissions?: string[]; grants?: string[] }).permissions ??
-      (raw as { permissions?: string[]; grants?: string[] }).grants;
-    if (Array.isArray(inner) && inner.length > 0) return inner;
-  }
-  return null;
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((p): p is string => typeof p === 'string')
+    : [];
 }
 
 @Injectable()
 export class RolesService {
-  hasPermission(role: string, permission: string): boolean {
-    if (!ROLE_PERMISSIONS[role]) return false;
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getUserRole(userId: number): Promise<string | null> {
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    return profile?.role ?? null;
+  }
+
+  async getUserPermissions(userId: number): Promise<string[]> {
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: userId },
+      select: { permissions: true },
+    });
+    return asStringList(profile?.permissions);
+  }
+
+  /** Sync resolver — used by RolesGuard with the already-loaded profile. */
+  resolveEffectivePermissions(
+    role: string | null | undefined,
+    customPermissions: unknown,
+  ): string[] {
+    const roleNorm = String(role || '').trim().toLowerCase();
+    if (roleNorm === 'admin') return allCatalogKeys();
+
+    const custom = asStringList(customPermissions);
+
+    if (roleNorm === 'manager') {
+      return custom.length > 0
+        ? [...new Set(custom)]
+        : [...DEFAULT_MANAGER_PERMISSIONS];
+    }
+
+    return [...(ROLE_PERMISSIONS[roleNorm] || [])];
+  }
+
+  /**
+   * Effective ACL for API + UI.
+   * - Admin: all catalog keys (bypass).
+   * - Manager with empty custom list: DEFAULT_MANAGER_PERMISSIONS.
+   * - Manager with custom list: that list replaces defaults.
+   * - Other roles: ROLE_PERMISSIONS template only.
+   */
+  async getEffectivePermissions(userId: number): Promise<string[]> {
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: userId },
+      select: { role: true, permissions: true },
+    });
+    if (!profile) return [];
+    return this.resolveEffectivePermissions(profile.role, profile.permissions);
+  }
+
+  async hasPermission(userId: number, permission: string): Promise<boolean> {
+    const role = await this.getUserRole(userId);
     if (role === 'admin') return true;
-    return ROLE_PERMISSIONS[role].includes(permission);
+    const effective = await this.getEffectivePermissions(userId);
+    return effective.includes(permission);
   }
 
-  checkPermissionForUser(user: Profile, permission: string): boolean {
-    const roleNorm = normalizeRole(user.role);
+  async hasAnyPermission(
+    userId: number,
+    permissions: string[],
+  ): Promise<boolean> {
+    if (!permissions.length) return true;
+    const role = await this.getUserRole(userId);
+    if (role === 'admin') return true;
+    const effective = await this.getEffectivePermissions(userId);
+    return permissions.some((p) => effective.includes(p));
+  }
+
+  /** Sync any-of check against a loaded profile (RolesGuard). */
+  profileHasAnyPermission(
+    profile: { role?: string | null; permissions?: unknown },
+    permissions: string[],
+  ): boolean {
+    if (!permissions.length) return true;
+    const roleNorm = String(profile.role || '').trim().toLowerCase();
     if (roleNorm === 'admin') return true;
-
-    if (ROLE_TOKENS.includes(permission)) {
-      return roleNorm === permission;
-    }
-
-    const custom = normalizeCustomPermissions(user.permissions);
-    if (custom) {
-      if (custom.includes(permission)) return true;
-      if (
-        roleNorm === 'employee' &&
-        this.hasPermission('employee', permission)
-      ) {
-        return true;
-      }
-      if (
-        ['manager', 'agent'].includes(roleNorm) &&
-        TASK_STAFF_TEMPLATE_KEYS.includes(permission) &&
-        this.hasPermission(roleNorm, permission)
-      ) {
-        return true;
-      }
-      return false;
-    }
-
-    return this.hasPermission(roleNorm, permission);
+    const effective = this.resolveEffectivePermissions(
+      profile.role,
+      profile.permissions,
+    );
+    return permissions.some((p) => effective.includes(p));
   }
 
-  userHasAnyPermission(user: Profile, permissions: string[]): boolean {
-    return permissions.some((p) => this.checkPermissionForUser(user, p));
+  async hasRole(userId: number, roles: string[]): Promise<boolean> {
+    const role = await this.getUserRole(userId);
+    return role !== null && roles.includes(role);
+  }
+
+  getAvailablePermissions(): Record<string, PermissionGroup[]> {
+    return AVAILABLE_PERMISSIONS;
+  }
+
+  getDefaultPermissionsForRole(role: string): string[] {
+    if (role === 'manager') return [...DEFAULT_MANAGER_PERMISSIONS];
+    return [...(ROLE_PERMISSIONS[role] || [])];
+  }
+
+  /**
+   * Used when saving custom permissions.
+   * Empty custom list means "use role defaults" for managers.
+   */
+  checkPermissionForUser(
+    role: string,
+    customPermissions: string[] | null | undefined,
+    permission: string,
+  ): boolean {
+    return this.resolveEffectivePermissions(role, customPermissions).includes(
+      permission,
+    );
   }
 }

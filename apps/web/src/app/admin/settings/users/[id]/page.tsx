@@ -167,7 +167,11 @@ export default function AdminUserDetailPage() {
     : [];
 
   const permissionGroups = (availablePermissionsData?.availablePermissions ?? {}) as Record<string, { key: string; label: string; description: string }[]>;
-  const currentPermissions: string[] = permissionsData?.customPermissions ?? [];
+  // Show effective grants checked (defaults when custom list is empty). Edits start from that set.
+  const currentPermissions: string[] =
+    permissionsData?.effectivePermissions ??
+    permissionsData?.customPermissions ??
+    [];
 
   return (
     <PageShell

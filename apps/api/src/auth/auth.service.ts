@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'crypto';
 import { createTransport } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
+import { RolesService } from './roles.service';
 
 @Injectable()
 export class AuthService {
@@ -13,9 +14,12 @@ export class AuthService {
   private adminClient: SupabaseClient | null = null;
   private publicClient: SupabaseClient | null = null;
 
-  constructor(private readonly config: ConfigService,
+  constructor(
+    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly cache?: CacheService) {
+    private readonly rolesService: RolesService,
+    private readonly cache?: CacheService,
+  ) {
     const url = this.config.get<string>('SUPABASE_URL');
     const serviceKey = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
     const anonKey = this.config.get<string>('SUPABASE_ANON_KEY');
@@ -54,8 +58,23 @@ export class AuthService {
 
   private sanitizeProfile(profile: any) {
     if (!profile) return profile;
-    const { password: _password, email_verification_token: _emailVerificationToken, password_reset_token: _passwordResetToken, ...safe } = profile;
-    return safe;
+    const {
+      password: _password,
+      email_verification_token: _emailVerificationToken,
+      password_reset_token: _passwordResetToken,
+      ...safe
+    } = profile;
+    const custom = Array.isArray(safe.permissions)
+      ? safe.permissions.filter((p: unknown): p is string => typeof p === 'string')
+      : [];
+    return {
+      ...safe,
+      permissions: custom,
+      effectivePermissions: this.rolesService.resolveEffectivePermissions(
+        safe.role,
+        custom,
+      ),
+    };
   }
 
   async register(dto: { email: string; password: string; first_name: string; last_name: string; phone?: string }) {

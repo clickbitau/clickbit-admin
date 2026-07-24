@@ -21,6 +21,8 @@ interface UserProfile {
   last_name: string;
   role: string;
   avatar?: string | null;
+  permissions?: string[];
+  effectivePermissions?: string[];
 }
 
 interface MfaFactor {
@@ -51,6 +53,8 @@ interface AuthContextValue {
   oauthSignIn: (provider: string) => Promise<void>;
   linkOAuth: (provider: string) => Promise<void>;
   clearError: () => void;
+  hasPermission: (permission: string) => boolean;
+  hasAnyPermission: (permissions: string[]) => boolean;
 }
 
 interface RegisterData {
@@ -370,6 +374,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = data.url;
   }, []);
 
+  const hasPermission = useCallback(
+    (permission: string) => {
+      if (!user) return false;
+      if (user.role === 'admin') return true;
+      const effective = user.effectivePermissions ?? user.permissions ?? [];
+      return effective.includes(permission);
+    },
+    [user],
+  );
+
+  const hasAnyPermission = useCallback(
+    (permissions: string[]) => {
+      if (!permissions.length) return true;
+      if (!user) return false;
+      if (user.role === 'admin') return true;
+      const effective = user.effectivePermissions ?? user.permissions ?? [];
+      return permissions.some((p) => effective.includes(p));
+    },
+    [user],
+  );
+
   const value: AuthContextValue = {
     token,
     refreshToken,
@@ -391,6 +416,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     oauthSignIn,
     linkOAuth,
     clearError,
+    hasPermission,
+    hasAnyPermission,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
