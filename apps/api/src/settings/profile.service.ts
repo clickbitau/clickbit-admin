@@ -36,6 +36,13 @@ export class ProfileService {
     return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   }
 
+  private getSupabasePublic() {
+    const url = this.config.get<string>('SUPABASE_URL');
+    const key = this.config.get<string>('SUPABASE_ANON_KEY');
+    if (!url || !key) return null;
+    return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  }
+
   async getProfile(user: Profile) {
     return this.cached(this.cacheKey('getProfile', user.id), async () => {
 
@@ -114,7 +121,7 @@ export class ProfileService {
     const current = stringValue(dto.current_password);
     const newPass = stringValue(dto.new_password);
     const confirm = stringValue(dto.confirm_password);
-    if (!current || !newPass || !confirm) throw new BadRequestException({ success: false, message: 'Please provide current password, new password, and confirmation' });
+    if (!newPass || !confirm) throw new BadRequestException({ success: false, message: 'Please provide new password and confirmation' });
     if (newPass !== confirm) throw new BadRequestException({ success: false, message: 'New passwords do not match' });
     if (newPass.length < 8) throw new BadRequestException({ success: false, message: 'New password must be at least 8 characters long' });
 
@@ -122,8 +129,26 @@ export class ProfileService {
     if (!profile) throw new NotFoundException({ success: false, message: 'Profile not found' });
 
     const admin = this.getSupabaseAdmin();
+    const publicClient = this.getSupabasePublic();
+    let hasPassword = false;
+
     if (admin && profile.auth_uid) {
-      // Verify current password by attempting an admin password reset is not possible; trust client for now.
+      const { data, error } = await admin.auth.admin.getUserById(profile.auth_uid);
+      if (error) throw new BadRequestException({ success: false, message: 'Failed to load user' });
+      const identities = (data.user?.identities || []) as any[];
+      hasPassword = identities.some((i) => i.provider === 'email');
+    } else if (profile.password) {
+      hasPassword = true;
+    }
+
+    if (hasPassword) {
+      if (!current) throw new BadRequestException({ success: false, message: 'Current password is required' });
+      if (!publicClient) throw new BadRequestException({ success: false, message: 'Auth client not configured' });
+      const { error } = await publicClient.auth.signInWithPassword({ email: profile.email, password: current });
+      if (error) throw new BadRequestException({ success: false, message: 'Current password is incorrect' });
+    }
+
+    if (admin && profile.auth_uid) {
       const { error } = await admin.auth.admin.updateUserById(profile.auth_uid, { password: newPass });
       if (error) throw new BadRequestException({ success: false, message: 'Failed to update password' });
     }
