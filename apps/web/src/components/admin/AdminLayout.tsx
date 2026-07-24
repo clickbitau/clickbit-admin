@@ -64,6 +64,8 @@ interface NavLink {
   label: string;
   icon: React.ElementType;
   roles?: string[];
+  /** Any-of permission keys; managers must have at least one. Admins always pass. */
+  permissions?: string[];
 }
 
 interface NavSection {
@@ -73,6 +75,7 @@ interface NavSection {
   href?: string;
   flat?: boolean;
   roles?: string[];
+  permissions?: string[];
   links: NavLink[];
 }
 
@@ -82,7 +85,8 @@ const sections: NavSection[] = [
     label: 'Dashboard',
     icon: Home,
     flat: true,
-    links: [{ href: '/admin', label: 'Dashboard', icon: Home }],
+    permissions: ['dashboard:view'],
+    links: [{ href: '/admin', label: 'Dashboard', icon: Home, permissions: ['dashboard:view'] }],
   },
   {
     id: 'tasks',
@@ -90,7 +94,8 @@ const sections: NavSection[] = [
     icon: CheckSquare,
     flat: true,
     roles: ['admin', 'manager'],
-    links: [{ href: '/admin/tasks', label: 'All Tasks', icon: CheckSquare }],
+    permissions: ['crm:view', 'crm:manage', 'tasks:list_assignees'],
+    links: [{ href: '/admin/tasks', label: 'All Tasks', icon: CheckSquare, permissions: ['crm:view', 'crm:manage', 'tasks:list_assignees'] }],
   },
   {
     id: 'my-work',
@@ -111,15 +116,16 @@ const sections: NavSection[] = [
     label: 'CRM',
     icon: HeartHandshake,
     roles: ['admin', 'manager'],
+    permissions: ['crm:view', 'crm:manage'],
     links: [
-      { href: '/admin/crm/pipeline', label: 'Sales Pipeline', icon: Kanban },
-      { href: '/admin/crm/deals', label: 'Deals', icon: Target },
-      { href: '/admin/crm/companies', label: 'Companies', icon: Building2 },
-      { href: '/admin/crm/projects', label: 'Projects', icon: FolderKanban },
-      { href: '/admin/crm/project-tasks', label: 'Project Tasks', icon: ListTodo },
-      { href: '/admin/crm/leads', label: 'Contacts', icon: UserPlus },
-      { href: '/admin/crm/customers', label: 'Customers', icon: Users },
-      { href: '/admin/crm/agents', label: 'Agents', icon: Briefcase },
+      { href: '/admin/crm/pipeline', label: 'Sales Pipeline', icon: Kanban, permissions: ['crm:view', 'crm:manage'] },
+      { href: '/admin/crm/deals', label: 'Deals', icon: Target, permissions: ['crm:view', 'crm:manage'] },
+      { href: '/admin/crm/companies', label: 'Companies', icon: Building2, permissions: ['crm:view', 'crm:manage'] },
+      { href: '/admin/crm/projects', label: 'Projects', icon: FolderKanban, permissions: ['crm:view', 'crm:manage'] },
+      { href: '/admin/crm/project-tasks', label: 'Project Tasks', icon: ListTodo, permissions: ['crm:view', 'crm:manage'] },
+      { href: '/admin/crm/leads', label: 'Contacts', icon: UserPlus, permissions: ['crm:view', 'crm:manage', 'contacts:list', 'contacts:view'] },
+      { href: '/admin/crm/customers', label: 'Customers', icon: Users, permissions: ['crm:view', 'crm:manage', 'users:list'] },
+      { href: '/admin/crm/agents', label: 'Agents', icon: Briefcase, permissions: ['crm:view', 'crm:manage', 'users:list'] },
     ],
   },
   {
@@ -127,16 +133,17 @@ const sections: NavSection[] = [
     label: 'HR',
     icon: Users,
     roles: ['admin', 'manager'],
+    permissions: ['hr:view', 'hr:manage', 'contracts:manage'],
     links: [
-      { href: '/admin/hr/employees', label: 'Employees', icon: Users },
-      { href: '/admin/hr/timesheets', label: 'Timesheets', icon: FileClock },
-      { href: '/admin/hr/payslips', label: 'Payslips', icon: Banknote },
-      { href: '/admin/hr/contracts', label: 'Contracts', icon: FileText },
-      { href: '/admin/hr/kpi', label: 'KPI', icon: BarChart3 },
-      { href: '/admin/hr/time-off', label: 'Time Off Requests', icon: Calendar },
-      { href: '/admin/hr/announcements', label: 'Announcements', icon: Megaphone },
-      { href: '/admin/hr/reminders', label: 'Reminders', icon: Bell },
-      { href: '/admin/hr/public-holidays', label: 'Public Holidays', icon: Clock },
+      { href: '/admin/hr/employees', label: 'Employees', icon: Users, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/timesheets', label: 'Timesheets', icon: FileClock, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/payslips', label: 'Payslips', icon: Banknote, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/contracts', label: 'Contracts', icon: FileText, permissions: ['contracts:manage', 'hr:manage'] },
+      { href: '/admin/hr/kpi', label: 'KPI', icon: BarChart3, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/time-off', label: 'Time Off Requests', icon: Calendar, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/announcements', label: 'Announcements', icon: Megaphone, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/reminders', label: 'Reminders', icon: Bell, permissions: ['hr:view', 'hr:manage'] },
+      { href: '/admin/hr/public-holidays', label: 'Public Holidays', icon: Clock, permissions: ['hr:view', 'hr:manage'] },
     ],
   },
   {
@@ -144,12 +151,13 @@ const sections: NavSection[] = [
     label: 'Finance',
     icon: DollarSign,
     roles: ['admin', 'manager'],
+    permissions: ['finance:view', 'finance:manage', 'orders:list', 'orders:view'],
     links: [
-      { href: '/admin/finance/orders', label: 'Orders', icon: ShoppingBag },
-      { href: '/admin/finance/invoices', label: 'Invoices', icon: Receipt },
-      { href: '/admin/finance/payments', label: 'Payments', icon: CreditCard },
-      { href: '/admin/finance/expenses', label: 'Expenses', icon: ClipboardList },
-      { href: '/admin/finance/staff-advances', label: 'Staff Advances', icon: HandCoins },
+      { href: '/admin/finance/orders', label: 'Orders', icon: ShoppingBag, permissions: ['orders:list', 'orders:view', 'finance:view'] },
+      { href: '/admin/finance/invoices', label: 'Invoices', icon: Receipt, permissions: ['finance:view', 'finance:manage'] },
+      { href: '/admin/finance/payments', label: 'Payments', icon: CreditCard, permissions: ['finance:view', 'finance:manage'] },
+      { href: '/admin/finance/expenses', label: 'Expenses', icon: ClipboardList, permissions: ['finance:view', 'finance:manage'] },
+      { href: '/admin/finance/staff-advances', label: 'Staff Advances', icon: HandCoins, permissions: ['finance:view', 'finance:manage'] },
     ],
   },
   {
@@ -158,9 +166,10 @@ const sections: NavSection[] = [
     icon: Ticket,
     flat: true,
     roles: ['admin', 'manager'],
+    permissions: ['support:view', 'support:manage'],
     links: [
-      { href: '/admin/support', label: 'Tickets', icon: Ticket },
-      { href: '/admin/support/automation', label: 'Automation', icon: TrendingUp },
+      { href: '/admin/support', label: 'Tickets', icon: Ticket, permissions: ['support:view', 'support:manage'] },
+      { href: '/admin/support/automation', label: 'Automation', icon: TrendingUp, permissions: ['support:manage'] },
     ],
   },
   {
@@ -168,9 +177,10 @@ const sections: NavSection[] = [
     label: 'Communication',
     icon: MessageSquare,
     roles: ['admin', 'manager'],
+    permissions: ['communication:view', 'communication:manage'],
     links: [
-      { href: '/admin/communication/chat', label: 'Chat', icon: MessageSquare },
-      { href: '/admin/communication/mail', label: 'Mail', icon: FileText },
+      { href: '/admin/communication/chat', label: 'Chat', icon: MessageSquare, permissions: ['communication:view', 'communication:manage'] },
+      { href: '/admin/communication/mail', label: 'Mail', icon: FileText, permissions: ['communication:view', 'communication:manage'] },
     ],
   },
   {
@@ -178,13 +188,14 @@ const sections: NavSection[] = [
     label: 'Content',
     icon: FileText,
     roles: ['admin', 'manager'],
+    permissions: ['content:list', 'content:view', 'services:list', 'team:list', 'reviews:list', 'marketing:view'],
     links: [
-      { href: '/admin/content/services', label: 'Services', icon: Layers },
-      { href: '/admin/content/team', label: 'Team', icon: UserCircle },
-      { href: '/admin/content/portfolio', label: 'Portfolio', icon: Briefcase },
-      { href: '/admin/content/reviews', label: 'Reviews', icon: Star },
-      { href: '/admin/content/blog', label: 'Blog', icon: BookOpen },
-      { href: '/admin/content/marketing', label: 'Marketing', icon: TrendingUp },
+      { href: '/admin/content/services', label: 'Services', icon: Layers, permissions: ['services:list', 'services:view'] },
+      { href: '/admin/content/team', label: 'Team', icon: UserCircle, permissions: ['team:list', 'team:view'] },
+      { href: '/admin/content/portfolio', label: 'Portfolio', icon: Briefcase, permissions: ['content:list', 'content:view'] },
+      { href: '/admin/content/reviews', label: 'Reviews', icon: Star, permissions: ['reviews:list', 'reviews:view'] },
+      { href: '/admin/content/blog', label: 'Blog', icon: BookOpen, permissions: ['content:list', 'content:view'] },
+      { href: '/admin/content/marketing', label: 'Marketing', icon: TrendingUp, permissions: ['marketing:view', 'marketing:update'] },
     ],
   },
   {
@@ -193,6 +204,7 @@ const sections: NavSection[] = [
     icon: FileText,
     roles: ['admin', 'manager'],
     href: '/admin/documents',
+    permissions: ['settings:view', 'content:view'],
     links: [],
   },
   {
@@ -200,6 +212,7 @@ const sections: NavSection[] = [
     label: 'Notifications',
     icon: BellDot,
     href: '/admin/notifications',
+    permissions: ['dashboard:view'],
     links: [],
   },
   {
@@ -208,6 +221,7 @@ const sections: NavSection[] = [
     icon: BarChart3,
     roles: ['admin', 'manager'],
     href: '/admin/analytics',
+    permissions: ['dashboard:view'],
     links: [],
   },
   {
@@ -216,6 +230,7 @@ const sections: NavSection[] = [
     icon: Bug,
     roles: ['admin', 'manager'],
     href: '/admin/bug-reports',
+    permissions: ['settings:view'],
     links: [],
   },
   {
@@ -223,14 +238,15 @@ const sections: NavSection[] = [
     label: 'Admin',
     icon: Settings,
     roles: ['admin', 'manager'],
+    permissions: ['users:list', 'settings:view', 'settings:update', 'billing:view'],
     links: [
-      { href: '/admin/settings/users', label: 'Users', icon: Users },
-      { href: '/admin/settings/credentials', label: 'Credentials', icon: Lock },
-      { href: '/admin/settings/audit-logs', label: 'Audit Logs', icon: Activity },
-      { href: '/admin/settings/pdf-templates', label: 'PDF Templates', icon: FileText },
-      { href: '/admin/settings/public-content', label: 'Public Content', icon: Globe },
-      { href: '/admin/clickdeploy', label: 'ClickDeploy', icon: Rocket },
-      { href: '/admin/settings/billing', label: 'Billing', icon: CreditCard },
+      { href: '/admin/settings/users', label: 'Users', icon: Users, permissions: ['users:list', 'users:view'] },
+      { href: '/admin/settings/credentials', label: 'Credentials', icon: Lock, permissions: ['settings:view', 'settings:update'] },
+      { href: '/admin/settings/audit-logs', label: 'Audit Logs', icon: Activity, permissions: ['settings:view'] },
+      { href: '/admin/settings/pdf-templates', label: 'PDF Templates', icon: FileText, permissions: ['settings:view', 'settings:update'] },
+      { href: '/admin/settings/public-content', label: 'Public Content', icon: Globe, permissions: ['settings:view', 'marketing:view'] },
+      { href: '/admin/clickdeploy', label: 'ClickDeploy', icon: Rocket, permissions: ['settings:update'] },
+      { href: '/admin/settings/billing', label: 'Billing', icon: CreditCard, permissions: ['billing:view', 'billing:update'] },
       { href: '/admin/settings/profile', label: 'Profile', icon: UserCircle },
     ],
   },
@@ -241,14 +257,33 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function canSee(userRole: string | undefined, allowed?: string[]) {
+function canSeeRole(userRole: string | undefined, allowed?: string[]) {
   return !allowed || allowed.includes(userRole || '');
+}
+
+function canSeePermissions(
+  role: string | undefined,
+  effective: string[] | undefined,
+  required?: string[],
+) {
+  if (!required?.length) return true;
+  if (role === 'admin') return true;
+  if (role !== 'manager') return true;
+  const perms = effective ?? [];
+  return required.some((p) => perms.includes(p));
 }
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, logout } = useAuth();
+  const userRole = user?.role;
+  const effectivePermissions = user?.effectivePermissions ?? user?.permissions ?? [];
+
+  const canAccess = (roles?: string[], permissions?: string[]) =>
+    canSeeRole(userRole, roles) &&
+    canSeePermissions(userRole, effectivePermissions, permissions);
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -295,6 +330,29 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
+  // Managers deep-linking to a section they lost access to → bounce to dashboard.
+  useEffect(() => {
+    if (loading || !user || user.role !== 'manager' || !pathname) return;
+    if (pathname === '/admin' || pathname === '/admin/dashboard' || pathname === '/admin/settings/profile') {
+      return;
+    }
+    const match = sections.find(
+      (s) =>
+        (s.href && isActive(pathname, s.href)) ||
+        s.links.some((l) => isActive(pathname, l.href)),
+    );
+    if (!match) return;
+    const link = match.links.find((l) => isActive(pathname, l.href));
+    const allowed = link
+      ? canSeeRole(user.role, link.roles ?? match.roles) &&
+        canSeePermissions(user.role, effectivePermissions, link.permissions ?? match.permissions)
+      : canSeeRole(user.role, match.roles) &&
+        canSeePermissions(user.role, effectivePermissions, match.permissions);
+    if (!allowed) {
+      router.replace('/admin');
+    }
+  }, [loading, user, pathname, router, effectivePermissions]);
+
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center admin-surface">
@@ -302,8 +360,6 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
-  const userRole = user?.role;
 
   const Nav = ({ collapsedMode = false }: { collapsedMode?: boolean }) => {
     const [hovered, setHovered] = useState<string | null>(null);
@@ -335,9 +391,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 overflow-y-auto overflow-x-visible space-y-1 px-2 pb-2">
           {sections.map((section) => {
-            if (!canSee(userRole, section.roles)) return null;
-            const visibleLinks = section.links.filter((l) => canSee(userRole, l.roles));
-            const hasHref = section.href && canSee(userRole, section.roles);
+            if (!canAccess(section.roles, section.permissions)) return null;
+            const visibleLinks = section.links.filter((l) =>
+              canAccess(l.roles ?? section.roles, l.permissions ?? section.permissions),
+            );
+            const hasHref = Boolean(section.href && canAccess(section.roles, section.permissions));
             if (visibleLinks.length === 0 && !hasHref) return null;
 
             const SectionIcon = section.icon;
