@@ -656,22 +656,24 @@ export class TicketsService {
     const days = Number(period) || 30;
     const start = new Date();
     start.setDate(start.getDate() - days);
+    const baseWhere = { is_demo: false };
 
     const [statusCounts, priorityCounts, categoryCounts, newCount, resolvedCount, unassigned, overdue] = await Promise.all([
-      this.prisma.tickets.groupBy({ by: ['status'], _count: { id: true } }),
+      this.prisma.tickets.groupBy({ by: ['status'], where: baseWhere, _count: { id: true } }),
       this.prisma.tickets.groupBy({
         by: ['priority'],
-        where: { status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] } },
+        where: { ...baseWhere, status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] } },
         _count: { id: true },
       }),
-      this.prisma.tickets.groupBy({ by: ['category'], where: { created_at: { gte: start } }, _count: { id: true } }),
-      this.prisma.tickets.count({ where: { created_at: { gte: start } } }),
-      this.prisma.tickets.count({ where: { resolved_at: { gte: start } } }),
+      this.prisma.tickets.groupBy({ by: ['category'], where: { ...baseWhere, created_at: { gte: start } }, _count: { id: true } }),
+      this.prisma.tickets.count({ where: { ...baseWhere, created_at: { gte: start } } }),
+      this.prisma.tickets.count({ where: { ...baseWhere, resolved_at: { gte: start } } }),
       this.prisma.tickets.count({
-        where: { assigned_to: null, status: { in: ['open', 'in_progress', 'waiting_staff'] } },
+        where: { ...baseWhere, assigned_to: null, status: { in: ['open', 'in_progress', 'waiting_staff'] } },
       }),
       this.prisma.tickets.count({
         where: {
+          ...baseWhere,
           status: { in: ['open', 'waiting_staff'] },
           first_response_at: null,
           created_at: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
@@ -681,7 +683,7 @@ export class TicketsService {
 
     const byAssignee = await this.prisma.tickets.groupBy({
       by: ['assigned_to'],
-      where: { assigned_to: { not: null }, status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] } },
+      where: { ...baseWhere, assigned_to: { not: null }, status: { in: ['open', 'in_progress', 'waiting_customer', 'waiting_staff'] } },
       _count: { id: true },
     });
 
@@ -690,18 +692,18 @@ export class TicketsService {
     const openTotal = statusObj.open + statusObj.in_progress + statusObj.waiting_customer + statusObj.waiting_staff;
 
     const firstResponse = await this.prisma.$queryRawUnsafe<Array<{ avg_hours: number | null }>>(
-      `SELECT AVG(EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600) as avg_hours FROM public.tickets WHERE first_response_at IS NOT NULL AND created_at >= $1`,
+      `SELECT AVG(EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600) as avg_hours FROM public.tickets WHERE first_response_at IS NOT NULL AND is_demo = false AND created_at >= $1`,
       start,
     );
     const resolution = await this.prisma.$queryRawUnsafe<Array<{ avg_hours: number | null }>>(
-      `SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg_hours FROM public.tickets WHERE resolved_at IS NOT NULL AND created_at >= $1`,
+      `SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg_hours FROM public.tickets WHERE resolved_at IS NOT NULL AND is_demo = false AND created_at >= $1`,
       start,
     );
     const satisfaction = await this.prisma.$queryRawUnsafe<Array<{ avg_rating: number | null; total_ratings: number | null }>>(
-      `SELECT AVG(satisfaction_rating) as avg_rating, COUNT(satisfaction_rating) as total_ratings FROM public.tickets WHERE satisfaction_rating IS NOT NULL`,
+      `SELECT AVG(satisfaction_rating) as avg_rating, COUNT(satisfaction_rating) as total_ratings FROM public.tickets WHERE satisfaction_rating IS NOT NULL AND is_demo = false`,
     );
 
-    const total = await this.prisma.tickets.count();
+    const total = await this.prisma.tickets.count({ where: baseWhere });
 
     return {
       overview: { total, open: openTotal, unassigned: unassigned, overdue: overdue, newThisPeriod: newCount, resolvedThisPeriod: resolvedCount },
