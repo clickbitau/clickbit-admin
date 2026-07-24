@@ -44,7 +44,6 @@ import {
   winLead,
   loseLead,
   recalculateLeadScores,
-  updateLeadScore,
 } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { CrmLead, Pipeline, PipelineStage, User } from '@/types/crm';
@@ -267,7 +266,7 @@ export default function LeadsPage() {
 
       <ConfirmDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)} title="Delete Lead" description={`Delete "${deleting?.name}"?`} onConfirm={() => deleting && deleteMutation.mutate(deleting.id)} loading={deleteMutation.isPending} />
 
-      <ScoreDialog lead={scoring} onClose={() => setScoring(null)} onSave={async (score) => { if (scoring) { await updateLeadScore(token!, scoring.id, score); toast.success('Score updated'); queryClient.invalidateQueries({ queryKey: ['leads'] }); setScoring(null); } }} />
+      <ScoreDialog lead={scoring} onClose={() => setScoring(null)} onSave={async (score) => { if (scoring) { try { await updateLead(token!, scoring.id, { lead_score: score }); toast.success('Score updated'); queryClient.invalidateQueries({ queryKey: ['leads'] }); setScoring(null); } catch (err: any) { toast.error(err?.message || 'Failed to update score'); } } }} />
     </PageShell>
   );
 }

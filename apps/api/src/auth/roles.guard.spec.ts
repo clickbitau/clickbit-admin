@@ -69,10 +69,10 @@ describe('RolesGuard manager ACL', () => {
     } as unknown as Reflector;
 
     const rolesService = {
-      hasAnyPermission: jest.fn(async (userId: number, required: string[]) => {
+      hasAnyPermission: jest.fn((userId: number, required: string[]) => {
         const svc = new RolesService({} as any);
         // Simulate DB-backed check using the request user payload.
-        return svc.profileHasAnyPermission(opts.user, required);
+        return Promise.resolve(svc.profileHasAnyPermission(opts.user, required));
       }),
       profileHasAnyPermission: (profile: any, required: string[]) =>
         new RolesService({} as any).profileHasAnyPermission(profile, required),
@@ -137,6 +137,7 @@ describe('RolesGuard manager ACL', () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(rolesService.hasAnyPermission).toHaveBeenCalledWith(4, [
       'support:manage',
     ]);
@@ -149,6 +150,7 @@ describe('RolesGuard manager ACL', () => {
       user: { id: 5, role: 'employee', permissions: [] },
     });
     await expect(guard.canActivate(context)).rejects.toThrow(/role/i);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(rolesService.hasAnyPermission).not.toHaveBeenCalled();
   });
 

@@ -109,7 +109,7 @@ export const expenseInclude = {
     },
   },
   invoices: { select: { id: true, package_code: true, title: true } },
-  deals: { select: { id: true, name: true } },
+  deals: { select: { id: true, title: true } },
   crm_projects: { select: { id: true, name: true, project_number: true } },
   crm_subprojects: { select: { id: true, name: true } },
   receipts_records: true,
