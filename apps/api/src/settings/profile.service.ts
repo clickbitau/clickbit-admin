@@ -150,7 +150,7 @@ export class ProfileService {
 
     if (admin && profile.auth_uid) {
       const { error } = await admin.auth.admin.updateUserById(profile.auth_uid, { password: newPass });
-      if (error) throw new BadRequestException({ success: false, message: 'Failed to update password' });
+      if (error) throw new BadRequestException({ success: false, message: error.message || 'Failed to update password' });
     }
 
     await this.prisma.profiles.update({ where: { id: user.id }, data: { password: newPass, updated_at: new Date() } });

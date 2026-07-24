@@ -260,6 +260,36 @@ export class AuthService {
     return { success: true, message: 'Password updated successfully', user: data.user };
   }
 
+  async resetPasswordWithCode(dto: { code?: string; token_hash?: string; email?: string; password: string }) {
+    if (!dto.password || dto.password.length < 8) throw new BadRequestException('Password must be at least 8 characters');
+    if (!dto.code && !dto.token_hash) throw new BadRequestException('Reset code or token is required');
+
+    const publicClient = this.ensurePublic();
+    const verifyParams: any = { type: 'recovery' };
+    if (dto.code && dto.email) {
+      verifyParams.email = dto.email.trim().toLowerCase();
+      verifyParams.token = dto.code.trim();
+    } else if (dto.token_hash) {
+      verifyParams.token_hash = dto.token_hash;
+    } else {
+      throw new BadRequestException('Email and code are required');
+    }
+
+    const { data, error } = await publicClient.auth.verifyOtp(verifyParams);
+    if (error || !data.session || !data.user) throw new BadRequestException(error?.message || 'Invalid or expired reset code');
+
+    const admin = this.ensureAdmin();
+    const { error: updateError } = await admin.auth.admin.updateUserById(data.user.id, { password: dto.password });
+    if (updateError) throw new BadRequestException(updateError.message || 'Failed to update password');
+
+    await this.prisma.profiles.updateMany({
+      where: { auth_uid: data.user.id },
+      data: { password: dto.password, updated_at: new Date() },
+    });
+
+    return { success: true, message: 'Password updated successfully' };
+  }
+
   async resendVerification(dto: { email: string }) {
     if (!dto.email) throw new BadRequestException('email is required');
     const publicClient = this.ensurePublic();
