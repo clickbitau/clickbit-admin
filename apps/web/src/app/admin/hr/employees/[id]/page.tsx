@@ -16,8 +16,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
-import { fetchEmployee, updateEmployee, deleteEmployee, fetchDocumentSignedUrl } from '@/lib/api';
+import { fetchEmployee, updateEmployee, deleteEmployee, uploadEmployeeDocument, deleteEmployeeDocument } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime, formatLeaveHours } from '@/lib/format';
 import type { Employee } from '@/types/hr';
 import { ArrowLeft, Users, Save, Trash, Clock, FileText, Calendar, Banknote, Briefcase, FileClock, ClipboardList, GraduationCap, Plus, HandCoins, Target } from 'lucide-react';
@@ -26,8 +40,21 @@ const employmentTypes = ['full_time', 'part_time', 'contract', 'casual', 'intern
 const employmentStatuses = ['active', 'inactive', 'terminated', 'on_leave'];
 const payFrequencies = ['weekly', 'fortnightly', 'monthly', 'quarterly', 'annually'];
 
+function parseAddress(raw: unknown) {
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw as Record<string, string>;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as Record<string, string>;
+    } catch {
+      return { street: raw };
+    }
+  }
+  return null;
+}
+
 export default function AdminEmployeeDetailPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const params = useParams();
   const router = useRouter();
   const id = String(params.id);
@@ -35,6 +62,11 @@ export default function AdminEmployeeDetailPage() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<Partial<Employee>>({});
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadCategory, setUploadCategory] = useState('other');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadName, setUploadName] = useState('');
 
   const { data, isLoading, error } = useQuery<Employee>({
     queryKey: ['employee', token, id],
@@ -68,6 +100,34 @@ export default function AdminEmployeeDetailPage() {
       router.push('/admin/hr/employees');
     },
     onError: () => toast.error('Failed to delete employee'),
+  });
+
+  const uploadDocumentMutation = useMutation({
+    mutationFn: () => {
+      if (!token || !uploadFile) throw new Error('No file selected');
+      return uploadEmployeeDocument(token, id, uploadFile, {
+        name: uploadName || uploadFile.name,
+        category: uploadCategory,
+      });
+    },
+    onSuccess: () => {
+      toast.success('Document uploaded');
+      queryClient.invalidateQueries({ queryKey: ['employee', token, id] });
+      setUploadOpen(false);
+      setUploadFile(null);
+      setUploadName('');
+      setUploadCategory('other');
+    },
+    onError: () => toast.error('Failed to upload document'),
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (docId: number) => deleteEmployeeDocument(token!, id, docId),
+    onSuccess: () => {
+      toast.success('Document deleted');
+      queryClient.invalidateQueries({ queryKey: ['employee', token, id] });
+    },
+    onError: () => toast.error('Failed to delete document'),
   });
 
   const handleSave = () => updateMutation.mutate(form);
@@ -227,13 +287,20 @@ export default function AdminEmployeeDetailPage() {
               <Card className="nm-raised">
                 <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <p><span className="text-muted-foreground">Email:</span> {employee.user?.email || '—'}</p>
-                  <p><span className="text-muted-foreground">Phone:</span> {employee.user?.phone || '—'}</p>
-                  <p><span className="text-muted-foreground">Address:</span> {employee.address || employee.user?.address || '—'}</p>
-                  <p><span className="text-muted-foreground">City:</span> {employee.city || '—'}</p>
-                  <p><span className="text-muted-foreground">State:</span> {employee.state || '—'}</p>
-                  <p><span className="text-muted-foreground">Country:</span> {employee.country || '—'}</p>
-                  <p><span className="text-muted-foreground">Postcode:</span> {employee.postcode || '—'}</p>
+                  {(() => {
+                    const addressObj = parseAddress(employee.address) || parseAddress(employee.user?.address);
+                    return (
+                      <>
+                        <p><span className="text-muted-foreground">Email:</span> {employee.user?.email || '—'}</p>
+                        <p><span className="text-muted-foreground">Phone:</span> {employee.user?.phone || '—'}</p>
+                        <p><span className="text-muted-foreground">Address:</span> {addressObj?.street || addressObj?.address || employee.address || employee.user?.address || '—'}</p>
+                        <p><span className="text-muted-foreground">City:</span> {addressObj?.city || employee.city || '—'}</p>
+                        <p><span className="text-muted-foreground">State:</span> {addressObj?.state || employee.state || '—'}</p>
+                        <p><span className="text-muted-foreground">Country:</span> {addressObj?.country || employee.country || '—'}</p>
+                        <p><span className="text-muted-foreground">Postcode:</span> {addressObj?.postal_code || addressObj?.postcode || employee.postcode || '—'}</p>
+                      </>
+                    );
+                  })()}
                 </CardContent>
               </Card>
 
@@ -313,22 +380,25 @@ export default function AdminEmployeeDetailPage() {
               </Card>
 
               <Card className="nm-raised">
-                <CardHeader className="flex flex-row flex-wrap items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><CardTitle>Documents</CardTitle></CardHeader>
+                <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-row flex-wrap items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><CardTitle>Documents</CardTitle></div>
+                  <Button variant="outline" size="sm" onClick={() => { setUploadCategory('other'); setUploadOpen(true); }}><Plus className="mr-1 h-4 w-4" /> Upload</Button>
+                </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
                     {(employee.documents || []).length === 0 && <li className="text-muted-foreground">No documents.</li>}
                     {(employee.documents || []).slice(0, 5).map((row: any) => (
                       <li key={row.id} className="flex items-center justify-between">
-                        <span className="truncate max-w-[200px]">{row.document_name || row.title || `Document #${row.id}`}</span>
-                        <Button variant="ghost" size="sm" className="h-6 px-2" onClick={async () => {
-                          if (!token) return;
-                          try {
-                            const { url } = await fetchDocumentSignedUrl(token, row.id);
-                            window.open(url, '_blank', 'noopener,noreferrer');
-                          } catch {
-                            toast.error('Failed to open document');
-                          }
-                        }}>View</Button>
+                        <span className="truncate max-w-[180px]">{row.name || row.file_name || `Document #${row.id}`}</span>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => {
+                            if (row.file_url) window.open(row.file_url, '_blank', 'noopener,noreferrer');
+                            else toast.error('No file URL');
+                          }}>View</Button>
+                          {user?.role === 'admin' && (
+                            <Button variant="ghost" size="sm" className="h-6 px-2 text-destructive" onClick={() => deleteDocumentMutation.mutate(row.id)} disabled={deleteDocumentMutation.isPending}><Trash className="h-3 w-3" /></Button>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -336,10 +406,23 @@ export default function AdminEmployeeDetailPage() {
               </Card>
 
               <Card className="nm-raised">
-                <CardHeader className="flex flex-row flex-wrap items-center gap-2"><GraduationCap className="h-5 w-5 text-primary" /><CardTitle>Skills & Certifications</CardTitle></CardHeader>
+                <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-row flex-wrap items-center gap-2"><GraduationCap className="h-5 w-5 text-primary" /><CardTitle>Skills & Certifications</CardTitle></div>
+                  <Button variant="outline" size="sm" onClick={() => { setUploadCategory('certificate'); setUploadOpen(true); }}><Plus className="mr-1 h-4 w-4" /> Upload certificate</Button>
+                </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p><span className="text-muted-foreground">Skills:</span> {Array.isArray(employee.skills) ? employee.skills.join(', ') : employee.skills ? String(employee.skills) : '—'}</p>
                   <p><span className="text-muted-foreground">Certifications:</span> {Array.isArray(employee.certifications) ? employee.certifications.join(', ') : employee.certifications ? String(employee.certifications) : '—'}</p>
+                  {(employee.documents || []).filter((d: any) => d.category === 'certificate').length > 0 && (
+                    <ul className="space-y-1 pt-2">
+                      {(employee.documents || []).filter((d: any) => d.category === 'certificate').slice(0, 5).map((row: any) => (
+                        <li key={row.id} className="flex items-center justify-between">
+                          <span className="truncate max-w-[180px]">{row.name || row.file_name || `Certificate #${row.id}`}</span>
+                          <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => { if (row.file_url) window.open(row.file_url, '_blank', 'noopener,noreferrer'); else toast.error('No file URL'); }}>View</Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               </Card>
 
@@ -370,6 +453,44 @@ export default function AdminEmployeeDetailPage() {
               </Card>
             </div>
           </div>
+
+          <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Upload document</DialogTitle>
+                <DialogDescription>Add a document or certificate for this employee.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label>File</Label>
+                  <Input type="file" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder={uploadFile?.name || 'Document name'} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="other">General</SelectItem>
+                      <SelectItem value="certificate">Certificate</SelectItem>
+                      <SelectItem value="skill">Skill</SelectItem>
+                      <SelectItem value="contract">Contract</SelectItem>
+                      <SelectItem value="identity">Identity</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setUploadOpen(false)}>Cancel</Button>
+                  <Button onClick={() => uploadDocumentMutation.mutate()} disabled={!uploadFile || uploadDocumentMutation.isPending}>
+                    {uploadDocumentMutation.isPending ? 'Uploading...' : 'Upload'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </PageShell>

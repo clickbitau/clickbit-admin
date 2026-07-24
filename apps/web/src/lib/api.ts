@@ -37,7 +37,7 @@ import type { AppDocument } from '@/types/documents';
 import type { BillingSettings, PdfTemplate, SettingRow } from '@/types/settings';
 import type { DashboardStats, FinanceDashboardData } from '@/types/dashboard';
 import type { BugReport, BugReportConfig, BugReportListResponse, BugReportStats, CreateBugReportInput } from '@/types/bug-reports';
-import type { Announcement, Contract, Employee, HrDashboardData, HrStats, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
+import type { Announcement, Contract, Employee, EmployeeDocument, HrDashboardData, HrStats, KpiScore, Payslip, PayslipCalcResult, PublicHoliday, Reminder, Shift, TimeClockStatus, TimeEntry, TimeOffRequest, TimesheetSummary } from '@/types/hr';
 import type {
   AdminTicketListResponse,
   CannedResponse,
@@ -1162,6 +1162,31 @@ export async function updateEmployee(token: string, id: string | number, data: P
 
 export async function deleteEmployee(token: string, id: string | number): Promise<{ success: boolean; message: string }> {
   return (await api.delete(`/api/hr/employees/${id}`, { headers: authHeaders(token) })).data;
+}
+
+export async function uploadEmployeeDocument(
+  token: string,
+  employeeId: string | number,
+  file: File,
+  meta?: { name?: string; description?: string; category?: string },
+): Promise<{ success: boolean; data: EmployeeDocument }> {
+  const formData = new FormData();
+  formData.append('document', file);
+  if (meta?.name) formData.append('name', meta.name);
+  if (meta?.description) formData.append('description', meta.description);
+  if (meta?.category) formData.append('category', meta.category);
+  const response = await api.post(`/api/hr/employees/${employeeId}/documents`, formData, {
+    headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+}
+
+export async function deleteEmployeeDocument(
+  token: string,
+  employeeId: string | number,
+  docId: number,
+): Promise<{ success: boolean; message: string }> {
+  return (await api.delete(`/api/hr/employees/${employeeId}/documents/${docId}`, { headers: authHeaders(token) })).data;
 }
 
 export async function syncEmployees(token: string): Promise<{ success: boolean; data: { created: number; skipped: number } }> {
