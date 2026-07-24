@@ -41,11 +41,29 @@ export default function AdminDocumentDetailPage() {
 
   const doc = data;
 
-  const signedUrlMutation = useMutation({
-    mutationFn: () => fetchDocumentSignedUrl(token!, id),
-    onSuccess: (res) => { window.open(res.url, '_blank'); },
-    onError: () => toast.error('Failed to generate signed URL'),
-  });
+  const downloadDocument = async () => {
+    if (!token || !doc) return;
+    try {
+      const { url } = await fetchDocumentSignedUrl(token, id);
+      try {
+        const response = await fetch(url, { method: 'GET', mode: 'cors' });
+        if (!response.ok) throw new Error('Network response was not ok');
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = doc.name || doc.original_name || `document-${doc.id}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      toast.error('Failed to download document');
+    }
+  };
 
   const remove = useMutation({
     mutationFn: () => deleteDocument(token!, id),
@@ -82,7 +100,7 @@ export default function AdminDocumentDetailPage() {
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/admin/documents"><ArrowLeft className="mr-1 h-4 w-4" /> Back</Link></Button>
-          <Button variant="outline" size="sm" onClick={() => signedUrlMutation.mutate()} disabled={signedUrlMutation.isPending}><Download className="mr-1 h-4 w-4" /> Open / Download</Button>
+          <Button variant="outline" size="sm" onClick={downloadDocument} disabled={!doc}><Download className="mr-1 h-4 w-4" /> Download</Button>
           <Button variant="destructive" size="sm" onClick={() => remove.mutate()} disabled={remove.isPending}><Trash className="mr-1 h-4 w-4" /> Delete</Button>
         </div>
       }
@@ -124,7 +142,7 @@ export default function AdminDocumentDetailPage() {
               <Card>
                 <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
-                  <Button className="w-full" onClick={() => signedUrlMutation.mutate()} disabled={signedUrlMutation.isPending}><Download className="mr-1 h-4 w-4" /> Open / Download</Button>
+                  <Button className="w-full" onClick={downloadDocument} disabled={!doc}><Download className="mr-1 h-4 w-4" /> Download</Button>
                   <Button variant="destructive" className="w-full" onClick={() => remove.mutate()} disabled={remove.isPending}><Trash className="mr-1 h-4 w-4" /> Delete</Button>
                 </CardContent>
               </Card>

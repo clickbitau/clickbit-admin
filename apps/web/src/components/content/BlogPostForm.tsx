@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { createBlogPost } from '@/lib/api';
+import { createBlogPost, uploadContentImage } from '@/lib/api';
 import { Plus } from 'lucide-react';
 
 const statuses = ['draft', 'published', 'scheduled'];
@@ -21,6 +21,7 @@ interface BlogPostFormProps {
 
 export function BlogPostForm({ token, onSuccess, onCancel, initial }: BlogPostFormProps) {
   const queryClient = useQueryClient();
+  const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({
     title: '',
     slug: '',
@@ -33,6 +34,7 @@ export function BlogPostForm({ token, onSuccess, onCancel, initial }: BlogPostFo
     meta_description: '',
     scheduled_at: '',
     published_at: '',
+    featured_image: '',
     ...initial,
   });
 
@@ -62,6 +64,29 @@ export function BlogPostForm({ token, onSuccess, onCancel, initial }: BlogPostFo
       </div>
       <div className="md:col-span-2"><Label>Excerpt</Label><Textarea value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} rows={2} /></div>
       <div className="md:col-span-2"><Label>Content</Label><Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={6} /></div>
+      <div className="md:col-span-2 space-y-2">
+        <Label>Featured image</Label>
+        <Input
+          type="file"
+          accept="image/*"
+          disabled={uploading}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file || !token) return;
+            setUploading(true);
+            try {
+              const result = await uploadContentImage(token, 'blog', file, form.featured_image || undefined);
+              setForm({ ...form, featured_image: result.imageUrl });
+              toast.success('Featured image uploaded');
+            } catch (err: any) {
+              toast.error(err?.response?.data?.message || 'Upload failed');
+            } finally {
+              setUploading(false);
+            }
+          }}
+        />
+        {form.featured_image && <img src={form.featured_image} alt="Featured" className="max-h-40 rounded-md object-cover" />}
+      </div>
       <div><Label>Meta title</Label><Input value={form.meta_title} onChange={(e) => setForm({ ...form, meta_title: e.target.value })} /></div>
       <div><Label>Meta description</Label><Input value={form.meta_description} onChange={(e) => setForm({ ...form, meta_description: e.target.value })} /></div>
       <div><Label>Published at</Label><Input type="datetime-local" value={form.published_at} onChange={(e) => setForm({ ...form, published_at: e.target.value })} /></div>

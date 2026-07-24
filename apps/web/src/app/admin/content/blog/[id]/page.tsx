@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { fetchAdminBlogPost, updateBlogPost, deleteBlogPost } from '@/lib/api';
+import { fetchAdminBlogPost, updateBlogPost, deleteBlogPost, uploadContentImage } from '@/lib/api';
 import { formatDateTime, formatDate } from '@/lib/format';
 import { ArrowLeft, Save, Trash, BookOpen } from 'lucide-react';
 import type { BlogPost } from '@/types/content';
@@ -29,6 +29,7 @@ export default function AdminBlogPostDetailPage() {
   const id = String(params.id);
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState<Partial<BlogPost>>({});
 
   const { data, isLoading, error } = useQuery({
@@ -135,7 +136,29 @@ export default function AdminBlogPostDetailPage() {
                     </div>
                     <div className="md:col-span-2"><Label>Excerpt</Label><Textarea value={String(form.excerpt || '')} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} rows={3} /></div>
                     <div className="md:col-span-2"><Label>Content</Label><Textarea value={String(form.content || '')} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={10} /></div>
-                    <div className="md:col-span-2"><Label>Featured image URL</Label><Input value={String(form.featured_image || '')} onChange={(e) => setForm({ ...form, featured_image: e.target.value })} /></div>
+                    <div className="md:col-span-2 space-y-2">
+                      <Label>Featured image</Label>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploading}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !token) return;
+                          setUploading(true);
+                          try {
+                            const result = await uploadContentImage(token, 'blog', file, form.featured_image || undefined);
+                            setForm({ ...form, featured_image: result.imageUrl });
+                            toast.success('Featured image uploaded');
+                          } catch (err: any) {
+                            toast.error(err?.response?.data?.message || 'Upload failed');
+                          } finally {
+                            setUploading(false);
+                          }
+                        }}
+                      />
+                      {form.featured_image && <img src={form.featured_image} alt="Featured" className="max-h-40 rounded-md object-cover" />}
+                    </div>
                     <div><Label>Tags (comma separated)</Label><Input value={Array.isArray(form.tags) ? form.tags.join(', ') : ''} onChange={(e) => handleArrayChange('tags', e.target.value)} /></div>
                     <div><Label>Categories (comma separated)</Label><Input value={Array.isArray(form.categories) ? form.categories.join(', ') : ''} onChange={(e) => handleArrayChange('categories', e.target.value)} /></div>
                   </div>
