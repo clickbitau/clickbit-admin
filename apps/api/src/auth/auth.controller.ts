@@ -15,6 +15,7 @@ import {
   OAuthCallbackDto,
   RefreshDto,
   RegisterDto,
+  ResetPasswordCodeDto,
   ResetPasswordDto,
   SocialLoginDto,
   TrustDeviceDto,
@@ -79,6 +80,9 @@ export class AuthController {
 
   @Post('reset-password')
   async resetPassword(@Body() body: ResetPasswordDto) { return this.authService.resetPassword(body || {}); }
+
+  @Post('reset-password-code')
+  async resetPasswordWithCode(@Body() body: ResetPasswordCodeDto) { return this.authService.resetPasswordWithCode(body || {}); }
 
   @Post('verify-email')
   async resendVerification(@Body() body: VerifyEmailDto) { return this.authService.resendVerification(body || {}); }

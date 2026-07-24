@@ -44,6 +44,24 @@ export class ResetPasswordDto {
   password: string;
 }
 
+export class ResetPasswordCodeDto {
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  token_hash?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
+}
+
 export class VerifyEmailDto {
   @IsEmail()
   email: string;

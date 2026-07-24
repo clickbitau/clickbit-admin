@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
+import { createTransport } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
 
@@ -169,11 +170,85 @@ export class AuthService {
     };
   }
 
-  async forgotPassword(dto: { email: string }) {
+  async forgotPassword(dto: { email: string; redirect_to?: string }) {
     if (!dto.email) throw new BadRequestException('email is required');
+    const email = dto.email.trim().toLowerCase();
+
+    const profile = await this.prisma.profiles.findFirst({ where: { email } });
+    if (!profile?.auth_uid) {
+      // No local profile linked to Supabase — fall back to the default Supabase email flow.
+      const publicClient = this.ensurePublic();
+      const { error } = await publicClient.auth.resetPasswordForEmail(email, {
+        redirectTo: dto.redirect_to || this.config.get<string>('FRONTEND_URL') || undefined,
+      });
+      if (error) throw new BadRequestException(error.message);
+      return { success: true, message: 'If an account exists, a password reset email has been sent.' };
+    }
+
+    const admin = this.ensureAdmin();
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: dto.redirect_to || this.config.get<string>('FRONTEND_URL') || undefined },
+    });
+
+    if (error || !data?.properties?.email_otp) {
+      this.logger.error(`Failed to generate password reset link for ${email}: ${error?.message || 'missing email_otp'}`);
+      const publicClient = this.ensurePublic();
+      await publicClient.auth.resetPasswordForEmail(email).catch(() => {});
+      return { success: true, message: 'If an account exists, a password reset email has been sent.' };
+    }
+
+    const resetCode = data.properties.email_otp as string;
+    const hashedToken = data.properties.hashed_token as string | undefined;
+    const frontendUrl = (this.config.get<string>('FRONTEND_URL') || 'https://clickbit.com.au').replace(/\/$/, '');
+    const deepLink = `clickbit://reset-password?token=${hashedToken || ''}&type=recovery`;
+
+    const smtpHost = this.config.get<string>('SMTP_HOST');
+    const smtpPort = Number(this.config.get<number>('SMTP_PORT') || 465);
+    const smtpSecure = this.config.get<string>('SMTP_SECURE') !== 'false';
+    const smtpUser = this.config.get<string>('SMTP_USER');
+    const smtpPass = this.config.get<string>('SMTP_PASS');
+    const fromEmail = this.config.get<string>('FROM_EMAIL') || smtpUser || 'noreply@clickbit.com.au';
+
+    if (smtpHost && smtpUser && smtpPass) {
+      try {
+        const transporter = createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          auth: { user: smtpUser, pass: smtpPass },
+          tls: { rejectUnauthorized: false },
+        });
+
+        const html = `
+          <p>Hi ${profile.first_name || ''},</p>
+          <p>You requested a password reset for your ClickBIT account.</p>
+          <p style="font-size:24px; font-weight:bold;">Reset code: ${resetCode}</p>
+          <p>Enter this code in the ClickBIT app to set a new password. This code expires in 1 hour.</p>
+          <p>Alternatively, tap this link on your mobile device to reset automatically:<br/><a href="${deepLink}">${deepLink}</a></p>
+          <p>If you did not request this, you can safely ignore this email.</p>
+        `;
+
+        await transporter.sendMail({
+          from: `ClickBIT <${fromEmail}>`,
+          to: email,
+          subject: 'ClickBIT password reset',
+          text: `Your ClickBIT password reset code is ${resetCode}. Enter it in the app to set a new password. This code expires in 1 hour.`,
+          html,
+        });
+
+        return { success: true, message: 'If an account exists, a password reset email has been sent.' };
+      } catch (e: any) {
+        this.logger.error(`Failed to send password reset email to ${email}: ${e.message}`);
+      }
+    }
+
+    // If SMTP is not configured or sending failed, fall back to Supabase's email service.
     const publicClient = this.ensurePublic();
-    const { error } = await publicClient.auth.resetPasswordForEmail(dto.email.trim().toLowerCase());
-    if (error) throw new BadRequestException(error.message);
+    await publicClient.auth.resetPasswordForEmail(email, {
+      redirectTo: dto.redirect_to || this.config.get<string>('FRONTEND_URL') || undefined,
+    }).catch(() => {});
     return { success: true, message: 'If an account exists, a password reset email has been sent.' };
   }
 
@@ -183,6 +258,36 @@ export class AuthService {
     const { data, error } = await publicClient.auth.updateUser({ password: dto.password });
     if (error) throw new BadRequestException(error.message);
     return { success: true, message: 'Password updated successfully', user: data.user };
+  }
+
+  async resetPasswordWithCode(dto: { code?: string; token_hash?: string; email?: string; password: string }) {
+    if (!dto.password || dto.password.length < 8) throw new BadRequestException('Password must be at least 8 characters');
+    if (!dto.code && !dto.token_hash) throw new BadRequestException('Reset code or token is required');
+
+    const publicClient = this.ensurePublic();
+    const verifyParams: any = { type: 'recovery' };
+    if (dto.code && dto.email) {
+      verifyParams.email = dto.email.trim().toLowerCase();
+      verifyParams.token = dto.code.trim();
+    } else if (dto.token_hash) {
+      verifyParams.token_hash = dto.token_hash;
+    } else {
+      throw new BadRequestException('Email and code are required');
+    }
+
+    const { data, error } = await publicClient.auth.verifyOtp(verifyParams);
+    if (error || !data.session || !data.user) throw new BadRequestException(error?.message || 'Invalid or expired reset code');
+
+    const admin = this.ensureAdmin();
+    const { error: updateError } = await admin.auth.admin.updateUserById(data.user.id, { password: dto.password });
+    if (updateError) throw new BadRequestException(updateError.message || 'Failed to update password');
+
+    await this.prisma.profiles.updateMany({
+      where: { auth_uid: data.user.id },
+      data: { password: dto.password, updated_at: new Date() },
+    });
+
+    return { success: true, message: 'Password updated successfully' };
   }
 
   async resendVerification(dto: { email: string }) {
