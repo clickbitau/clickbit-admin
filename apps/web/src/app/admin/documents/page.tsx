@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { toast } from 'sonner';
 import { deleteDocument, fetchDocumentSignedUrl, fetchDocuments } from '@/lib/api';
 
 function formatBytes(bytes?: number | null) {
@@ -37,6 +38,7 @@ export default function AdminDocumentsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   const params = useMemo(() => ({ page, limit: 20, search: search || undefined }), [page, search]);
 
@@ -54,13 +56,33 @@ export default function AdminDocumentsPage() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['documents', token] });
 
-  const signedUrlMutation = useMutation({
-    mutationFn: async (id: number) => {
-      if (!token) throw new Error('No token');
-      const res = await fetchDocumentSignedUrl(token, id);
-      return res.url;
-    },
-  });
+  const downloadDocument = async (e: React.MouseEvent, doc: any) => {
+    e.stopPropagation();
+    if (!token) return;
+    setDownloadingId(doc.id);
+    try {
+      const { url } = await fetchDocumentSignedUrl(token, doc.id);
+      try {
+        const response = await fetch(url, { method: 'GET', mode: 'cors' });
+        if (!response.ok) throw new Error('Network response was not ok');
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = doc.name || doc.original_name || `document-${doc.id}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      toast.error('Failed to generate signed URL');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const removeMutation = useMutation({
     mutationFn: (id: number) => {
@@ -133,16 +155,14 @@ export default function AdminDocumentsPage() {
                       <Badge variant={doc.status === 'active' ? 'default' : 'secondary'}>{doc.status || 'active'}</Badge>
                     </TableCell>
                     <TableCell>{doc.uploader?.name || doc.uploader?.email || '-'}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button size="sm" variant="outline" onClick={() => signedUrlMutation.mutate(doc.id)} disabled={signedUrlMutation.isPending}>
+                    <TableCell
+                      className="text-right space-x-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button size="sm" variant="outline" onClick={(e) => downloadDocument(e, doc)} disabled={downloadingId === doc.id}>
                         <Download className="h-4 w-4" />
                       </Button>
-                      {signedUrlMutation.data && signedUrlMutation.variables === doc.id && (
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={signedUrlMutation.data} target="_blank" rel="noreferrer">Open</a>
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => removeMutation.mutate(doc.id)} disabled={removeMutation.isPending}>
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); removeMutation.mutate(doc.id); }} disabled={removeMutation.isPending}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>

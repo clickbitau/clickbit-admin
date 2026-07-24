@@ -253,6 +253,7 @@ function DashboardSkeleton() {
 }
 
 function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolean }) {
+  const router = useRouter();
   if (loading || !data) return <DashboardSkeleton />;
 
   const cards = [
@@ -368,6 +369,10 @@ function BusinessTab({ data, loading }: { data?: DashboardStats; loading: boolea
               key={a.to}
               href={a.to}
               className="flex items-center gap-2.5 p-3 rounded-xl hover:brightness-[0.97] dark:hover:brightness-110 transition-all duration-200 group"
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(a.to);
+              }}
             >
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${a.color}`}>
                 <a.icon className="w-4 h-4" />
