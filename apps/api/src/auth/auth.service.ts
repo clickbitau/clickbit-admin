@@ -218,9 +218,8 @@ export class AuthService {
       return { success: true, message: 'If an account exists, a password reset email has been sent.' };
     }
 
-    const resetCode = data.properties.email_otp as string;
+    const resetCode = data.properties.email_otp;
     const hashedToken = data.properties.hashed_token as string | undefined;
-    const frontendUrl = (this.config.get<string>('FRONTEND_URL') || 'https://clickbit.com.au').replace(/\/$/, '');
     const deepLink = `clickbit://reset-password?token=${hashedToken || ''}&type=recovery`;
 
     const smtpHost = this.config.get<string>('SMTP_HOST');

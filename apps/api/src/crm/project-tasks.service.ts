@@ -227,17 +227,6 @@ export class ProjectTasksService {
     const limit = Math.min(100, Math.max(1, Number((query as any).limit ?? 25)));
     const where = this.buildWhere(query);
 
-    const phaseFilter = [
-      { phase_id: null },
-      { project_phases: { status: { not: 'not_started' } } },
-    ];
-    if (where.OR) {
-      where.AND = [{ OR: where.OR }, { OR: phaseFilter }];
-      delete where.OR;
-    } else {
-      where.OR = phaseFilter;
-    }
-
     const [tasks, total] = await Promise.all([
       this.prisma.project_tasks.findMany({
         where,

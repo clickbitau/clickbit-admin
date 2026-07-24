@@ -484,13 +484,6 @@ export async function fetchUncontactedLeads(token: string, days = 7): Promise<Cr
   return extractList<CrmLead>(response, 'leads');
 }
 
-export async function updateLeadScore(token: string, id: string | number, score: number): Promise<{ lead_score: number }> {
-  const response = await api.put(`/api/crm/contacts/${id}/lead-score`, { lead_score: score }, {
-    headers: authHeaders(token),
-  });
-  return response.data;
-}
-
 // ─── Contacts / Customers / Agents ────────────────────────────────────────────
 
 export async function fetchContacts(

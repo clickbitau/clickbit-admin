@@ -167,7 +167,7 @@ export class LeadsController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Roles('admin', 'manager')
   async delete(
     @Param('id', ParseIntPipe) id: number,
     @Res({ passthrough: true }) res: Response,
