@@ -13,7 +13,11 @@ const advanceInclude: any = {
 };
 
 function normalize(a: any) {
-  return { ...a, employee: a.employees, creator: a.profiles, deductions: a.staff_advance_deductions };
+  const employee = a.employees ? { ...a.employees, user: a.employees.profiles } : null;
+  const deductions = Array.isArray(a.staff_advance_deductions)
+    ? a.staff_advance_deductions.map((d: any) => ({ ...d, user: d.profiles }))
+    : a.staff_advance_deductions;
+  return { ...a, employee, creator: a.profiles, deductions };
 }
 
 function toLocalDateStr(dt: Date | string) {
@@ -288,12 +292,13 @@ export class StaffAdvancesService {
         notes: dto.notes,
         created_by: userId,
       },
+      include: { profiles: { select: { id: true, first_name: true, last_name: true } } },
     });
 
     const updated = await this.recalcBalance(advanceId);
     await this.invalidateCache();
     await this.cache?.del(this.cacheKey('detail', advanceId));
-    return { success: true, data: deduction, remainingBalance: updated.remaining_balance, status: updated.status };
+    return { success: true, data: { ...deduction, user: deduction.profiles }, remainingBalance: updated.remaining_balance, status: updated.status };
   }
 
   async removeDeduction(advanceId: number, deductionId: number) {
