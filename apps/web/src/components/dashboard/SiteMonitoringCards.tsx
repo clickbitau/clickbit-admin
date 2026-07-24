@@ -15,7 +15,12 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { fetchMonitoredSites, clearAllMonitoredSites } from '@/lib/api';
+import {
+  fetchMonitoredSites,
+  clearAllMonitoredSites,
+  updateMonitoredSiteStatus,
+  deleteMonitoredSite,
+} from '@/lib/api';
 import type { MonitoredSite, MonitoredSiteStats } from '@/types/notifications';
 import { toast } from 'sonner';
 
@@ -74,6 +79,25 @@ export function SiteMonitoringCards() {
     onError: () => toast.error('Failed to clear sites'),
   });
 
+  const updateSite = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      updateMonitoredSiteStatus(token!, id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['monitored-sites', token] });
+      toast.success('Site status updated');
+    },
+    onError: () => toast.error('Failed to update site status'),
+  });
+
+  const deleteSite = useMutation({
+    mutationFn: (id: number) => deleteMonitoredSite(token!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['monitored-sites', token] });
+      toast.success('Site removed');
+    },
+    onError: () => toast.error('Failed to remove site'),
+  });
+
   const sites = useMemo(() => {
     const list = data?.sites ?? [];
     return [...list].sort((a, b) => {
@@ -83,7 +107,7 @@ export function SiteMonitoringCards() {
     });
   }, [data?.sites]);
 
-  const stats = data?.stats ?? { total: 0, up: 0, down: 0, paused: 0 };
+  const stats = data?.stats ?? { total: 0, up: 0, down: 0, paused: 0, unknown: 0 };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -162,6 +186,11 @@ export function SiteMonitoringCards() {
                 {stats.paused} paused
               </span>
             )}
+            {stats.unknown > 0 && (
+              <span className="px-3 py-1 rounded-md bg-muted text-muted-foreground font-medium whitespace-nowrap">
+                {stats.unknown} unknown
+              </span>
+            )}
           </div>
 
           <button
@@ -234,7 +263,7 @@ export function SiteMonitoringCards() {
                 </div>
               </div>
 
-              <div className="flex flex-col items-end flex-shrink-0 ml-2">
+              <div className="flex flex-col items-end flex-shrink-0 ml-2 gap-1">
                 {site.status === 'down' && getDowntimeDuration(site) ? (
                   <span className="text-xs font-medium text-red-600 dark:text-red-400">
                     Down {getDowntimeDuration(site)}
@@ -242,16 +271,60 @@ export function SiteMonitoringCards() {
                 ) : (
                   <span className="text-xs font-medium text-muted-foreground capitalize">{site.status}</span>
                 )}
-                {site.url && (
-                  <a
-                    href={site.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 p-1 nm-surface rounded-md text-muted-foreground hover:text-primary transition-colors"
+                <div className="flex items-center gap-1">
+                  {site.url && (
+                    <a
+                      href={site.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 nm-surface rounded-md text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {site.status !== 'up' && (
+                    <button
+                      type="button"
+                      title="Mark as up"
+                      onClick={() => updateSite.mutate({ id: site.id, status: 'up' })}
+                      className="p-1 nm-surface rounded-md text-muted-foreground hover:text-emerald-500 transition-colors"
+                    >
+                      <CheckCircle className="h-3 w-3" />
+                    </button>
+                  )}
+                  {site.status !== 'down' && (
+                    <button
+                      type="button"
+                      title="Mark as down"
+                      onClick={() => updateSite.mutate({ id: site.id, status: 'down' })}
+                      className="p-1 nm-surface rounded-md text-muted-foreground hover:text-red-500 transition-colors"
+                    >
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  )}
+                  {site.status !== 'paused' && (
+                    <button
+                      type="button"
+                      title="Mark as paused"
+                      onClick={() => updateSite.mutate({ id: site.id, status: 'paused' })}
+                      className="p-1 nm-surface rounded-md text-muted-foreground hover:text-amber-500 transition-colors"
+                    >
+                      <Pause className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    title="Remove"
+                    onClick={() => {
+                      if (window.confirm(`Remove "${site.name}" from monitoring?`)) {
+                        deleteSite.mutate(site.id);
+                      }
+                    }}
+                    className="p-1 nm-surface rounded-md text-muted-foreground hover:text-destructive transition-colors"
                   >
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}

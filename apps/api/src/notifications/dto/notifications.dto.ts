@@ -12,6 +12,14 @@ export class UptimeKumaWebhookDto {
 
   @IsOptional()
   @IsString()
+  heartbeatJSON?: string;
+
+  @IsOptional()
+  @IsString()
+  monitorJSON?: string;
+
+  @IsOptional()
+  @IsString()
   msg?: string;
 
   @IsOptional()
