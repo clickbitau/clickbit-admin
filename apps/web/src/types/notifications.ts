@@ -17,6 +17,7 @@ export interface MonitoredSiteStats {
   up: number;
   down: number;
   paused: number;
+  unknown: number;
 }
 
 export interface MonitoredSitesResponse {

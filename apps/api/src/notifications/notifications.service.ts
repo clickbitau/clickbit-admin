@@ -35,7 +35,12 @@ export class NotificationsService {
   async handleUptimeKumaWebhook(dto: Record<string, unknown>): Promise<Record<string, unknown>> {
     // Caller (controller) already verifies the webhook token.
 
-    const monitorName = this.extractMonitorName(dto);
+    const parsedHeartbeat = this.parseJsonString(dto.heartbeatJSON) || dto.heartbeat;
+    const parsedMonitor = this.parseJsonString(dto.monitorJSON) || dto.monitor;
+    const monitor = parsedMonitor as Record<string, unknown> | undefined;
+    const heartbeat = parsedHeartbeat as Record<string, unknown> | undefined;
+
+    const monitorName = this.asString(monitor?.name) || this.asString(dto.monitorName);
     if (!monitorName) {
       if (dto.type === 'test' || Object.keys(dto).length === 0) {
         return { success: true, message: 'Test webhook received successfully' };
@@ -44,13 +49,11 @@ export class NotificationsService {
     }
 
     const sanitizedName = monitorName.trim().substring(0, 255);
-    const monitor = dto.monitor as Record<string, unknown> | undefined;
-    const heartbeat = dto.heartbeat as Record<string, unknown> | undefined;
     const monitorUrl = this.asString(monitor?.url) || this.asString(dto.monitorUrl) || null;
     const heartbeatStatus = heartbeat?.status ?? dto.status;
     const heartbeatMsg = this.asString(heartbeat?.msg) || this.asString(dto.msg) || null;
 
-    const normalizedStatus = this.normalizeStatus(heartbeatStatus, dto.status);
+    const normalizedStatus = this.normalizeStatus(heartbeatStatus);
     const isDown = normalizedStatus === 'down';
     const isUp = normalizedStatus === 'up';
 
@@ -123,11 +126,12 @@ export class NotificationsService {
     const upCount = sites.filter((s) => s.status === 'up').length;
     const downCount = sites.filter((s) => s.status === 'down').length;
     const pausedCount = sites.filter((s) => s.status === 'paused').length;
+    const unknownCount = sites.filter((s) => s.status === 'unknown').length;
 
     return {
       success: true,
       sites: formatted,
-      stats: { total: sites.length, up: upCount, down: downCount, paused: pausedCount },
+      stats: { total: sites.length, up: upCount, down: downCount, paused: pausedCount, unknown: unknownCount },
     };
     });
   }
@@ -422,6 +426,8 @@ export class NotificationsService {
       expectedFormat: {
         monitor: { name: 'Monitor Name', url: 'https://example.com', id: 123 },
         heartbeat: { status: '1 (up) or 0 (down)', msg: 'Status message', monitorID: 123 },
+        // Also supports Uptime Kuma custom body variables:
+        // heartbeatJSON: '{"status":1,...}', monitorJSON: '{"name":"Monitor Name",...}'
       },
       timestamp: new Date().toISOString(),
     };
@@ -441,19 +447,15 @@ export class NotificationsService {
     }
   }
 
-  private extractMonitorName(dto: Record<string, unknown>): string | null {
-    const monitor = dto.monitor as Record<string, unknown> | undefined;
-    const name = this.asString(monitor?.name) || this.asString(dto.monitorName);
-    return name ? name.trim().substring(0, 255) : null;
-  }
-
-  private normalizeStatus(heartbeatStatus: unknown, fallbackStatus: unknown): string {
-    if (heartbeatStatus === 1 || heartbeatStatus === '1') return 'up';
-    if (heartbeatStatus === 0 || heartbeatStatus === '0') return 'down';
-    if (heartbeatStatus === 2 || heartbeatStatus === '2') return 'paused';
-    const fallback = typeof fallbackStatus === 'string' ? fallbackStatus : '';
-    const strStatus = fallback.toLowerCase();
-    if (['up', 'down', 'paused'].includes(strStatus)) return strStatus;
+  private normalizeStatus(status: unknown): string {
+    if (status === 1 || status === '1') return 'up';
+    if (status === 0 || status === '0') return 'down';
+    if (status === 2 || status === '2') return 'paused';
+    if (status === 3 || status === '3') return 'paused';
+    const str = typeof status === 'string' ? status.toLowerCase() : '';
+    if (['up', 'up.', 'ok'].includes(str)) return 'up';
+    if (['down', 'down.', 'error', 'failed'].includes(str)) return 'down';
+    if (['paused', 'pending', 'maintenance'].includes(str)) return 'paused';
     return 'unknown';
   }
 
@@ -511,6 +513,16 @@ export class NotificationsService {
     if (value === undefined || value === null) return undefined;
     if (typeof value === 'string') return value;
     return undefined;
+  }
+
+  private parseJsonString(value: unknown): unknown {
+    const str = this.asString(value);
+    if (!str) return undefined;
+    try {
+      return JSON.parse(str);
+    } catch {
+      return undefined;
+    }
   }
 
   private asArray<T>(value: unknown): T[] {
