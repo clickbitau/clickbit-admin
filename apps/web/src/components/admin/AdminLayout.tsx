@@ -270,7 +270,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       (s) => s.links.some((l) => isActive(pathname || '', l.href)) || (s.href && isActive(pathname || '', s.href))
     );
     if (current && current.id !== expanded) setExpanded(current.id);
-  }, [pathname, expanded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
