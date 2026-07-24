@@ -39,6 +39,7 @@ import {
   fetchMailTemplates,
   createMailTemplate,
   deleteMailTemplate,
+  fetchUserTeam,
 } from '@/lib/api';
 import type { CachedEmail, EmailTemplate, MailAccount, MailFolder } from '@/types/communication';
 import { toast } from 'sonner';
@@ -79,7 +80,7 @@ function formatMailDate(dateString?: string) {
 const LIMIT = 25;
 
 export default function AdminCommunicationMailPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -92,9 +93,10 @@ export default function AdminCommunicationMailPage() {
   const [selectedFolder, setSelectedFolder] = useState<string>(folderQuery);
   const [selectedUid, setSelectedUid] = useState<string>(uidQuery);
   const [showAddAccount, setShowAddAccount] = useState(false);
-  const [accountForm, setAccountForm] = useState({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '' });
+  const [accountForm, setAccountForm] = useState({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '', shared_with_users: [] as number[], shared_with_roles: [] as string[] });
   const [discoveredMailboxes, setDiscoveredMailboxes] = useState<{ resourceId: string; address: string }[]>([]);
   const isHostingerRest = accountForm.preset === 'hostinger_rest';
+  const { data: team } = useQuery({ queryKey: ['team', token], queryFn: () => fetchUserTeam(token!), enabled: !!token });
   const [accountSearch, setAccountSearch] = useState('');
   const [messageSearch, setMessageSearch] = useState('');
   const [templateSearch, setTemplateSearch] = useState('');
@@ -181,8 +183,10 @@ export default function AdminCommunicationMailPage() {
       resource_id: accountForm.resource_id || undefined,
       username: isHostingerRest ? undefined : (accountForm.username || undefined),
       password: isHostingerRest ? undefined : (accountForm.password || undefined),
+      shared_with_users: accountForm.shared_with_users.length > 0 ? accountForm.shared_with_users : undefined,
+      shared_with_roles: accountForm.shared_with_roles.length > 0 ? accountForm.shared_with_roles : undefined,
     } as unknown as Partial<MailAccount>),
-    onSuccess: () => { toast.success('Account added'); queryClient.invalidateQueries({ queryKey: ['mail-accounts'] }); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '' }); setDiscoveredMailboxes([]); setShowAddAccount(false); },
+    onSuccess: () => { toast.success('Account added'); queryClient.invalidateQueries({ queryKey: ['mail-accounts'] }); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '', shared_with_users: [], shared_with_roles: [] }); setDiscoveredMailboxes([]); setShowAddAccount(false); },
   });
 
   const removeAccount = useMutation({
@@ -269,9 +273,56 @@ export default function AdminCommunicationMailPage() {
                     <Input type="password" placeholder="Password" value={accountForm.password} onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })} className="h-8 text-sm" />
                   </>
                 )}
+
+                <div className="space-y-2 rounded-lg border border-border/50 bg-background/50 p-2">
+                  <p className="text-xs font-medium text-muted-foreground">Share with users</p>
+                  <div className="max-h-24 overflow-y-auto space-y-1">
+                    {(team || []).filter((u: any) => u.id !== (user?.id ? Number(user.id) : undefined)).map((u: any) => (
+                      <label key={u.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          className="rounded border-white/10 bg-black/30 text-brand-400"
+                          checked={accountForm.shared_with_users.includes(Number(u.id))}
+                          onChange={(e) => {
+                            const id = Number(u.id);
+                            setAccountForm((f) => ({
+                              ...f,
+                              shared_with_users: e.target.checked ? [...f.shared_with_users, id] : f.shared_with_users.filter((x) => x !== id),
+                            }));
+                          }}
+                        />
+                        <span className="truncate">{u.first_name} {u.last_name} ({u.email})</span>
+                      </label>
+                    ))}
+                    {!team?.length && <p className="text-[11px] text-muted-foreground">No team members found.</p>}
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-lg border border-border/50 bg-background/50 p-2">
+                  <p className="text-xs font-medium text-muted-foreground">Share with roles</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['manager', 'employee'].map((role) => (
+                      <label key={role} className="flex items-center gap-1.5 text-xs capitalize">
+                        <input
+                          type="checkbox"
+                          className="rounded border-white/10 bg-black/30 text-brand-400"
+                          checked={accountForm.shared_with_roles.includes(role)}
+                          onChange={(e) => {
+                            setAccountForm((f) => ({
+                              ...f,
+                              shared_with_roles: e.target.checked ? [...f.shared_with_roles, role] : f.shared_with_roles.filter((r) => r !== role),
+                            }));
+                          }}
+                        />
+                        {role}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <Button size="sm" className="h-7" onClick={() => addAccount.mutate()} disabled={addAccount.isPending || !accountForm.email || (!isHostingerRest && !accountForm.password) || (isHostingerRest && !accountForm.api_token)}>Add</Button>
-                  <Button size="sm" variant="ghost" className="h-7" onClick={() => { setShowAddAccount(false); setDiscoveredMailboxes([]); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '' }); }}>Cancel</Button>
+                  <Button size="sm" variant="ghost" className="h-7" onClick={() => { setShowAddAccount(false); setDiscoveredMailboxes([]); setAccountForm({ email: '', username: '', password: '', display_name: '', preset: '', api_token: '', resource_id: '', shared_with_users: [], shared_with_roles: [] }); }}>Cancel</Button>
                 </div>
               </div>
             )}
